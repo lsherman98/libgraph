@@ -9,11 +9,11 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import {  Home, Settings, CreditCard } from "lucide-react";
+import { Home, Settings, CreditCard } from "lucide-react";
 import { pb } from "@/lib/pocketbase";
-import { Link } from "@tanstack/react-router";
+// import { Link } from "@tanstack/react-router";
 
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+export function LeftSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const data = {
     navMain: [
       {
@@ -28,37 +28,24 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         url: "/settings",
         icon: Settings,
       },
-      {
-        title: "Subscription",
-        url: "/subscription",
-        icon: CreditCard,
-      },
+      //   {
+      //     title: "Subscription",
+      //     url: "/subscription",
+      //     icon: CreditCard,
+      //   },
     ],
   };
 
   const user = pb.authStore.model;
   return (
     <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <Link to="/" className="flex items-center">
-              Home
-            </Link>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarHeader>
+      <SidebarHeader></SidebarHeader>
       <SidebarContent>
         <NavMain items={data.navMain} />
         <div className="flex-1"></div>
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>
-        <div className="text-xs text-muted-foreground pl-2">
-          <a href="mailto:example@example.com" className="text-primary hover:underline">
-            example@example.com
-          </a>
-        </div>
         <NavUser email={user?.email} />
       </SidebarFooter>
     </Sidebar>
