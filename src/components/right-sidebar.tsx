@@ -12,14 +12,10 @@ export function RightSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
         <SidebarMenu>
-          <SidebarMenuItem>
-            <span className="font-semibold">Right Sidebar</span>
-          </SidebarMenuItem>
+          <SidebarMenuItem></SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent>
-        <div className="p-4 text-sm text-muted-foreground">Right sidebar content goes here.</div>
-      </SidebarContent>
+      <SidebarContent></SidebarContent>
       <SidebarFooter></SidebarFooter>
     </Sidebar>
   );
