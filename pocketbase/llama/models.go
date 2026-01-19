@@ -21,17 +21,11 @@ type ParseRequest struct {
 }
 
 type OutputOptions struct {
-	Markdown     *MarkdownOptions  `json:"markdown,omitempty"`
-	ImagesToSave []string          `json:"images_to_save,omitempty"`
-	ExportPDF    *ExportPDFOptions `json:"export_pdf,omitempty"`
+	Markdown *MarkdownOptions `json:"markdown,omitempty"`
 }
 
 type MarkdownOptions struct {
 	AnnotateLinks bool `json:"annotate_links"`
-}
-
-type ExportPDFOptions struct {
-	Enable bool `json:"enable"`
 }
 
 type ProcessingOptions struct {
@@ -50,6 +44,21 @@ type ParseResponse struct {
 	ProjectId    string     `json:"project_id,omitempty"`
 	Status       StatusEnum `json:"status,omitempty"`
 	ErrorMessage string     `json:"error_message,omitempty"`
+}
+
+type Page struct {
+	PageNumber int    `json:"page_number"`
+	Markdown   string `json:"markdown"`
+	Success    bool   `json:"success"`
+}
+
+type MarkdownResult struct {
+	Pages []Page `json:"pages"`
+}
+
+type ParseJobResponse struct {
+	Job      ParseResponse  `json:"job"`
+	Markdown MarkdownResult `json:"markdown,omitempty"`
 }
 
 type WebhookConfiguration struct {

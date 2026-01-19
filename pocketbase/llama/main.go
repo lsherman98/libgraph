@@ -103,10 +103,6 @@ func (c *LlamaClient) Parse(upload *core.Record) (*ParseResponse, error) {
 			Markdown: &MarkdownOptions{
 				AnnotateLinks: true,
 			},
-			ImagesToSave: []string{"screenshot"},
-			ExportPDF: &ExportPDFOptions{
-				Enable: true,
-			},
 		},
 		ProcessingOptions: &ProcessingOptions{
 			Ignore: &IgnoreOptions{
@@ -126,12 +122,19 @@ func (c *LlamaClient) Parse(upload *core.Record) (*ParseResponse, error) {
 	return &response, nil
 }
 
-func (c *LlamaClient) GetParseJob(jobId string) error {
-    params := url.Values{}
+func (c *LlamaClient) GetParseJob(jobId string) (*ParseJobResponse, error) {
+	params := url.Values{}
 	params.Add("project_id", c.ProjectID)
 	params.Add("organization_id", c.OrganizationID)
-    
-    return nil
+	params.Add("expand", "markdown")
+
+    var response ParseJobResponse
+    if err := c.Do(context.Background(), http.MethodGet, path.Join("/", jobId), params, nil, &response); err != nil {
+        c.App.Logger().Error("LlamaIndex: GetParseJob request failed", "error", err)
+        return nil, err
+    }
+
+	return &response, nil
 }
 
 func (c *LlamaClient) Do(ctx context.Context, method, endpointPath string, queryParams url.Values, reqBody, resBody any) error {
