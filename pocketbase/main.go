@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/joho/godotenv"
+	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/uploads"
 
 	// _ "github.com/lsherman98/pb-template/pocketbase/migrations"
 	"github.com/pocketbase/pocketbase"
@@ -32,6 +33,10 @@ func main() {
 	// if err := stripe.Init(app); err != nil {
 	// 	log.Fatal("Failed to initialize Stripe hooks: ", err)
 	// }
+
+	if err := uploads.Init(app); err != nil {
+		log.Fatal("Failed to initialize Uploads hooks: ", err)
+	}
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.GET("/{path...}", apis.Static(os.DirFS("./pb_public"), true))

@@ -13,7 +13,7 @@ const (
 type ParseRequest struct {
 	Tier                 string                  `json:"tier"`
 	Version              string                  `json:"version"`
-	Languages            []string                `json:"languages"`
+	Languages            []string                `json:"languages,omitempty"`
 	OutputOptions        *OutputOptions          `json:"output_options,omitempty"`
 	ProcessingOptions    *ProcessingOptions      `json:"processing_options,omitempty"`
 	SourceURL            string                  `json:"source_url"`
@@ -25,7 +25,7 @@ type OutputOptions struct {
 }
 
 type MarkdownOptions struct {
-	AnnotateLinks bool `json:"annotate_links"`
+	AnnotateLinks bool `json:"annotate_links,omitempty"`
 }
 
 type ProcessingOptions struct {
@@ -33,9 +33,9 @@ type ProcessingOptions struct {
 }
 
 type IgnoreOptions struct {
-	IgnoreDiagonalText bool `json:"ignore_diagonal_text"`
-	IgnoreTextInImage  bool `json:"ignore_text_in_image"`
-	IgnoreHiddenText   bool `json:"ignore_hidden_text"`
+	IgnoreDiagonalText bool `json:"ignore_diagonal_text,omitempty"`
+	IgnoreTextInImage  bool `json:"ignore_text_in_image,omitempty"`
+	IgnoreHiddenText   bool `json:"ignore_hidden_text,omitempty"`
 }
 
 type ParseResponse struct {

@@ -13,8 +13,8 @@ export enum Collections {
 	Superusers = "_superusers",
 	Authors = "authors",
 	Edges = "edges",
-	Files = "files",
 	Nodes = "nodes",
+	Pages = "pages",
 	Tags = "tags",
 	Topics = "topics",
 	Uploads = "uploads",
@@ -122,14 +122,6 @@ export type EdgesRecord = {
 	updated: IsoAutoDateString
 }
 
-export type FilesRecord = {
-	created: IsoAutoDateString
-	file?: FileNameString
-	id: string
-	updated: IsoAutoDateString
-	upload?: RecordIdString
-}
-
 export enum NodesTypeOptions {
 	"author" = "author",
 	"tag" = "tag",
@@ -142,6 +134,15 @@ export type NodesRecord = {
 	record?: string
 	type?: NodesTypeOptions
 	updated: IsoAutoDateString
+}
+
+export type PagesRecord = {
+	created: IsoAutoDateString
+	id: string
+	markdown?: FileNameString
+	page?: number
+	updated: IsoAutoDateString
+	upload?: RecordIdString
 }
 
 export type TagsRecord = {
@@ -206,8 +207,8 @@ export type OtpsResponse<Texpand = unknown> = Required<OtpsRecord> & BaseSystemF
 export type SuperusersResponse<Texpand = unknown> = Required<SuperusersRecord> & AuthSystemFields<Texpand>
 export type AuthorsResponse<Texpand = unknown> = Required<AuthorsRecord> & BaseSystemFields<Texpand>
 export type EdgesResponse<Texpand = unknown> = Required<EdgesRecord> & BaseSystemFields<Texpand>
-export type FilesResponse<Texpand = unknown> = Required<FilesRecord> & BaseSystemFields<Texpand>
 export type NodesResponse<Texpand = unknown> = Required<NodesRecord> & BaseSystemFields<Texpand>
+export type PagesResponse<Texpand = unknown> = Required<PagesRecord> & BaseSystemFields<Texpand>
 export type TagsResponse<Texpand = unknown> = Required<TagsRecord> & BaseSystemFields<Texpand>
 export type TopicsResponse<Texpand = unknown> = Required<TopicsRecord> & BaseSystemFields<Texpand>
 export type UploadsResponse<Texpand = unknown> = Required<UploadsRecord> & BaseSystemFields<Texpand>
@@ -223,8 +224,8 @@ export type CollectionRecords = {
 	_superusers: SuperusersRecord
 	authors: AuthorsRecord
 	edges: EdgesRecord
-	files: FilesRecord
 	nodes: NodesRecord
+	pages: PagesRecord
 	tags: TagsRecord
 	topics: TopicsRecord
 	uploads: UploadsRecord
@@ -239,8 +240,8 @@ export type CollectionResponses = {
 	_superusers: SuperusersResponse
 	authors: AuthorsResponse
 	edges: EdgesResponse
-	files: FilesResponse
 	nodes: NodesResponse
+	pages: PagesResponse
 	tags: TagsResponse
 	topics: TopicsResponse
 	uploads: UploadsResponse

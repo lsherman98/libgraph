@@ -96,9 +96,8 @@ func (c *LlamaClient) Parse(upload *core.Record) (*ParseResponse, error) {
 
 	var response ParseResponse
 	body := &ParseRequest{
-		Tier:      "cost_effective",
-		Version:   "latest",
-		Languages: []string{"en"},
+		Tier:    "cost_effective",
+		Version: "latest",
 		OutputOptions: &OutputOptions{
 			Markdown: &MarkdownOptions{
 				AnnotateLinks: true,
@@ -115,7 +114,6 @@ func (c *LlamaClient) Parse(upload *core.Record) (*ParseResponse, error) {
 	}
 
 	if err := c.Do(context.Background(), http.MethodPost, "", params, body, &response); err != nil {
-		c.App.Logger().Error("LlamaIndex: Parse request failed", "error", err)
 		return nil, err
 	}
 
@@ -128,11 +126,10 @@ func (c *LlamaClient) GetParseJob(jobId string) (*ParseJobResponse, error) {
 	params.Add("organization_id", c.OrganizationID)
 	params.Add("expand", "markdown")
 
-    var response ParseJobResponse
-    if err := c.Do(context.Background(), http.MethodGet, path.Join("/", jobId), params, nil, &response); err != nil {
-        c.App.Logger().Error("LlamaIndex: GetParseJob request failed", "error", err)
-        return nil, err
-    }
+	var response ParseJobResponse
+	if err := c.Do(context.Background(), http.MethodGet, path.Join("/", jobId), params, nil, &response); err != nil {
+		return nil, err
+	}
 
 	return &response, nil
 }
@@ -140,7 +137,6 @@ func (c *LlamaClient) GetParseJob(jobId string) (*ParseJobResponse, error) {
 func (c *LlamaClient) Do(ctx context.Context, method, endpointPath string, queryParams url.Values, reqBody, resBody any) error {
 	endpoint, err := c.BaseURL.Parse(path.Join(c.BaseURL.Path, endpointPath))
 	if err != nil {
-		c.App.Logger().Error("LlamaIndex:: failed to parse endpoint URL", "error", err)
 		return err
 	}
 
@@ -152,7 +148,6 @@ func (c *LlamaClient) Do(ctx context.Context, method, endpointPath string, query
 	if reqBody != nil {
 		bodyBytes, err := json.Marshal(reqBody)
 		if err != nil {
-			c.App.Logger().Error("LlamaIndex: failed to marshal request payload", "error", err)
 			return err
 		}
 		payload = bytes.NewBuffer(bodyBytes)
@@ -160,7 +155,6 @@ func (c *LlamaClient) Do(ctx context.Context, method, endpointPath string, query
 
 	req, err := http.NewRequestWithContext(ctx, method, endpoint.String(), payload)
 	if err != nil {
-		c.App.Logger().Error("LlamaIndex: failed to create HTTP request", "error", err)
 		return err
 	}
 
@@ -172,7 +166,6 @@ func (c *LlamaClient) Do(ctx context.Context, method, endpointPath string, query
 
 	resp, err := c.Client.Do(req)
 	if err != nil {
-		c.App.Logger().Error("LlamaIndex: failed to execute request", "error", err)
 		return err
 	}
 	defer resp.Body.Close()
@@ -184,7 +177,6 @@ func (c *LlamaClient) Do(ctx context.Context, method, endpointPath string, query
 
 	if resBody != nil && resp.StatusCode != http.StatusNoContent {
 		if err := json.NewDecoder(resp.Body).Decode(resBody); err != nil {
-			c.App.Logger().Error("LlamaIndex: failed to decode response body", "error", err)
 			return err
 		}
 	}
