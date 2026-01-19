@@ -11,6 +11,13 @@ export enum Collections {
 	Mfas = "_mfas",
 	Otps = "_otps",
 	Superusers = "_superusers",
+	Authors = "authors",
+	Edges = "edges",
+	Files = "files",
+	Nodes = "nodes",
+	Tags = "tags",
+	Topics = "topics",
+	Uploads = "uploads",
 	Users = "users",
 }
 
@@ -92,6 +99,92 @@ export type SuperusersRecord = {
 	verified?: boolean
 }
 
+export enum AuthorsTypeOptions {
+	"youtube_channel" = "youtube_channel",
+	"author" = "author",
+	"publication" = "publication",
+	"podcast" = "podcast",
+}
+export type AuthorsRecord = {
+	created: IsoAutoDateString
+	id: string
+	name?: string
+	source?: string
+	type?: AuthorsTypeOptions
+	updated: IsoAutoDateString
+}
+
+export type EdgesRecord = {
+	created: IsoAutoDateString
+	id: string
+	source?: RecordIdString
+	target?: RecordIdString
+	updated: IsoAutoDateString
+}
+
+export type FilesRecord = {
+	created: IsoAutoDateString
+	file?: FileNameString
+	id: string
+	updated: IsoAutoDateString
+	upload?: RecordIdString
+}
+
+export enum NodesTypeOptions {
+	"author" = "author",
+	"tag" = "tag",
+	"topic" = "topic",
+	"file" = "file",
+}
+export type NodesRecord = {
+	created: IsoAutoDateString
+	id: string
+	record?: string
+	type?: NodesTypeOptions
+	updated: IsoAutoDateString
+}
+
+export type TagsRecord = {
+	created: IsoAutoDateString
+	id: string
+	title?: string
+	updated: IsoAutoDateString
+}
+
+export type TopicsRecord = {
+	created: IsoAutoDateString
+	id: string
+	title?: string
+	updated: IsoAutoDateString
+}
+
+export enum UploadsTypeOptions {
+	"book" = "book",
+	"article" = "article",
+	"podcast" = "podcast",
+	"lecture" = "lecture",
+}
+
+export enum UploadsStatusOptions {
+	"PENDING" = "PENDING",
+	"PROCESSING" = "PROCESSING",
+	"FAILED" = "FAILED",
+	"SUCCESS" = "SUCCESS",
+}
+export type UploadsRecord = {
+	author?: RecordIdString
+	created: IsoAutoDateString
+	file?: FileNameString
+	id: string
+	status?: UploadsStatusOptions
+	tags?: RecordIdString[]
+	title?: string
+	topic?: RecordIdString[]
+	type?: UploadsTypeOptions
+	updated: IsoAutoDateString
+	user?: RecordIdString
+}
+
 export type UsersRecord = {
 	avatar?: FileNameString
 	created: IsoAutoDateString
@@ -111,6 +204,13 @@ export type ExternalauthsResponse<Texpand = unknown> = Required<ExternalauthsRec
 export type MfasResponse<Texpand = unknown> = Required<MfasRecord> & BaseSystemFields<Texpand>
 export type OtpsResponse<Texpand = unknown> = Required<OtpsRecord> & BaseSystemFields<Texpand>
 export type SuperusersResponse<Texpand = unknown> = Required<SuperusersRecord> & AuthSystemFields<Texpand>
+export type AuthorsResponse<Texpand = unknown> = Required<AuthorsRecord> & BaseSystemFields<Texpand>
+export type EdgesResponse<Texpand = unknown> = Required<EdgesRecord> & BaseSystemFields<Texpand>
+export type FilesResponse<Texpand = unknown> = Required<FilesRecord> & BaseSystemFields<Texpand>
+export type NodesResponse<Texpand = unknown> = Required<NodesRecord> & BaseSystemFields<Texpand>
+export type TagsResponse<Texpand = unknown> = Required<TagsRecord> & BaseSystemFields<Texpand>
+export type TopicsResponse<Texpand = unknown> = Required<TopicsRecord> & BaseSystemFields<Texpand>
+export type UploadsResponse<Texpand = unknown> = Required<UploadsRecord> & BaseSystemFields<Texpand>
 export type UsersResponse<Texpand = unknown> = Required<UsersRecord> & AuthSystemFields<Texpand>
 
 // Types containing all Records and Responses, useful for creating typing helper functions
@@ -121,6 +221,13 @@ export type CollectionRecords = {
 	_mfas: MfasRecord
 	_otps: OtpsRecord
 	_superusers: SuperusersRecord
+	authors: AuthorsRecord
+	edges: EdgesRecord
+	files: FilesRecord
+	nodes: NodesRecord
+	tags: TagsRecord
+	topics: TopicsRecord
+	uploads: UploadsRecord
 	users: UsersRecord
 }
 
@@ -130,6 +237,13 @@ export type CollectionResponses = {
 	_mfas: MfasResponse
 	_otps: OtpsResponse
 	_superusers: SuperusersResponse
+	authors: AuthorsResponse
+	edges: EdgesResponse
+	files: FilesResponse
+	nodes: NodesResponse
+	tags: TagsResponse
+	topics: TopicsResponse
+	uploads: UploadsResponse
 	users: UsersResponse
 }
 

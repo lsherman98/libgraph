@@ -9,7 +9,7 @@ import {
   SidebarMenu,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { Home, Settings, CreditCard } from "lucide-react";
+import { Home, Settings, CreditCard, Files } from "lucide-react";
 import { pb } from "@/lib/pocketbase";
 // import { Link } from "@tanstack/react-router";
 
@@ -20,6 +20,11 @@ export function LeftSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) 
         title: "Home",
         url: "/",
         icon: Home,
+      },
+      {
+        title: "Upload",
+        url: "/upload",
+        icon: Files,
       },
     ],
     navSecondary: [

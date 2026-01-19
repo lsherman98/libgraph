@@ -12,6 +12,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as AppUploadIndexRouteImport } from './routes/_app/upload/index'
 
 const SigninLazyRouteImport = createFileRoute('/signin')()
 
@@ -24,28 +25,38 @@ const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppUploadIndexRoute = AppUploadIndexRouteImport.update({
+  id: '/upload/',
+  path: '/upload/',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
+  '/': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
+  '/upload/': typeof AppUploadIndexRoute
 }
 export interface FileRoutesByTo {
+  '/': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
+  '/upload': typeof AppUploadIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/_app': typeof AppRoute
+  '/_app': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
+  '/_app/upload/': typeof AppUploadIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/signin'
+  fullPaths: '/' | '/signin' | '/upload/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/signin'
-  id: '__root__' | '/_app' | '/signin'
+  to: '/' | '/signin' | '/upload'
+  id: '__root__' | '/_app' | '/signin' | '/_app/upload/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  AppRoute: typeof AppRoute
+  AppRoute: typeof AppRouteWithChildren
   SigninLazyRoute: typeof SigninLazyRoute
 }
 
@@ -61,15 +72,32 @@ declare module '@tanstack/react-router' {
     '/_app': {
       id: '/_app'
       path: ''
-      fullPath: ''
+      fullPath: '/'
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/upload/': {
+      id: '/_app/upload/'
+      path: '/upload'
+      fullPath: '/upload/'
+      preLoaderRoute: typeof AppUploadIndexRouteImport
+      parentRoute: typeof AppRoute
     }
   }
 }
 
+interface AppRouteChildren {
+  AppUploadIndexRoute: typeof AppUploadIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppUploadIndexRoute: AppUploadIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  AppRoute: AppRoute,
+  AppRoute: AppRouteWithChildren,
   SigninLazyRoute: SigninLazyRoute,
 }
 export const routeTree = rootRouteImport

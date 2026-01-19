@@ -5,4 +5,5 @@ const (
 	StripeCharges        = "stripe_charges"
 	StripeCustomers      = "stripe_customers"
 	StripeSubscriptions  = "stripe_subscriptions"
+	Uploads              = "uploads"
 )
