@@ -1,6 +1,7 @@
 package uploads
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/lsherman98/libgraph/pocketbase/collections"
@@ -14,6 +15,7 @@ import (
 func Init(app *pocketbase.PocketBase) error {
 	app.OnRecordAfterCreateSuccess(collections.Uploads).BindFunc(func(e *core.RecordEvent) error {
 		upload := e.Record
+		title := upload.GetString("title")
 
 		llamaClient, err := llama.New(app)
 		if err != nil {
@@ -23,7 +25,16 @@ func Init(app *pocketbase.PocketBase) error {
 		res, err := llamaClient.Parse(upload)
 		if err != nil {
 			e.App.Logger().Error("Failed to start parse job:", "error", err)
+			upload.Set("status", "FAILED")
+			if err := app.Save(upload); err != nil {
+				e.App.Logger().Error("Failed to update upload status to FAILED:", "error", err)
+			}
 			return err
+		}
+
+		upload.Set("status", "PROCESSING")
+		if err := app.Save(upload); err != nil {
+			e.App.Logger().Error("Failed to update upload status:", "error", err)
 		}
 
 		jobId := res.ID
@@ -35,7 +46,7 @@ func Init(app *pocketbase.PocketBase) error {
 			}
 
 			status := jobRes.Job.Status
-			for status == "RUNNING" {
+			for status == "RUNNING" || status == "PENDING" {
 				time.Sleep(5 * time.Second)
 				jobRes, err = llamaClient.GetParseJob(jobId)
 				if err != nil {
@@ -56,8 +67,7 @@ func Init(app *pocketbase.PocketBase) error {
 				newPage.Set("upload", upload.Id)
 				newPage.Set("page", page.PageNumber)
 
-				//TODO: name file appropriately
-				f, err := filesystem.NewFileFromBytes([]byte(page.Markdown), "content.md")
+				f, err := filesystem.NewFileFromBytes([]byte(page.Markdown), fmt.Sprintf("%s_page_%d.md", title, page.PageNumber))
 				if err != nil {
 					e.App.Logger().Error("Failed to create file from markdown bytes:", "error", err)
 				}
@@ -66,6 +76,11 @@ func Init(app *pocketbase.PocketBase) error {
 				if err = app.Save(newPage); err != nil {
 					e.App.Logger().Error("Failed to save new page record:", "error", err)
 				}
+			}
+
+			upload.Set("status", "SUCCESS")
+			if err := app.Save(upload); err != nil {
+				e.App.Logger().Error("Failed to update upload status to SUCCESS:", "error", err)
 			}
 		})
 

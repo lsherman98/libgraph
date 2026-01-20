@@ -112,6 +112,7 @@ export type AuthorsRecord = {
 	source?: string
 	type?: AuthorsTypeOptions
 	updated: IsoAutoDateString
+	user?: RecordIdString
 }
 
 export type EdgesRecord = {
@@ -150,6 +151,7 @@ export type TagsRecord = {
 	id: string
 	title?: string
 	updated: IsoAutoDateString
+	user?: RecordIdString
 }
 
 export type TopicsRecord = {
@@ -157,6 +159,7 @@ export type TopicsRecord = {
 	id: string
 	title?: string
 	updated: IsoAutoDateString
+	user?: RecordIdString
 }
 
 export enum UploadsTypeOptions {
