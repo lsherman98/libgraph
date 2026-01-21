@@ -26,6 +26,16 @@ export function LeftSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) 
         url: "/upload",
         icon: Files,
       },
+      {
+        title: "Documents",
+        url: "/documents",
+        icon: Files,
+      },
+      {
+        title: "Reader",
+        url: "/reader",
+        icon: Files,
+      },
     ],
     navSecondary: [
       {

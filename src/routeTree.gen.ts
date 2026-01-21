@@ -13,6 +13,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppUploadIndexRouteImport } from './routes/_app/upload/index'
+import { Route as AppReaderIndexRouteImport } from './routes/_app/reader/index'
+import { Route as AppDocumentsIndexRouteImport } from './routes/_app/documents/index'
 
 const SigninLazyRouteImport = createFileRoute('/signin')()
 
@@ -30,29 +32,51 @@ const AppUploadIndexRoute = AppUploadIndexRouteImport.update({
   path: '/upload/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppReaderIndexRoute = AppReaderIndexRouteImport.update({
+  id: '/reader/',
+  path: '/reader/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDocumentsIndexRoute = AppDocumentsIndexRouteImport.update({
+  id: '/documents/',
+  path: '/documents/',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
+  '/documents/': typeof AppDocumentsIndexRoute
+  '/reader/': typeof AppReaderIndexRoute
   '/upload/': typeof AppUploadIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
+  '/documents': typeof AppDocumentsIndexRoute
+  '/reader': typeof AppReaderIndexRoute
   '/upload': typeof AppUploadIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
+  '/_app/documents/': typeof AppDocumentsIndexRoute
+  '/_app/reader/': typeof AppReaderIndexRoute
   '/_app/upload/': typeof AppUploadIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/signin' | '/upload/'
+  fullPaths: '/' | '/signin' | '/documents/' | '/reader/' | '/upload/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/signin' | '/upload'
-  id: '__root__' | '/_app' | '/signin' | '/_app/upload/'
+  to: '/' | '/signin' | '/documents' | '/reader' | '/upload'
+  id:
+    | '__root__'
+    | '/_app'
+    | '/signin'
+    | '/_app/documents/'
+    | '/_app/reader/'
+    | '/_app/upload/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -83,14 +107,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppUploadIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/reader/': {
+      id: '/_app/reader/'
+      path: '/reader'
+      fullPath: '/reader/'
+      preLoaderRoute: typeof AppReaderIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/documents/': {
+      id: '/_app/documents/'
+      path: '/documents'
+      fullPath: '/documents/'
+      preLoaderRoute: typeof AppDocumentsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
+  AppDocumentsIndexRoute: typeof AppDocumentsIndexRoute
+  AppReaderIndexRoute: typeof AppReaderIndexRoute
   AppUploadIndexRoute: typeof AppUploadIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppDocumentsIndexRoute: AppDocumentsIndexRoute,
+  AppReaderIndexRoute: AppReaderIndexRoute,
   AppUploadIndexRoute: AppUploadIndexRoute,
 }
 
