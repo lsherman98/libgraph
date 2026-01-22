@@ -4,6 +4,7 @@ import { useInfinitePages, usePageMarkdown, usePages } from "@/lib/api/queries";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
 import { ArrowLeft, ChevronLeft, ChevronRight, FileText, ScrollText } from "lucide-react";
 import { pb } from "@/lib/pocketbase";
 import { Collections } from "@/lib/pocketbase-types";
@@ -149,6 +150,11 @@ function PaginatedReader({
   totalPages: number;
 }) {
   const { data, isLoading } = usePages(uploadId, currentPage, 1);
+
+  // Prefetch adjacent pages for caching
+  usePages(uploadId, Math.max(1, currentPage - 1), 1);
+  usePages(uploadId, Math.min(totalPages, currentPage + 1), 1);
+
   const page = data?.items[0];
 
   return (
@@ -172,8 +178,22 @@ function PaginatedReader({
         >
           <ChevronLeft className="h-4 w-4 mr-2" /> Previous
         </Button>
-        <div className="text-sm text-muted-foreground">
-          Page {currentPage} of {totalPages}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Page</span>
+          <Input
+            type="number"
+            min={1}
+            max={totalPages}
+            value={currentPage}
+            onChange={(e) => {
+              const page = parseInt(e.target.value, 10);
+              if (page >= 1 && page <= totalPages) {
+                onPageChange(page);
+              }
+            }}
+            className="w-16 h-8 text-center"
+          />
+          <span className="text-sm text-muted-foreground">of {totalPages}</span>
         </div>
         <Button
           variant="outline"
@@ -307,13 +327,32 @@ function RouteComponent() {
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <div className="text-sm text-muted-foreground">
-            Page {currentPage} of {totalPages || "?"}
-          </div>
-          <div className="flex gap-1">
+          <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" disabled={currentPage <= 1} onClick={() => navigatePage("prev")}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
+            <div className="flex items-center gap-1">
+              <Input
+                type="number"
+                min={1}
+                max={totalPages}
+                value={currentPage}
+                onChange={(e) => {
+                  const page = parseInt(e.target.value, 10);
+                  if (page >= 1 && page <= totalPages) {
+                    handlePageChange(page);
+                    if (mode === "scroll") {
+                      const el = document.getElementById(`page-${page}`);
+                      if (el) {
+                        el.scrollIntoView({ behavior: "smooth" });
+                      }
+                    }
+                  }
+                }}
+                className="w-16 h-9 text-center"
+              />
+              <span className="text-sm text-muted-foreground whitespace-nowrap">/ {totalPages || "?"}</span>
+            </div>
             <Button
               variant="outline"
               size="icon"
