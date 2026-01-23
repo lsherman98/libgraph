@@ -5,23 +5,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import {
-  ArrowLeft,
-  BookOpen,
-  ChevronLeft,
-  ChevronRight,
-  FileText,
-  Maximize2,
-  Minimize2,
-  ScrollText,
-} from "lucide-react";
+import { ArrowLeft, BookOpen, BookMarked, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from "lucide-react";
 import { pb } from "@/lib/pocketbase";
 import { Collections } from "@/lib/pocketbase-types";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { useReaderSettings, usePageSettings, FONT_FAMILIES } from "@/lib/hooks/use-reader-settings";
 import { ReaderSettingsPanel, QuickFontSizeControl } from "@/components/reader/reader-settings-panel";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useSidebar } from "@/components/ui/sidebar";
+import { useReaderStore } from "@/lib/stores/reader-store";
 
 // Debounce helper
 function useDebouncedCallback<T extends (...args: any[]) => void>(callback: T, delay: number): T {
@@ -460,7 +454,10 @@ function RouteComponent() {
   const { uploadId } = Route.useSearch();
   const [upload, setUpload] = useState<any>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const { isReadingMode, setReadingMode } = useReaderStore();
   const readerContainerRef = useRef<HTMLDivElement>(null);
+  const { setOpen, setOpenRight, open: leftSidebarOpen, openRight: rightSidebarOpen } = useSidebar();
+  const previousSidebarState = useRef({ left: true, right: true });
 
   // Use our new hooks
   const { settings, setSettings, applyTheme, resetSettings, cssVariables } = useReaderSettings();
@@ -489,9 +486,23 @@ function RouteComponent() {
     [setCurrentPage],
   );
 
-  const handleModeChange = (value: string) => {
-    if (!value) return;
-    setSettings({ viewMode: value as "scroll" | "paginate" });
+  const toggleScrollMode = (enabled: boolean) => {
+    setSettings({ viewMode: enabled ? "scroll" : "paginate" });
+  };
+
+  // Toggle reading mode - hides sidebars and applies full theme
+  const toggleReadingMode = () => {
+    if (!isReadingMode) {
+      // Entering reading mode - save current state and close sidebars
+      previousSidebarState.current = { left: leftSidebarOpen, right: rightSidebarOpen };
+      setOpen(false);
+      setOpenRight(false);
+    } else {
+      // Exiting reading mode - restore previous sidebar state
+      setOpen(previousSidebarState.current.left);
+      setOpenRight(previousSidebarState.current.right);
+    }
+    setReadingMode(!isReadingMode);
   };
 
   const toggleFullscreen = () => {
@@ -560,11 +571,22 @@ function RouteComponent() {
     <TooltipProvider>
       <div
         ref={readerContainerRef}
-        className={cn("h-full flex flex-col", isFullscreen && "bg-[var(--reader-bg-color)]")}
+        className={cn(
+          "h-full w-full flex flex-col transition-colors duration-300 overflow-hidden",
+          (isFullscreen || isReadingMode) && "bg-[var(--reader-bg-color)]",
+        )}
         style={cssVariables}
       >
         {/* Header */}
-        <header className="flex-shrink-0 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-20">
+        <header
+          className={cn(
+            "flex-shrink-0 border-b z-20 transition-colors duration-300",
+            isReadingMode
+              ? "bg-[var(--reader-bg-color)] border-[var(--reader-text-color)]/10"
+              : "bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+          )}
+          style={isReadingMode ? { color: settings.textColor } : undefined}
+        >
           <div className="flex items-center justify-between px-4 py-3">
             {/* Left section */}
             <div className="flex items-center gap-4">
@@ -584,28 +606,8 @@ function RouteComponent() {
               </div>
             </div>
 
-            {/* Center section - View mode & Page navigation */}
+            {/* Center section - Page navigation */}
             <div className="flex items-center gap-3">
-              {/* View mode toggle */}
-              <ToggleGroup type="single" value={settings.viewMode} onValueChange={handleModeChange} size="sm">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <ToggleGroupItem value="scroll" aria-label="Scroll Mode">
-                      <ScrollText className="h-4 w-4" />
-                    </ToggleGroupItem>
-                  </TooltipTrigger>
-                  <TooltipContent>Infinite Scroll</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <ToggleGroupItem value="paginate" aria-label="Page Mode">
-                      <FileText className="h-4 w-4" />
-                    </ToggleGroupItem>
-                  </TooltipTrigger>
-                  <TooltipContent>Page by Page</TooltipContent>
-                </Tooltip>
-              </ToggleGroup>
-
               {/* Page navigation */}
               <div className="flex items-center gap-1">
                 <Button
@@ -658,10 +660,37 @@ function RouteComponent() {
 
             {/* Right section - Quick controls & Settings */}
             <div className="flex items-center gap-2">
+              {/* Scroll mode toggle */}
+              <div className="hidden lg:flex items-center gap-2 px-2 border-r">
+                <Label htmlFor="scroll-mode-right" className="text-xs cursor-pointer">
+                  Scroll
+                </Label>
+                <Switch
+                  id="scroll-mode-right"
+                  checked={settings.viewMode === "scroll"}
+                  onCheckedChange={toggleScrollMode}
+                />
+              </div>
+
               {/* Quick font size */}
               <div className="hidden lg:flex items-center gap-1 px-2 border-r">
                 <QuickFontSizeControl fontSize={settings.fontSize} onChange={(fontSize) => setSettings({ fontSize })} />
               </div>
+
+              {/* Reading mode toggle */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={isReadingMode ? "default" : "ghost"}
+                    size="icon"
+                    className="h-9 w-9"
+                    onClick={toggleReadingMode}
+                  >
+                    <BookMarked className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{isReadingMode ? "Exit Reading Mode" : "Reading Mode"}</TooltipContent>
+              </Tooltip>
 
               {/* Fullscreen toggle */}
               <Tooltip>
@@ -684,9 +713,12 @@ function RouteComponent() {
           </div>
 
           {/* Progress bar */}
-          <div className="h-0.5 bg-muted">
+          <div className={cn("h-0.5", isReadingMode ? "bg-[var(--reader-text-color)]/10" : "bg-muted")}>
             <div
-              className="h-full bg-primary/50 transition-all duration-300"
+              className={cn(
+                "h-full transition-all duration-300",
+                isReadingMode ? "bg-[var(--reader-text-color)]/30" : "bg-primary/50",
+              )}
               style={{
                 width: `${(pageSettings.currentPage / (totalPages || 1)) * 100}%`,
               }}
@@ -696,13 +728,13 @@ function RouteComponent() {
 
         {/* Reader content area */}
         <main
-          className="flex-1 overflow-hidden transition-colors duration-300"
+          className="flex-1 min-h-0 overflow-hidden transition-colors duration-300"
           style={{
             backgroundColor: settings.backgroundColor,
             color: settings.textColor,
           }}
         >
-          <ScrollArea className="h-full">
+          <ScrollArea className="h-full w-full">
             <div
               className="w-full"
               style={{

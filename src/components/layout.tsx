@@ -4,8 +4,11 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 import type { PropsWithChildren } from "react";
 import { AppHeader } from "./header/app-header";
+import { useReaderStore } from "@/lib/stores/reader-store";
 
 export default function Layout({ children }: PropsWithChildren) {
+  const isReadingMode = useReaderStore((state) => state.isReadingMode);
+
   return (
     <SidebarProvider
       style={
@@ -20,9 +23,9 @@ export default function Layout({ children }: PropsWithChildren) {
       defaultOpen={true}
     >
       <LeftSidebar variant="sidebar" />
-      <SidebarInset className="overflow-hidden">
-        <AppHeader />
-        <div className="flex flex-1 p-4">{children}</div>
+      <SidebarInset className="overflow-hidden flex flex-col h-screen">
+        {!isReadingMode && <AppHeader />}
+        <div className="flex flex-1 min-h-0 overflow-hidden">{children}</div>
       </SidebarInset>
       <RightSidebar variant="sidebar" side="right" />
     </SidebarProvider>

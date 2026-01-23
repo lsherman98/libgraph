@@ -175,24 +175,24 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
         </div>
 
         <Tabs defaultValue="typography" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 rounded-none border-b bg-transparent h-10">
+          <TabsList className="grid w-full grid-cols-3 rounded-none border-b bg-transparent p-0 h-10">
             <TabsTrigger
               value="typography"
-              className="gap-1.5 text-xs rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              className="relative gap-1.5 text-xs rounded-none border-0 bg-transparent shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 data-[state=active]:after:bg-primary"
             >
               <Type className="h-3.5 w-3.5" />
               Text
             </TabsTrigger>
             <TabsTrigger
               value="theme"
-              className="gap-1.5 text-xs rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              className="relative gap-1.5 text-xs rounded-none border-0 bg-transparent shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 data-[state=active]:after:bg-primary"
             >
               <Palette className="h-3.5 w-3.5" />
               Theme
             </TabsTrigger>
             <TabsTrigger
               value="layout"
-              className="gap-1.5 text-xs rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+              className="relative gap-1.5 text-xs rounded-none border-0 bg-transparent shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 data-[state=active]:after:bg-primary"
             >
               <AlignJustify className="h-3.5 w-3.5" />
               Layout
