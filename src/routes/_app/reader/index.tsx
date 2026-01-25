@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, BookOpen, BookMarked, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from "lucide-react";
+import { BookOpen, BookMarked, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from "lucide-react";
 import { pb } from "@/lib/pocketbase";
 import { Collections } from "@/lib/pocketbase-types";
 import { Switch } from "@/components/ui/switch";
@@ -13,31 +13,10 @@ import { Label } from "@/components/ui/label";
 import { useReaderSettings, usePageSettings, FONT_FAMILIES } from "@/lib/hooks/use-reader-settings";
 import { ReaderSettingsPanel, QuickFontSizeControl } from "@/components/reader/reader-settings-panel";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { cn, useDebouncedCallback } from "@/lib/utils";
 import { useSidebar } from "@/components/ui/sidebar";
 import { useReaderStore } from "@/lib/stores/reader-store";
-
-// Debounce helper
-function useDebouncedCallback<T extends (...args: any[]) => void>(callback: T, delay: number): T {
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const callbackRef = useRef(callback);
-
-  useEffect(() => {
-    callbackRef.current = callback;
-  }, [callback]);
-
-  return useCallback(
-    ((...args: Parameters<T>) => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      timeoutRef.current = setTimeout(() => {
-        callbackRef.current(...args);
-      }, delay);
-    }) as T,
-    [delay],
-  );
-}
+import Markdown from "react-markdown";
 
 type ReaderSearch = {
   uploadId?: string;
@@ -52,7 +31,6 @@ export const Route = createFileRoute("/_app/reader/")({
   },
 });
 
-// Markdown content renderer with proper styling
 function MarkdownContent({ content, isLoading }: { content: string | null | undefined; isLoading: boolean }) {
   if (isLoading) {
     return (
@@ -73,96 +51,34 @@ function MarkdownContent({ content, isLoading }: { content: string | null | unde
     );
   }
 
-  // Split content into paragraphs and render
-  const paragraphs = content.split(/\n\n+/);
-
   return (
     <div className="reader-content">
-      {paragraphs.map((paragraph, index) => {
-        const trimmed = paragraph.trim();
-        if (!trimmed) return null;
-
-        // Check for headings
-        if (trimmed.startsWith("# ")) {
-          return (
-            <h1 key={index} className="text-2xl font-bold mt-8 mb-4 first:mt-0">
-              {trimmed.slice(2)}
-            </h1>
-          );
-        }
-        if (trimmed.startsWith("## ")) {
-          return (
-            <h2 key={index} className="text-xl font-semibold mt-6 mb-3">
-              {trimmed.slice(3)}
-            </h2>
-          );
-        }
-        if (trimmed.startsWith("### ")) {
-          return (
-            <h3 key={index} className="text-lg font-medium mt-5 mb-2">
-              {trimmed.slice(4)}
-            </h3>
-          );
-        }
-
-        // Check for code blocks
-        if (trimmed.startsWith("```")) {
-          const lines = trimmed.split("\n");
-          const code = lines.slice(1, -1).join("\n");
-          return (
-            <pre
-              key={index}
-              className="my-4 p-4 rounded-lg bg-black/5 dark:bg-white/5 overflow-x-auto font-mono text-sm"
-            >
-              <code>{code}</code>
+      <Markdown
+        components={{
+          h1: ({ children }) => <h1 className="text-2xl font-bold mt-8 mb-4 first:mt-0">{children}</h1>,
+          h2: ({ children }) => <h2 className="text-xl font-semibold mt-6 mb-3">{children}</h2>,
+          h3: ({ children }) => <h3 className="text-lg font-medium mt-5 mb-2">{children}</h3>,
+          pre: ({ children }) => (
+            <pre className="my-4 p-4 rounded-lg bg-black/5 dark:bg-white/5 overflow-x-auto font-mono text-sm">
+              {children}
             </pre>
-          );
-        }
-
-        // Check for blockquotes
-        if (trimmed.startsWith("> ")) {
-          return (
-            <blockquote key={index} className="my-4 pl-4 border-l-4 border-current/20 italic opacity-90">
-              {trimmed.slice(2)}
-            </blockquote>
-          );
-        }
-
-        // Check for lists
-        if (trimmed.match(/^[-*]\s/)) {
-          const items = trimmed.split(/\n/).filter((line) => line.trim());
-          return (
-            <ul key={index} className="my-4 pl-6 list-disc space-y-1">
-              {items.map((item, i) => (
-                <li key={i}>{item.replace(/^[-*]\s/, "")}</li>
-              ))}
-            </ul>
-          );
-        }
-
-        if (trimmed.match(/^\d+\.\s/)) {
-          const items = trimmed.split(/\n/).filter((line) => line.trim());
-          return (
-            <ol key={index} className="my-4 pl-6 list-decimal space-y-1">
-              {items.map((item, i) => (
-                <li key={i}>{item.replace(/^\d+\.\s/, "")}</li>
-              ))}
-            </ol>
-          );
-        }
-
-        // Regular paragraph
-        return (
-          <p key={index} className="reader-paragraph">
-            {trimmed}
-          </p>
-        );
-      })}
+          ),
+          code: ({ children }) => <code>{children}</code>,
+          blockquote: ({ children }) => (
+            <blockquote className="my-4 pl-4 border-l-4 border-current/20 italic opacity-90">{children}</blockquote>
+          ),
+          ul: ({ children }) => <ul className="my-4 pl-6 list-disc space-y-1">{children}</ul>,
+          ol: ({ children }) => <ol className="my-4 pl-6 list-decimal space-y-1">{children}</ol>,
+          li: ({ children }) => <li>{children}</li>,
+          p: ({ children }) => <p className="reader-paragraph">{children}</p>,
+        }}
+      >
+        {content}
+      </Markdown>
     </div>
   );
 }
 
-// Page component for scroll mode
 function ScrollPageRenderer({
   page,
   onInView,
@@ -179,18 +95,14 @@ function ScrollPageRenderer({
   useEffect(() => {
     if (!onInView) return;
 
-    // Reset reported status when page changes
     hasReportedRef.current = false;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        // Only report when becoming visible and at a significant threshold
-        // and only report once per scroll direction change
         if (entry.isIntersecting && entry.intersectionRatio >= 0.5 && !hasReportedRef.current) {
           hasReportedRef.current = true;
           onInView(page.page);
         } else if (!entry.isIntersecting) {
-          // Reset when page leaves view
           hasReportedRef.current = false;
         }
       },
@@ -215,7 +127,6 @@ function ScrollPageRenderer({
   );
 }
 
-// Infinite scroll reader
 function ScrollReader({
   uploadId,
   startPage,
@@ -233,7 +144,6 @@ function ScrollReader({
 
   const allPages = data?.pages.flatMap((p) => p.items) || [];
 
-  // Debounced page change to prevent flickering
   const debouncedPageChange = useDebouncedCallback((page: number) => {
     if (page !== currentVisiblePageRef.current) {
       currentVisiblePageRef.current = page;
@@ -241,7 +151,6 @@ function ScrollReader({
     }
   }, 150);
 
-  // Handle initial scroll to startPage
   useEffect(() => {
     if (!data) return;
     const lastLoadedPage = allPages[allPages.length - 1]?.page || 0;
@@ -262,7 +171,6 @@ function ScrollReader({
     }
   }, [data, hasNextPage, isFetchingNextPage, fetchNextPage, allPages, startPage, initialLoadDone]);
 
-  // Infinite scroll observer
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -324,7 +232,6 @@ function ScrollReader({
   );
 }
 
-// Paginated reader (single page at a time)
 function PaginatedReader({
   uploadId,
   currentPage,
@@ -338,13 +245,11 @@ function PaginatedReader({
 }) {
   const { data, isLoading } = usePages(uploadId, currentPage, 1);
 
-  // Prefetch adjacent pages
   usePages(uploadId, Math.max(1, currentPage - 1), 1);
   usePages(uploadId, Math.min(totalPages, currentPage + 1), 1);
 
   const page = data?.items[0];
 
-  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement) return;
@@ -368,87 +273,33 @@ function PaginatedReader({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [currentPage, totalPages, onPageChange]);
 
-  return (
-    <div className="flex flex-col min-h-full">
-      {/* Page content */}
-      <div className="flex-1">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-16">
-            <div className="flex flex-col items-center gap-3">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-current border-t-transparent opacity-60" />
-              <span className="text-sm opacity-60">Loading page...</span>
-            </div>
-          </div>
-        ) : !page ? (
-          <div className="flex items-center justify-center py-16">
-            <p className="opacity-60">Page not found</p>
-          </div>
-        ) : (
-          <PaginatedPageContent pageId={page.id} />
-        )}
-      </div>
-
-      {/* Bottom pagination */}
-      <div className="flex-shrink-0 border-t mt-8 pt-6">
-        <div className="flex items-center justify-between">
-          <Button
-            variant="ghost"
-            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-            disabled={currentPage <= 1}
-            className="gap-2"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Previous
-          </Button>
-
-          <div className="flex items-center gap-3">
-            <span className="text-sm opacity-60">Page</span>
-            <Input
-              type="number"
-              min={1}
-              max={totalPages}
-              value={currentPage}
-              onChange={(e) => {
-                const page = parseInt(e.target.value, 10);
-                if (page >= 1 && page <= totalPages) {
-                  onPageChange(page);
-                }
-              }}
-              className="w-16 h-9 text-center"
-            />
-            <span className="text-sm opacity-60">of {totalPages}</span>
-          </div>
-
-          <Button
-            variant="ghost"
-            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-            disabled={currentPage >= totalPages}
-            className="gap-2"
-          >
-            Next
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* Progress bar */}
-        <div className="h-1 bg-black/5 dark:bg-white/5 rounded-full overflow-hidden mt-4">
-          <div
-            className="h-full bg-current opacity-30 transition-all duration-300"
-            style={{ width: `${(currentPage / totalPages) * 100}%` }}
-          />
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-current border-t-transparent opacity-60" />
+          <span className="text-sm opacity-60">Loading page...</span>
         </div>
       </div>
-    </div>
-  );
+    );
+  }
+
+  if (!page) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <p className="opacity-60">Page not found</p>
+      </div>
+    );
+  }
+
+  return <PaginatedPageContent pageId={page.id} />;
 }
 
-// Paginated reader inner content (for markdown fetching)
 function PaginatedPageContent({ pageId }: { pageId: string }) {
   const { data: markdown, isLoading } = usePageMarkdown(pageId);
   return <MarkdownContent content={markdown} isLoading={isLoading} />;
 }
 
-// Main reader component
 function RouteComponent() {
   const navigate = useNavigate();
   const { uploadId } = Route.useSearch();
@@ -458,16 +309,12 @@ function RouteComponent() {
   const readerContainerRef = useRef<HTMLDivElement>(null);
   const { setOpen, setOpenRight, open: leftSidebarOpen, openRight: rightSidebarOpen } = useSidebar();
   const previousSidebarState = useRef({ left: true, right: true });
-
-  // Use our new hooks
   const { settings, setSettings, applyTheme, resetSettings, cssVariables } = useReaderSettings();
   const { pageSettings, setCurrentPage } = usePageSettings(uploadId);
 
-  // Get total pages
   const { data: firstPageData } = usePages(uploadId ?? null, 1, 1);
   const totalPages = firstPageData?.totalItems || 0;
 
-  // Load document info
   useEffect(() => {
     if (uploadId) {
       pb.collection(Collections.Uploads)
@@ -490,15 +337,12 @@ function RouteComponent() {
     setSettings({ viewMode: enabled ? "scroll" : "paginate" });
   };
 
-  // Toggle reading mode - hides sidebars and applies full theme
   const toggleReadingMode = () => {
     if (!isReadingMode) {
-      // Entering reading mode - save current state and close sidebars
       previousSidebarState.current = { left: leftSidebarOpen, right: rightSidebarOpen };
       setOpen(false);
       setOpenRight(false);
     } else {
-      // Exiting reading mode - restore previous sidebar state
       setOpen(previousSidebarState.current.left);
       setOpenRight(previousSidebarState.current.right);
     }
@@ -515,7 +359,6 @@ function RouteComponent() {
     }
   };
 
-  // Listen for fullscreen changes
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
@@ -524,7 +367,6 @@ function RouteComponent() {
     return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
   }, []);
 
-  // Handle navigation with keyboard in scroll mode
   const navigatePage = (direction: "prev" | "next") => {
     let target = pageSettings.currentPage;
     if (direction === "prev") target = Math.max(1, pageSettings.currentPage - 1);
@@ -541,21 +383,26 @@ function RouteComponent() {
     }
   };
 
-  // No upload selected state
   if (!uploadId) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <BookOpen className="h-16 w-16 mx-auto mb-4 opacity-20" />
-          <h2 className="text-xl font-semibold mb-2">No Document Selected</h2>
-          <p className="text-muted-foreground mb-6">Select a document from your library to start reading.</p>
-          <Button onClick={() => navigate({ to: "/documents" })}>Browse Documents</Button>
+      <div className="flex flex-1 w-full items-center justify-center">
+        <div className="text-center max-w-md px-6">
+          <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-muted">
+            <BookOpen className="h-10 w-10 text-muted-foreground" />
+          </div>
+          <h2 className="text-2xl font-semibold mb-3">No Document Selected</h2>
+          <p className="text-muted-foreground mb-8">
+            Select a document from your library to start reading, or browse your collection to find something new.
+          </p>
+          <Button size="lg" onClick={() => navigate({ to: "/documents" })}>
+            <BookMarked className="mr-2 h-4 w-4" />
+            Browse Documents
+          </Button>
         </div>
       </div>
     );
   }
 
-  // Loading state
   if (!upload) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -573,30 +420,23 @@ function RouteComponent() {
         ref={readerContainerRef}
         className={cn(
           "h-full w-full flex flex-col transition-colors duration-300 overflow-hidden",
-          (isFullscreen || isReadingMode) && "bg-[var(--reader-bg-color)]",
+          (isFullscreen || isReadingMode) && "bg-(--reader-bg-color)",
         )}
         style={cssVariables}
       >
-        {/* Header */}
         <header
           className={cn(
-            "flex-shrink-0 border-b z-20 transition-colors duration-300",
+            "shrink-0 border-b z-20 transition-colors duration-300",
             isReadingMode
-              ? "bg-[var(--reader-bg-color)] border-[var(--reader-text-color)]/10"
-              : "bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60",
+              ? "bg-(--reader-bg-color) border-(--reader-text-color)/10"
+              : "bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60",
           )}
           style={isReadingMode ? { color: settings.textColor } : undefined}
         >
           <div className="flex items-center justify-between px-4 py-3">
-            {/* Left section */}
-            <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" onClick={() => navigate({ to: "/documents" })} className="gap-2">
-                <ArrowLeft className="h-4 w-4" />
-                <span className="hidden sm:inline">Back</span>
-              </Button>
-
+            <div className="flex items-center gap-4 flex-1">
               <div className="hidden md:block">
-                <h1 className="text-sm font-semibold line-clamp-1 max-w-[300px]">{upload.title || "Untitled"}</h1>
+                <h1 className="text-sm font-semibold line-clamp-1 max-w-75">{upload.title || "Untitled"}</h1>
                 <div className="flex items-center gap-2 mt-0.5">
                   <Badge variant="outline" className="text-xs">
                     {upload.type}
@@ -605,10 +445,7 @@ function RouteComponent() {
                 </div>
               </div>
             </div>
-
-            {/* Center section - Page navigation */}
             <div className="flex items-center gap-3">
-              {/* Page navigation */}
               <div className="flex items-center gap-1">
                 <Button
                   variant="ghost"
@@ -657,10 +494,7 @@ function RouteComponent() {
                 </Button>
               </div>
             </div>
-
-            {/* Right section - Quick controls & Settings */}
-            <div className="flex items-center gap-2">
-              {/* Scroll mode toggle */}
+            <div className="flex items-center gap-2 flex-1 justify-end">
               <div className="hidden lg:flex items-center gap-2 px-2 border-r">
                 <Label htmlFor="scroll-mode-right" className="text-xs cursor-pointer">
                   Scroll
@@ -671,13 +505,9 @@ function RouteComponent() {
                   onCheckedChange={toggleScrollMode}
                 />
               </div>
-
-              {/* Quick font size */}
               <div className="hidden lg:flex items-center gap-1 px-2 border-r">
                 <QuickFontSizeControl fontSize={settings.fontSize} onChange={(fontSize) => setSettings({ fontSize })} />
               </div>
-
-              {/* Reading mode toggle */}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -691,8 +521,6 @@ function RouteComponent() {
                 </TooltipTrigger>
                 <TooltipContent>{isReadingMode ? "Exit Reading Mode" : "Reading Mode"}</TooltipContent>
               </Tooltip>
-
-              {/* Fullscreen toggle */}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-9 w-9" onClick={toggleFullscreen}>
@@ -701,8 +529,6 @@ function RouteComponent() {
                 </TooltipTrigger>
                 <TooltipContent>{isFullscreen ? "Exit Fullscreen" : "Fullscreen"}</TooltipContent>
               </Tooltip>
-
-              {/* Settings panel */}
               <ReaderSettingsPanel
                 settings={settings}
                 onSettingsChange={setSettings}
@@ -711,13 +537,11 @@ function RouteComponent() {
               />
             </div>
           </div>
-
-          {/* Progress bar */}
-          <div className={cn("h-0.5", isReadingMode ? "bg-[var(--reader-text-color)]/10" : "bg-muted")}>
+          <div className={cn("h-0.5", isReadingMode ? "bg-(--reader-text-color)/10" : "bg-muted")}>
             <div
               className={cn(
                 "h-full transition-all duration-300",
-                isReadingMode ? "bg-[var(--reader-text-color)]/30" : "bg-primary/50",
+                isReadingMode ? "bg-(--reader-text-color)/30" : "bg-primary/50",
               )}
               style={{
                 width: `${(pageSettings.currentPage / (totalPages || 1)) * 100}%`,
@@ -725,8 +549,6 @@ function RouteComponent() {
             />
           </div>
         </header>
-
-        {/* Reader content area */}
         <main
           className="flex-1 min-h-0 overflow-hidden transition-colors duration-300"
           style={{
@@ -735,16 +557,10 @@ function RouteComponent() {
           }}
         >
           <ScrollArea className="h-full w-full">
-            <div
-              className="w-full"
-              style={{
-                padding: `${settings.paddingVertical}px ${settings.paddingHorizontal}px`,
-              }}
-            >
+            <div className="w-full">
               <div
-                className="mx-auto"
+                className="mx-auto px-6 py-8"
                 style={{
-                  maxWidth: `${settings.maxWidth}px`,
                   fontFamily: FONT_FAMILIES[settings.fontFamily].value,
                   fontSize: `${settings.fontSize}px`,
                   lineHeight: settings.lineHeight,
@@ -754,7 +570,6 @@ function RouteComponent() {
                   WebkitHyphens: settings.hyphenation ? "auto" : "manual",
                 }}
               >
-                {/* Reader paragraph spacing style */}
                 <style>{`
                   .reader-paragraph {
                     margin-bottom: ${settings.paragraphSpacing}em;
@@ -768,7 +583,6 @@ function RouteComponent() {
                     border-top-color: color-mix(in srgb, currentColor 10%, transparent);
                   }
                 `}</style>
-
                 {settings.viewMode === "scroll" ? (
                   <ScrollReader
                     uploadId={uploadId}
@@ -787,6 +601,55 @@ function RouteComponent() {
             </div>
           </ScrollArea>
         </main>
+        {settings.viewMode === "paginate" && (
+          <footer
+            className={cn(
+              "shrink-0 border-t px-4 py-3 transition-colors duration-300",
+              isReadingMode
+                ? "bg-(--reader-bg-color) border-(--reader-text-color)/10"
+                : "bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60",
+            )}
+            style={isReadingMode ? { color: settings.textColor } : undefined}
+          >
+            <div className="flex items-center justify-between max-w-3xl mx-auto">
+              <Button
+                variant="ghost"
+                onClick={() => navigatePage("prev")}
+                disabled={pageSettings.currentPage <= 1}
+                className="gap-2"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <div className="flex items-center gap-3">
+                <span className="text-sm opacity-60">Page</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={totalPages}
+                  value={pageSettings.currentPage}
+                  onChange={(e) => {
+                    const page = parseInt(e.target.value, 10);
+                    if (page >= 1 && page <= totalPages) {
+                      handlePageChange(page);
+                    }
+                  }}
+                  className="w-16 h-9 text-center"
+                />
+                <span className="text-sm opacity-60">of {totalPages}</span>
+              </div>
+              <Button
+                variant="ghost"
+                onClick={() => navigatePage("next")}
+                disabled={pageSettings.currentPage >= totalPages}
+                className="gap-2"
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </footer>
+        )}
       </div>
     </TooltipProvider>
   );

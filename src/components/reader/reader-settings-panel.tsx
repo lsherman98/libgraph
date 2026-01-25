@@ -175,7 +175,7 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
         </div>
 
         <Tabs defaultValue="typography" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 rounded-none border-b bg-transparent p-0 h-10">
+          <TabsList className="grid w-full grid-cols-2 rounded-none border-b bg-transparent p-0 h-10">
             <TabsTrigger
               value="typography"
               className="relative gap-1.5 text-xs rounded-none border-0 bg-transparent shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 data-[state=active]:after:bg-primary"
@@ -190,18 +190,9 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
               <Palette className="h-3.5 w-3.5" />
               Theme
             </TabsTrigger>
-            <TabsTrigger
-              value="layout"
-              className="relative gap-1.5 text-xs rounded-none border-0 bg-transparent shadow-none data-[state=active]:bg-transparent data-[state=active]:shadow-none after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 data-[state=active]:after:bg-primary"
-            >
-              <AlignJustify className="h-3.5 w-3.5" />
-              Layout
-            </TabsTrigger>
           </TabsList>
-
-          <ScrollArea className="h-[320px]">
+          <ScrollArea className="h-80">
             <TabsContent value="typography" className="mt-0 p-4 space-y-4">
-              {/* Font Family */}
               <SettingRow label="Font Family">
                 <div className="space-y-1">
                   {Object.entries(FONT_FAMILIES).map(([key, family]) => (
@@ -214,10 +205,7 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
                   ))}
                 </div>
               </SettingRow>
-
               <Separator />
-
-              {/* Font Size */}
               <SettingRow label="Font Size">
                 <SliderWithValue
                   value={settings.fontSize}
@@ -229,8 +217,6 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
                   showButtons={false}
                 />
               </SettingRow>
-
-              {/* Line Height */}
               <SettingRow label="Line Height">
                 <SliderWithValue
                   value={settings.lineHeight}
@@ -241,8 +227,6 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
                   showButtons={false}
                 />
               </SettingRow>
-
-              {/* Letter Spacing */}
               <SettingRow label="Letter Spacing">
                 <SliderWithValue
                   value={settings.letterSpacing}
@@ -254,8 +238,6 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
                   showButtons={false}
                 />
               </SettingRow>
-
-              {/* Paragraph Spacing */}
               <SettingRow label="Paragraph Spacing">
                 <SliderWithValue
                   value={settings.paragraphSpacing}
@@ -267,10 +249,7 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
                   showButtons={false}
                 />
               </SettingRow>
-
               <Separator />
-
-              {/* Text Alignment */}
               <SettingRow label="Text Alignment">
                 <ToggleGroup
                   type="single"
@@ -295,8 +274,6 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
                   </ToggleGroupItem>
                 </ToggleGroup>
               </SettingRow>
-
-              {/* Hyphenation */}
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label className="text-xs font-medium">Hyphenation</Label>
@@ -308,9 +285,7 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
                 />
               </div>
             </TabsContent>
-
             <TabsContent value="theme" className="mt-0 p-4 space-y-4">
-              {/* Theme Presets */}
               <SettingRow label="Theme Presets">
                 <div className="grid grid-cols-4 gap-1.5">
                   {Object.entries(READER_THEMES).map(([key, theme]) => (
@@ -323,10 +298,7 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
                   ))}
                 </div>
               </SettingRow>
-
               <Separator />
-
-              {/* Custom Colors */}
               <SettingRow label="Custom Colors">
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
@@ -362,7 +334,6 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
                       />
                     </div>
                   </div>
-
                   <div className="flex items-center gap-2">
                     <Label className="w-20 text-xs">Text</Label>
                     <div className="flex items-center gap-2 flex-1">
@@ -399,50 +370,8 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
                 </div>
               </SettingRow>
             </TabsContent>
-
-            <TabsContent value="layout" className="mt-0 p-4 space-y-4">
-              {/* Max Width */}
-              <SettingRow label="Content Width">
-                <SliderWithValue
-                  value={settings.maxWidth}
-                  min={400}
-                  max={1600}
-                  step={20}
-                  onChange={(maxWidth) => onSettingsChange({ maxWidth })}
-                  unit="px"
-                  showButtons={false}
-                />
-              </SettingRow>
-
-              {/* Horizontal Padding */}
-              <SettingRow label="Horizontal Padding">
-                <SliderWithValue
-                  value={settings.paddingHorizontal}
-                  min={16}
-                  max={80}
-                  step={4}
-                  onChange={(paddingHorizontal) => onSettingsChange({ paddingHorizontal })}
-                  unit="px"
-                  showButtons={false}
-                />
-              </SettingRow>
-
-              {/* Vertical Padding */}
-              <SettingRow label="Vertical Padding">
-                <SliderWithValue
-                  value={settings.paddingVertical}
-                  min={16}
-                  max={80}
-                  step={4}
-                  onChange={(paddingVertical) => onSettingsChange({ paddingVertical })}
-                  unit="px"
-                  showButtons={false}
-                />
-              </SettingRow>
-            </TabsContent>
           </ScrollArea>
         </Tabs>
-
         <div className="p-3 border-t">
           <Button variant="outline" size="sm" className="w-full" onClick={onReset}>
             <RotateCcw className="h-3.5 w-3.5 mr-2" />
@@ -454,7 +383,6 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
   );
 }
 
-// Quick settings popover for common adjustments
 export function QuickFontSizeControl({ fontSize, onChange }: { fontSize: number; onChange: (size: number) => void }) {
   return (
     <div className="flex items-center gap-1">

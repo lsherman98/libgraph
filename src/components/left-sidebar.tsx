@@ -1,30 +1,17 @@
 import { NavMain } from "@/components/nav-main";
 import { NavSecondary } from "@/components/nav-secondary";
 import { NavUser } from "@/components/nav-user";
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar";
-import { Home, Settings, CreditCard, Files } from "lucide-react";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar";
+import { Settings, Files, CloudUpload, BookText } from "lucide-react";
 import { pb } from "@/lib/pocketbase";
-// import { Link } from "@tanstack/react-router";
 
 export function LeftSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const data = {
     navMain: [
       {
-        title: "Home",
-        url: "/",
-        icon: Home,
-      },
-      {
         title: "Upload",
         url: "/upload",
-        icon: Files,
+        icon: CloudUpload,
       },
       {
         title: "Documents",
@@ -34,7 +21,7 @@ export function LeftSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) 
       {
         title: "Reader",
         url: "/reader",
-        icon: Files,
+        icon: BookText,
       },
     ],
     navSecondary: [
@@ -43,11 +30,6 @@ export function LeftSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) 
         url: "/settings",
         icon: Settings,
       },
-      //   {
-      //     title: "Subscription",
-      //     url: "/subscription",
-      //     icon: CreditCard,
-      //   },
     ],
   };
 

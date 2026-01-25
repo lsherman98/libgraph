@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { X, Upload, File as FileIcon, Loader2, CheckCircle, AlertCircle } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -109,7 +108,7 @@ function RouteComponent() {
   }));
 
   return (
-    <div className="container mx-auto py-8 space-y-8 max-w-6xl">
+    <div className="container mx-auto px-4 py-8 space-y-8 max-w-6xl">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Upload Files</h1>

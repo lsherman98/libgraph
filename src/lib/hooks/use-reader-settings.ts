@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 
-// Font families available for the reader
 export const FONT_FAMILIES = {
     system: { name: "System", value: "system-ui, -apple-system, sans-serif" },
     serif: { name: "Serif", value: "Georgia, 'Times New Roman', serif" },
@@ -11,7 +10,6 @@ export const FONT_FAMILIES = {
 
 export type FontFamilyKey = keyof typeof FONT_FAMILIES;
 
-// Preconfigured themes
 export const READER_THEMES = {
     light: {
         name: "Light",
@@ -19,23 +17,11 @@ export const READER_THEMES = {
         textColor: "#1a1a1a",
         accentColor: "#3b82f6",
     },
-    dark: {
-        name: "Dark",
-        backgroundColor: "#1a1a1a",
-        textColor: "#e5e5e5",
-        accentColor: "#60a5fa",
-    },
     sepia: {
         name: "Sepia",
         backgroundColor: "#f4ecd8",
         textColor: "#5c4b37",
         accentColor: "#8b6914",
-    },
-    night: {
-        name: "Night",
-        backgroundColor: "#0d1117",
-        textColor: "#c9d1d9",
-        accentColor: "#58a6ff",
     },
     paper: {
         name: "Paper",
@@ -43,69 +29,34 @@ export const READER_THEMES = {
         textColor: "#333333",
         accentColor: "#2563eb",
     },
-    forest: {
-        name: "Forest",
-        backgroundColor: "#1e2a1e",
-        textColor: "#c8d6c8",
-        accentColor: "#4ade80",
-    },
-    ocean: {
-        name: "Ocean",
-        backgroundColor: "#0f172a",
-        textColor: "#cbd5e1",
-        accentColor: "#38bdf8",
-    },
-    sunset: {
-        name: "Sunset",
-        backgroundColor: "#2d1f1f",
-        textColor: "#e8d5d5",
-        accentColor: "#f97316",
-    },
 } as const;
 
 export type ReaderThemeKey = keyof typeof READER_THEMES;
 
-// Reader settings interface
 export interface ReaderSettings {
-    // Typography
-    fontSize: number; // in px, range 12-32
+    fontSize: number;
     fontFamily: FontFamilyKey;
-    lineHeight: number; // multiplier, range 1.2-2.5
-    letterSpacing: number; // in em, range -0.05 to 0.15
-
-    // Layout
-    maxWidth: number; // in px, range 400-1200
-    paddingHorizontal: number; // in px, range 16-80
-    paddingVertical: number; // in px, range 16-80
+    lineHeight: number;
+    letterSpacing: number;
     textAlign: "left" | "justify" | "center";
-
-    // Colors (can be customized beyond themes)
     theme: ReaderThemeKey | "custom";
     backgroundColor: string;
     textColor: string;
-
-    // View mode
     viewMode: "scroll" | "paginate";
-
-    // Advanced
     hyphenation: boolean;
-    paragraphSpacing: number; // in em, range 0.5-3
+    paragraphSpacing: number;
 }
 
-// Default settings
 export const DEFAULT_READER_SETTINGS: ReaderSettings = {
     fontSize: 18,
     fontFamily: "serif",
     lineHeight: 1.8,
     letterSpacing: 0,
-    maxWidth: 900,
-    paddingHorizontal: 24,
-    paddingVertical: 24,
     textAlign: "left",
     theme: "light",
     backgroundColor: READER_THEMES.light.backgroundColor,
     textColor: READER_THEMES.light.textColor,
-    viewMode: "scroll",
+    viewMode: "paginate",
     hyphenation: false,
     paragraphSpacing: 1.5,
 };
@@ -119,7 +70,6 @@ function loadSettings(): ReaderSettings {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
             const parsed = JSON.parse(stored);
-            // Merge with defaults to handle missing keys from old versions
             return { ...DEFAULT_READER_SETTINGS, ...parsed };
         }
     } catch (e) {
@@ -142,13 +92,11 @@ export function useReaderSettings() {
     const [settings, setSettingsState] = useState<ReaderSettings>(loadSettings);
     const [isLoaded, setIsLoaded] = useState(false);
 
-    // Load settings on mount (handles SSR)
     useEffect(() => {
         setSettingsState(loadSettings());
         setIsLoaded(true);
     }, []);
 
-    // Save settings whenever they change
     useEffect(() => {
         if (isLoaded) {
             saveSettings(settings);
@@ -173,15 +121,11 @@ export function useReaderSettings() {
         setSettingsState(DEFAULT_READER_SETTINGS);
     }, []);
 
-    // Generate CSS variables for the reader
     const cssVariables = {
         "--reader-font-size": `${settings.fontSize}px`,
         "--reader-font-family": FONT_FAMILIES[settings.fontFamily].value,
         "--reader-line-height": settings.lineHeight,
         "--reader-letter-spacing": `${settings.letterSpacing}em`,
-        "--reader-max-width": `${settings.maxWidth}px`,
-        "--reader-padding-x": `${settings.paddingHorizontal}px`,
-        "--reader-padding-y": `${settings.paddingVertical}px`,
         "--reader-text-align": settings.textAlign,
         "--reader-bg-color": settings.backgroundColor,
         "--reader-text-color": settings.textColor,
@@ -198,7 +142,6 @@ export function useReaderSettings() {
     };
 }
 
-// Hook for page-specific settings (current page, scroll position, etc.)
 const PAGE_SETTINGS_PREFIX = "reader-page-";
 
 interface PageSettings {

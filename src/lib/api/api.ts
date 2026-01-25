@@ -52,7 +52,7 @@ export const getFirstPage = async (uploadId: string) => {
     return pages.items[0] || null;
 }
 
-export const getPages = async (uploadId: string, page = 1, perPage = 20) => {
+export const getPages = async (uploadId: string, page = 1, perPage = 5) => {
     return await pb.collection(Collections.Pages).getList(page, perPage, {
         filter: `upload = "${uploadId}"`,
         sort: 'page'

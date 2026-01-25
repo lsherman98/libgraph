@@ -79,6 +79,7 @@ func Init(app *pocketbase.PocketBase) error {
 			}
 
 			upload.Set("status", "SUCCESS")
+			upload.Set("num_pages", len(pages))
 			if err := app.Save(upload); err != nil {
 				e.App.Logger().Error("Failed to update upload status to SUCCESS:", "error", err)
 			}
