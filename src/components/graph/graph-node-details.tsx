@@ -1,15 +1,15 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { X, Trash2, ExternalLink } from "lucide-react";
-import { type GraphNodeType } from "./graph-node";
+import { X, ExternalLink } from "lucide-react";
+import { type GraphNodeType } from "./graph-canvas";
 import { NodesTypeOptions } from "@/lib/pocketbase-types";
 import { Link } from "@tanstack/react-router";
 
 interface GraphNodeDetailsProps {
   node: GraphNodeType;
   onClose: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
 }
 
 const typeRoutes: Partial<Record<NodesTypeOptions, string>> = {
@@ -18,12 +18,12 @@ const typeRoutes: Partial<Record<NodesTypeOptions, string>> = {
   [NodesTypeOptions.bookmark]: "/reader",
 };
 
-export function GraphNodeDetails({ node, onClose, onDelete }: GraphNodeDetailsProps) {
+export function GraphNodeDetails({ node, onClose }: GraphNodeDetailsProps) {
   const { data } = node;
   const route = typeRoutes[data.type];
 
   return (
-    <Card className="w-64 shadow-lg">
+    <Card className="w-64 shadow-lg shrink-0">
       <CardHeader className="py-3 px-4 flex flex-row items-center justify-between">
         <CardTitle className="text-sm font-medium">Node Details</CardTitle>
         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClose}>
@@ -61,20 +61,16 @@ export function GraphNodeDetails({ node, onClose, onDelete }: GraphNodeDetailsPr
           </div>
         )}
 
-        <div className="flex gap-2 pt-2 border-t">
-          {route && data.record && (
-            <Button variant="outline" size="sm" className="flex-1" asChild>
+        {route && data.record && (
+          <div className="pt-2 border-t">
+            <Button variant="outline" size="sm" className="w-full" asChild>
               <Link to={route} search={{ uploadId: data.record }}>
                 <ExternalLink className="h-3 w-3 mr-1" />
-                View
+                View Content
               </Link>
             </Button>
-          )}
-          <Button variant="destructive" size="sm" className="flex-1" onClick={onDelete}>
-            <Trash2 className="h-3 w-3 mr-1" />
-            Delete
-          </Button>
-        </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

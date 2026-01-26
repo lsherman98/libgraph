@@ -1,5 +1,4 @@
-export { GraphCanvas } from './graph-canvas';
-export { default as GraphNode, type GraphNodeData } from './graph-node';
-export { GraphToolbar } from './graph-toolbar';
+export { GraphCanvas, type GraphNodeData, type GraphNodeType } from './graph-canvas';
+export { GraphToolbar, type ViewMode } from './graph-toolbar';
 export { GraphNodeDetails } from './graph-node-details';
-export { AddEdgeDialog } from './add-edge-dialog';
+export { DagreGraphView } from './dagre-graph-view';

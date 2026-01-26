@@ -2,15 +2,21 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Filter, GitBranch, Circle } from "lucide-react";
+import { Filter, GitBranch, Circle, ChevronsUpDown, ChevronsDownUp, List, Network } from "lucide-react";
 import { NodesTypeOptions } from "@/lib/pocketbase-types";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+
+export type ViewMode = "tree" | "graph";
 
 interface GraphToolbarProps {
   filterType: NodesTypeOptions | "all";
   onFilterChange: (type: NodesTypeOptions | "all") => void;
-  onAddEdge: () => void;
   nodeCount: number;
   edgeCount: number;
+  onExpandAll: () => void;
+  onCollapseAll: () => void;
+  viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
 }
 
 const nodeTypeLabels: Record<NodesTypeOptions | "all", string> = {
@@ -25,9 +31,18 @@ const nodeTypeLabels: Record<NodesTypeOptions | "all", string> = {
   [NodesTypeOptions.file]: "Files",
 };
 
-export function GraphToolbar({ filterType, onFilterChange, onAddEdge, nodeCount, edgeCount }: GraphToolbarProps) {
+export function GraphToolbar({
+  filterType,
+  onFilterChange,
+  nodeCount,
+  edgeCount,
+  onExpandAll,
+  onCollapseAll,
+  viewMode,
+  onViewModeChange,
+}: GraphToolbarProps) {
   return (
-    <Card className="shadow-lg">
+    <Card className="shadow-lg w-56 shrink-0">
       <CardHeader className="py-3 px-4">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <GitBranch className="h-4 w-4" />
@@ -35,10 +50,30 @@ export function GraphToolbar({ filterType, onFilterChange, onAddEdge, nodeCount,
         </CardTitle>
       </CardHeader>
       <CardContent className="py-2 px-4 space-y-3">
+        {/* View Mode Toggle */}
+        <div>
+          <p className="text-xs text-muted-foreground mb-1.5">View</p>
+          <ToggleGroup
+            type="single"
+            value={viewMode}
+            onValueChange={(v) => v && onViewModeChange(v as ViewMode)}
+            className="justify-start"
+          >
+            <ToggleGroupItem value="tree" aria-label="Tree view" className="flex-1">
+              <List className="h-4 w-4 mr-1" />
+              Tree
+            </ToggleGroupItem>
+            <ToggleGroupItem value="graph" aria-label="Graph view" className="flex-1">
+              <Network className="h-4 w-4 mr-1" />
+              Graph
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+
         <div className="flex items-center gap-2">
           <Filter className="h-4 w-4 text-muted-foreground" />
           <Select value={filterType} onValueChange={(v) => onFilterChange(v as NodesTypeOptions | "all")}>
-            <SelectTrigger className="w-[140px] h-8 text-xs">
+            <SelectTrigger className="w-full h-8 text-xs">
               <SelectValue placeholder="Filter by type" />
             </SelectTrigger>
             <SelectContent>
@@ -51,10 +86,18 @@ export function GraphToolbar({ filterType, onFilterChange, onAddEdge, nodeCount,
           </Select>
         </div>
 
-        <Button size="sm" variant="outline" className="w-full" onClick={onAddEdge}>
-          <Plus className="h-4 w-4 mr-1" />
-          Add Connection
-        </Button>
+        {viewMode === "tree" && (
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={onExpandAll}>
+              <ChevronsUpDown className="h-3.5 w-3.5 mr-1" />
+              Expand
+            </Button>
+            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={onCollapseAll}>
+              <ChevronsDownUp className="h-3.5 w-3.5 mr-1" />
+              Collapse
+            </Button>
+          </div>
+        )}
 
         <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-2">
           <div className="flex items-center gap-1">
