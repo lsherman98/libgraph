@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useInfiniteQuery } from "@tanstack/react-query";
-import { getAuthors, getFirstPage, getPages, getPageUrl, getTags, getTopics, getUploads, getHighlights, getHighlightsForPage, getBookmarks, getNodes, getNodeById, getEdges, getEdgeById, getGraphData } from "./api";
+import { getAuthors, getFirstPage, getPages, getPageUrl, getTags, getTopics, getUploads, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData } from "./api";
 
 export function useAuthors() {
     return useQuery({
@@ -99,6 +99,16 @@ export function useBookmarks(uploadId: string | null) {
     return useQuery({
         queryKey: ["bookmarks", uploadId],
         queryFn: () => uploadId ? getBookmarks(uploadId) : [],
+        enabled: !!uploadId,
+        placeholderData: keepPreviousData
+    });
+}
+
+// Notes hooks
+export function useNotes(uploadId: string | null) {
+    return useQuery({
+        queryKey: ["notes", uploadId],
+        queryFn: () => uploadId ? getNotes(uploadId) : [],
         enabled: !!uploadId,
         placeholderData: keepPreviousData
     });

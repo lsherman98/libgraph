@@ -122,6 +122,33 @@ export const deleteBookmark = async (id: string) => {
     return await pb.collection(Collections.Bookmarks).delete(id);
 }
 
+// Notes API
+export const getNotes = async (uploadId: string) => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) return [];
+    return await pb.collection(Collections.Notes).getFullList({
+        filter: `upload = "${uploadId}" && user = "${userId}"`,
+        sort: 'page_number'
+    });
+}
+
+export const createNote = async (data: Create<Collections.Notes>) => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) throw new Error("User not authenticated");
+    return await pb.collection(Collections.Notes).create({
+        ...data,
+        user: userId
+    });
+}
+
+export const updateNote = async (id: string, data: Partial<Create<Collections.Notes>>) => {
+    return await pb.collection(Collections.Notes).update(id, data);
+}
+
+export const deleteNote = async (id: string) => {
+    return await pb.collection(Collections.Notes).delete(id);
+}
+
 // Nodes API
 export const getNodes = async (filters?: { type?: string; userId?: string }) => {
     const userId = pb.authStore.record?.id;

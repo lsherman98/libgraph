@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { upload, createAuthor, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNode, updateNode, deleteNode, createEdge, updateEdge, deleteEdge } from "./api";
+import { upload, createAuthor, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createNode, updateNode, deleteNode, createEdge, updateEdge, deleteEdge } from "./api";
 import { handleError } from "../utils";
 import { Collections, type Create } from "../pocketbase-types";
 
@@ -153,6 +153,44 @@ export function useDeleteBookmark() {
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
+        },
+    });
+}
+
+// Notes mutations
+export function useCreateNote() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (record: Create<Collections.Notes>) => createNote(record),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["notes"] });
+        },
+    });
+}
+
+export function useUpdateNote() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.Notes>> }) =>
+            updateNote(id, data),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["notes"] });
+        },
+    });
+}
+
+export function useDeleteNote() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (id: string) => deleteNote(id),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["notes"] });
         },
     });
 }

@@ -1,12 +1,14 @@
 import { useState, useMemo } from "react";
 import { useSearch } from "@tanstack/react-router";
-import { useHighlights, useBookmarks, usePageMarkdown, usePages } from "@/lib/api/queries";
+import { useHighlights, useBookmarks, useNotes, usePageMarkdown, usePages, useTags } from "@/lib/api/queries";
+import { useCreateNote, useUpdateNote, useDeleteNote } from "@/lib/api/mutations";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -15,10 +17,14 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Highlighter, BookMarked, ExternalLink, FileText, StickyNote, Tag } from "lucide-react";
+import { Highlighter, BookMarked, ExternalLink, FileText, StickyNote, Tag, Pencil, Trash2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { HighlightsColorOptions, type HighlightsRecord, type BookmarksRecord } from "@/lib/pocketbase-types";
-import { useTags } from "@/lib/api/queries";
+import {
+  HighlightsColorOptions,
+  type HighlightsRecord,
+  type BookmarksRecord,
+  type NotesRecord,
+} from "@/lib/pocketbase-types";
 
 type ReaderSearch = {
   uploadId?: string;
@@ -146,11 +152,69 @@ function BookmarkItem({ bookmark, onClick }: BookmarkItemProps) {
   );
 }
 
+interface NoteItemProps {
+  note: NotesRecord;
+  onEdit: () => void;
+  onDelete: () => void;
+  onClick: () => void;
+}
+
+function NoteItem({ note, onEdit, onDelete, onClick }: NoteItemProps) {
+  const { data: allTags = [] } = useTags();
+
+  const tagTitles = (note.tags || []).map((tagId) => allTags.find((t) => t.id === tagId)?.title).filter(Boolean);
+
+  return (
+    <div className="w-full text-left p-3 rounded-lg border border-transparent hover:border-border hover:bg-accent/50 transition-colors group">
+      <div className="flex items-start gap-2">
+        <Pencil className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm text-foreground line-clamp-3 whitespace-pre-wrap">{note.content}</p>
+
+          {tagTitles.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              <Tag className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+              {tagTitles.map((title, i) => (
+                <Badge key={i} variant="outline" className="text-[10px] px-1 py-0 h-4 border-muted-foreground/30">
+                  {title}
+                </Badge>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between mt-2">
+            <Badge variant="secondary" className="text-xs">
+              Page {note.page_number ?? "?"}
+            </Badge>
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClick} title="View in context">
+                <ExternalLink className="h-3 w-3" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onEdit} title="Edit note">
+                <Pencil className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-destructive hover:text-destructive"
+                onClick={onDelete}
+                title="Delete note"
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface PreviewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  type: "highlight" | "bookmark";
-  item: HighlightsRecord | BookmarksRecord | null;
+  type: "highlight" | "bookmark" | "note";
+  item: HighlightsRecord | BookmarksRecord | NotesRecord | null;
   pageNumber?: number;
   onNavigate: () => void;
 }
@@ -162,8 +226,10 @@ function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate 
   if (!item) return null;
 
   const isHighlight = type === "highlight";
+  const isNote = type === "note";
   const highlight = isHighlight ? (item as HighlightsRecord) : null;
-  const bookmark = !isHighlight ? (item as BookmarksRecord) : null;
+  const bookmark = type === "bookmark" ? (item as BookmarksRecord) : null;
+  const note = isNote ? (item as NotesRecord) : null;
 
   // Render the full page content with the highlight marked
   const renderPageContent = () => {
@@ -200,6 +266,11 @@ function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate 
                 <Highlighter className="h-5 w-5" />
                 Highlight Preview
               </>
+            ) : isNote ? (
+              <>
+                <Pencil className="h-5 w-5 text-blue-500" />
+                Note Preview
+              </>
             ) : (
               <>
                 <BookMarked className="h-5 w-5 text-amber-500" />
@@ -226,6 +297,15 @@ function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate 
                 <p className="text-sm text-muted-foreground">{highlight.note}</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Note content - fixed at top */}
+        {isNote && note && (
+          <div className="shrink-0 mb-2">
+            <div className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+              <p className="text-sm text-foreground whitespace-pre-wrap">{note.content}</p>
+            </div>
           </div>
         )}
 
@@ -270,19 +350,38 @@ export function AnnotationsPanel({ currentPageId, currentPageNumber, onNavigateT
 
   const [showCurrentPageOnly, setShowCurrentPageOnly] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewType, setPreviewType] = useState<"highlight" | "bookmark">("highlight");
-  const [previewItem, setPreviewItem] = useState<HighlightsRecord | BookmarksRecord | null>(null);
+  const [previewType, setPreviewType] = useState<"highlight" | "bookmark" | "note">("highlight");
+  const [previewItem, setPreviewItem] = useState<HighlightsRecord | BookmarksRecord | NotesRecord | null>(null);
   const [previewPageNumber, setPreviewPageNumber] = useState<number | undefined>();
+
+  // Note editing state
+  const [editingNote, setEditingNote] = useState<NotesRecord | null>(null);
+  const [isCreatingNote, setIsCreatingNote] = useState(false);
+  const [noteContent, setNoteContent] = useState("");
 
   const { data: allHighlights = [] } = useHighlights(uploadId);
   const { data: allBookmarks = [] } = useBookmarks(uploadId);
+  const { data: allNotes = [] } = useNotes(uploadId);
   const { data: pagesData } = usePages(uploadId, 1, 1000); // Get all pages to map page IDs to numbers
+
+  const createNoteMutation = useCreateNote();
+  const updateNoteMutation = useUpdateNote();
+  const deleteNoteMutation = useDeleteNote();
 
   // Create a map of page ID to page number
   const pageIdToNumber = useMemo(() => {
     const map = new Map<string, number>();
     pagesData?.items.forEach((page) => {
       map.set(page.id, page.page);
+    });
+    return map;
+  }, [pagesData]);
+
+  // Create a map of page number to page ID
+  const pageNumberToId = useMemo(() => {
+    const map = new Map<number, string>();
+    pagesData?.items.forEach((page) => {
+      map.set(page.page, page.id);
     });
     return map;
   }, [pagesData]);
@@ -297,6 +396,11 @@ export function AnnotationsPanel({ currentPageId, currentPageNumber, onNavigateT
     if (!showCurrentPageOnly || !currentPageNumber) return allBookmarks;
     return allBookmarks.filter((b) => b.page_number === currentPageNumber);
   }, [allBookmarks, showCurrentPageOnly, currentPageNumber]);
+
+  const notes = useMemo(() => {
+    if (!showCurrentPageOnly || !currentPageNumber) return allNotes;
+    return allNotes.filter((n) => n.page_number === currentPageNumber);
+  }, [allNotes, showCurrentPageOnly, currentPageNumber]);
 
   const handleHighlightClick = (highlight: HighlightsRecord) => {
     const pageNum = highlight.page ? pageIdToNumber.get(highlight.page) : undefined;
@@ -313,17 +417,86 @@ export function AnnotationsPanel({ currentPageId, currentPageNumber, onNavigateT
     setPreviewOpen(true);
   };
 
+  const handleNoteClick = (note: NotesRecord) => {
+    setPreviewType("note");
+    setPreviewItem(note);
+    setPreviewPageNumber(note.page_number);
+    setPreviewOpen(true);
+  };
+
+  const handleStartCreateNote = () => {
+    setIsCreatingNote(true);
+    setEditingNote(null);
+    setNoteContent("");
+  };
+
+  const handleStartEditNote = (note: NotesRecord) => {
+    setEditingNote(note);
+    setIsCreatingNote(false);
+    setNoteContent(note.content || "");
+  };
+
+  const handleCancelNoteEdit = () => {
+    setEditingNote(null);
+    setIsCreatingNote(false);
+    setNoteContent("");
+  };
+
+  const handleSaveNote = () => {
+    if (!noteContent.trim() || !uploadId) return;
+
+    if (isCreatingNote) {
+      createNoteMutation.mutate(
+        {
+          content: noteContent.trim(),
+          upload: uploadId,
+          page: currentPageId ? currentPageId : pageNumberToId.get(currentPageNumber || 1),
+          page_number: currentPageNumber || 1,
+        },
+        {
+          onSuccess: () => {
+            setIsCreatingNote(false);
+            setNoteContent("");
+          },
+        },
+      );
+    } else if (editingNote) {
+      updateNoteMutation.mutate(
+        {
+          id: editingNote.id,
+          data: { content: noteContent.trim() },
+        },
+        {
+          onSuccess: () => {
+            setEditingNote(null);
+            setNoteContent("");
+          },
+        },
+      );
+    }
+  };
+
+  const handleDeleteNote = (note: NotesRecord) => {
+    deleteNoteMutation.mutate(note.id);
+  };
+
   const handleNavigate = () => {
     if (!previewItem) return;
 
-    const pageNumber =
-      previewType === "highlight"
-        ? previewItem.page
-          ? pageIdToNumber.get(previewItem.page)
-          : undefined
-        : (previewItem as BookmarksRecord).page_number;
+    let pageNumber: number | undefined;
+    let blockId: string | undefined;
 
-    const blockId = previewType === "bookmark" ? (previewItem as BookmarksRecord).block_id : undefined;
+    if (previewType === "highlight") {
+      pageNumber = previewItem.page ? pageIdToNumber.get(previewItem.page) : undefined;
+    } else if (previewType === "bookmark") {
+      const bookmark = previewItem as BookmarksRecord;
+      pageNumber = bookmark.page_number;
+      blockId = bookmark.block_id;
+    } else if (previewType === "note") {
+      const note = previewItem as NotesRecord;
+      pageNumber = note.page_number;
+      blockId = note.block_id;
+    }
 
     if (pageNumber && onNavigateToPage) {
       onNavigateToPage(pageNumber, blockId);
@@ -372,6 +545,15 @@ export function AnnotationsPanel({ currentPageId, currentPageNumber, onNavigateT
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="notes" className="flex-1 gap-1.5">
+            <Pencil className="h-3.5 w-3.5" />
+            Notes
+            {notes.length > 0 && (
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                {notes.length}
+              </Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="highlights" className="flex-1 min-h-0 mt-0">
@@ -409,6 +591,71 @@ export function AnnotationsPanel({ currentPageId, currentPageNumber, onNavigateT
               ) : (
                 bookmarks.map((bookmark) => (
                   <BookmarkItem key={bookmark.id} bookmark={bookmark} onClick={() => handleBookmarkClick(bookmark)} />
+                ))
+              )}
+            </div>
+          </ScrollArea>
+        </TabsContent>
+
+        <TabsContent value="notes" className="flex-1 min-h-0 mt-0 flex flex-col">
+          {/* Note editor */}
+          {(isCreatingNote || editingNote) && (
+            <div className="p-3 border-b space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">
+                  {isCreatingNote ? "New Note" : "Edit Note"}
+                  {currentPageNumber && <span className="text-muted-foreground ml-1">(Page {currentPageNumber})</span>}
+                </span>
+              </div>
+              <Textarea
+                placeholder="Write your note..."
+                value={noteContent}
+                onChange={(e) => setNoteContent(e.target.value)}
+                className="min-h-25 resize-none"
+                autoFocus
+              />
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" size="sm" onClick={handleCancelNoteEdit}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSaveNote}
+                  disabled={!noteContent.trim() || createNoteMutation.isPending || updateNoteMutation.isPending}
+                >
+                  {createNoteMutation.isPending || updateNoteMutation.isPending ? "Saving..." : "Save"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Add note button */}
+          {!isCreatingNote && !editingNote && (
+            <div className="p-2 border-b">
+              <Button variant="outline" size="sm" className="w-full gap-2" onClick={handleStartCreateNote}>
+                <Plus className="h-4 w-4" />
+                Add Note {currentPageNumber && `(Page ${currentPageNumber})`}
+              </Button>
+            </div>
+          )}
+
+          <ScrollArea className="flex-1">
+            <div className="p-2 space-y-1">
+              {notes.length === 0 && !isCreatingNote ? (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  <Pencil className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                  <p>No notes yet</p>
+                  <p className="text-xs mt-1">Click "Add Note" to start taking notes</p>
+                </div>
+              ) : (
+                notes.map((note) => (
+                  <NoteItem
+                    key={note.id}
+                    note={note}
+                    onEdit={() => handleStartEditNote(note)}
+                    onDelete={() => handleDeleteNote(note)}
+                    onClick={() => handleNoteClick(note)}
+                  />
                 ))
               )}
             </div>
