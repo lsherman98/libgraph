@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { upload, createAuthor, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark } from "./api";
+import { upload, createAuthor, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNode, updateNode, deleteNode, createEdge, updateEdge, deleteEdge } from "./api";
 import { handleError } from "../utils";
 import { Collections, type Create } from "../pocketbase-types";
 
@@ -153,6 +153,89 @@ export function useDeleteBookmark() {
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
+        },
+    });
+}
+
+// Nodes mutations
+export function useCreateNode() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (record: Create<Collections.Nodes>) => createNode(record),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["nodes"] });
+            queryClient.invalidateQueries({ queryKey: ["graph"] });
+        },
+    });
+}
+
+export function useUpdateNode() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.Nodes>> }) =>
+            updateNode(id, data),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["nodes"] });
+            queryClient.invalidateQueries({ queryKey: ["graph"] });
+        },
+    });
+}
+
+export function useDeleteNode() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (id: string) => deleteNode(id),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["nodes"] });
+            queryClient.invalidateQueries({ queryKey: ["edges"] });
+            queryClient.invalidateQueries({ queryKey: ["graph"] });
+        },
+    });
+}
+
+// Edges mutations
+export function useCreateEdge() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (record: Create<Collections.Edges>) => createEdge(record),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["edges"] });
+            queryClient.invalidateQueries({ queryKey: ["graph"] });
+        },
+    });
+}
+
+export function useUpdateEdge() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.Edges>> }) =>
+            updateEdge(id, data),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["edges"] });
+            queryClient.invalidateQueries({ queryKey: ["graph"] });
+        },
+    });
+}
+
+export function useDeleteEdge() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (id: string) => deleteEdge(id),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["edges"] });
+            queryClient.invalidateQueries({ queryKey: ["graph"] });
         },
     });
 }

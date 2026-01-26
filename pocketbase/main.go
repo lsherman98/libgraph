@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/joho/godotenv"
+	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/graph"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/uploads"
 
 	// _ "github.com/lsherman98/pb-template/pocketbase/migrations"
@@ -36,6 +37,10 @@ func main() {
 
 	if err := uploads.Init(app); err != nil {
 		log.Fatal("Failed to initialize Uploads hooks: ", err)
+	}
+
+	if err := graph.Init(app); err != nil {
+		log.Fatal("Failed to initialize Graph hooks: ", err)
 	}
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {

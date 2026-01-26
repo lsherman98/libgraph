@@ -121,3 +121,125 @@ export const updateBookmark = async (id: string, data: Partial<Create<Collection
 export const deleteBookmark = async (id: string) => {
     return await pb.collection(Collections.Bookmarks).delete(id);
 }
+
+// Nodes API
+export const getNodes = async (filters?: { type?: string; userId?: string }) => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) return [];
+
+    let filterStr = `user=${userId}`;
+    if (filters?.type) {
+        filterStr += ` && type=${filters.type}`;
+    }
+
+    return await pb.collection(Collections.Nodes).getFullList({
+        filter: filterStr,
+        sort: '-created'
+    });
+}
+
+export const getNodeById = async (id: string) => {
+    return await pb.collection(Collections.Nodes).getOne(id);
+}
+
+export const getNodeByRecord = async (recordId: string, type: string) => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) return null;
+
+    const nodes = await pb.collection(Collections.Nodes).getList(1, 1, {
+        filter: `record = "${recordId}" && type = "${type}" && user = "${userId}"`
+    });
+    return nodes.items[0] || null;
+}
+
+export const createNode = async (data: Create<Collections.Nodes>) => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) throw new Error("User not authenticated");
+    return await pb.collection(Collections.Nodes).create({
+        ...data,
+        user: userId
+    });
+}
+
+export const updateNode = async (id: string, data: Partial<Create<Collections.Nodes>>) => {
+    return await pb.collection(Collections.Nodes).update(id, data);
+}
+
+export const deleteNode = async (id: string) => {
+    // First delete all edges connected to this node
+    const edges = await pb.collection(Collections.Edges).getFullList({
+        filter: `source = "${id}" || target = "${id}"`
+    });
+
+    for (const edge of edges) {
+        await pb.collection(Collections.Edges).delete(edge.id);
+    }
+
+    return await pb.collection(Collections.Nodes).delete(id);
+}
+
+// Edges API
+export const getEdges = async (filters?: { sourceId?: string; targetId?: string; type?: string }) => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) return [];
+
+    let filterStr = `user=${userId}`;
+    if (filters?.sourceId) {
+        filterStr += ` && source=${filters.sourceId}`;
+    }
+    if (filters?.targetId) {
+        filterStr += ` && target=${filters.targetId}`;
+    }
+    if (filters?.type) {
+        filterStr += ` && type=${filters.type}`;
+    }
+
+    return await pb.collection(Collections.Edges).getFullList({
+        filter: filterStr,
+        sort: '-created',
+        expand: 'source,target'
+    });
+}
+
+export const getEdgeById = async (id: string) => {
+    return await pb.collection(Collections.Edges).getOne(id, {
+        expand: 'source,target'
+    });
+}
+
+export const createEdge = async (data: Create<Collections.Edges>) => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) throw new Error("User not authenticated");
+    return await pb.collection(Collections.Edges).create({
+        ...data,
+        user: userId
+    });
+}
+
+export const updateEdge = async (id: string, data: Partial<Create<Collections.Edges>>) => {
+    return await pb.collection(Collections.Edges).update(id, data);
+}
+
+export const deleteEdge = async (id: string) => {
+    return await pb.collection(Collections.Edges).delete(id);
+}
+
+// Graph data for visualization - returns all nodes and edges for the current user
+export const getGraphData = async () => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) return { nodes: [], edges: [] };
+
+    const [nodes, edges] = await Promise.all([
+        pb.collection(Collections.Nodes).getFullList({
+            filter: `user = "${userId}"`,
+            sort: '-created'
+        }),
+        pb.collection(Collections.Edges).getFullList({
+            filter: `user = "${userId}"`,
+            sort: '-created',
+            expand: 'source,target'
+        })
+    ]);
+
+    return { nodes, edges };
+}

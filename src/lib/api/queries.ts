@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useInfiniteQuery } from "@tanstack/react-query";
-import { getAuthors, getFirstPage, getPages, getPageUrl, getTags, getTopics, getUploads, getHighlights, getHighlightsForPage, getBookmarks } from "./api";
+import { getAuthors, getFirstPage, getPages, getPageUrl, getTags, getTopics, getUploads, getHighlights, getHighlightsForPage, getBookmarks, getNodes, getNodeById, getEdges, getEdgeById, getGraphData } from "./api";
 
 export function useAuthors() {
     return useQuery({
@@ -100,6 +100,51 @@ export function useBookmarks(uploadId: string | null) {
         queryKey: ["bookmarks", uploadId],
         queryFn: () => uploadId ? getBookmarks(uploadId) : [],
         enabled: !!uploadId,
+        placeholderData: keepPreviousData
+    });
+}
+
+// Nodes hooks
+export function useNodes(filters?: { type?: string; userId?: string }) {
+    return useQuery({
+        queryKey: ["nodes", filters],
+        queryFn: () => getNodes(filters),
+        placeholderData: keepPreviousData
+    });
+}
+
+export function useNode(id: string | null) {
+    return useQuery({
+        queryKey: ["node", id],
+        queryFn: () => id ? getNodeById(id) : null,
+        enabled: !!id,
+        placeholderData: keepPreviousData
+    });
+}
+
+// Edges hooks
+export function useEdges(filters?: { sourceId?: string; targetId?: string; type?: string }) {
+    return useQuery({
+        queryKey: ["edges", filters],
+        queryFn: () => getEdges(filters),
+        placeholderData: keepPreviousData
+    });
+}
+
+export function useEdge(id: string | null) {
+    return useQuery({
+        queryKey: ["edge", id],
+        queryFn: () => id ? getEdgeById(id) : null,
+        enabled: !!id,
+        placeholderData: keepPreviousData
+    });
+}
+
+// Graph data hook - returns all nodes and edges for visualization
+export function useGraphData() {
+    return useQuery({
+        queryKey: ["graph"],
+        queryFn: getGraphData,
         placeholderData: keepPreviousData
     });
 }

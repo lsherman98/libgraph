@@ -14,6 +14,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppUploadIndexRouteImport } from './routes/_app/upload/index'
 import { Route as AppReaderIndexRouteImport } from './routes/_app/reader/index'
+import { Route as AppGraphIndexRouteImport } from './routes/_app/graph/index'
 import { Route as AppDocumentsIndexRouteImport } from './routes/_app/documents/index'
 
 const SigninLazyRouteImport = createFileRoute('/signin')()
@@ -37,6 +38,11 @@ const AppReaderIndexRoute = AppReaderIndexRouteImport.update({
   path: '/reader/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppGraphIndexRoute = AppGraphIndexRouteImport.update({
+  id: '/graph/',
+  path: '/graph/',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDocumentsIndexRoute = AppDocumentsIndexRouteImport.update({
   id: '/documents/',
   path: '/documents/',
@@ -47,6 +53,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
   '/documents/': typeof AppDocumentsIndexRoute
+  '/graph/': typeof AppGraphIndexRoute
   '/reader/': typeof AppReaderIndexRoute
   '/upload/': typeof AppUploadIndexRoute
 }
@@ -54,6 +61,7 @@ export interface FileRoutesByTo {
   '/': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
   '/documents': typeof AppDocumentsIndexRoute
+  '/graph': typeof AppGraphIndexRoute
   '/reader': typeof AppReaderIndexRoute
   '/upload': typeof AppUploadIndexRoute
 }
@@ -62,19 +70,27 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
   '/_app/documents/': typeof AppDocumentsIndexRoute
+  '/_app/graph/': typeof AppGraphIndexRoute
   '/_app/reader/': typeof AppReaderIndexRoute
   '/_app/upload/': typeof AppUploadIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/signin' | '/documents/' | '/reader/' | '/upload/'
+  fullPaths:
+    | '/'
+    | '/signin'
+    | '/documents/'
+    | '/graph/'
+    | '/reader/'
+    | '/upload/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/signin' | '/documents' | '/reader' | '/upload'
+  to: '/' | '/signin' | '/documents' | '/graph' | '/reader' | '/upload'
   id:
     | '__root__'
     | '/_app'
     | '/signin'
     | '/_app/documents/'
+    | '/_app/graph/'
     | '/_app/reader/'
     | '/_app/upload/'
   fileRoutesById: FileRoutesById
@@ -114,6 +130,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppReaderIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/graph/': {
+      id: '/_app/graph/'
+      path: '/graph'
+      fullPath: '/graph/'
+      preLoaderRoute: typeof AppGraphIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/documents/': {
       id: '/_app/documents/'
       path: '/documents'
@@ -126,12 +149,14 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppDocumentsIndexRoute: typeof AppDocumentsIndexRoute
+  AppGraphIndexRoute: typeof AppGraphIndexRoute
   AppReaderIndexRoute: typeof AppReaderIndexRoute
   AppUploadIndexRoute: typeof AppUploadIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppDocumentsIndexRoute: AppDocumentsIndexRoute,
+  AppGraphIndexRoute: AppGraphIndexRoute,
   AppReaderIndexRoute: AppReaderIndexRoute,
   AppUploadIndexRoute: AppUploadIndexRoute,
 }
