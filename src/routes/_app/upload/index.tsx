@@ -101,7 +101,7 @@ function RouteComponent() {
     label: a.name || "Unknown",
     value: a.id,
   }));
-  const tagOptions = (tagsQuery.data || []).map((t: TagsResponse) => ({ label: t.title || "Untitled", value: t.id }));
+  const tagOptions = (tagsQuery.data || []).map((t: TagsResponse) => ({ label: t.title || t.id, value: t.id }));
   const topicOptions = (topicsQuery.data || []).map((t: TopicsResponse) => ({
     label: t.title || "Untitled",
     value: t.id,

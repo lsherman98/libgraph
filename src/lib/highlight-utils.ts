@@ -9,6 +9,7 @@ export interface HighlightRange {
     endOffset: number;
     color: HighlightsColorOptions;
     note?: string;
+    tags?: string[];
     text: string;
 }
 
@@ -22,6 +23,7 @@ export function toHighlightRanges(highlights: HighlightsResponse[]): HighlightRa
         endOffset: h.end_offset,
         color: h.color,
         note: h.note || undefined,
+        tags: h.tags || [],
         text: h.text,
     }));
 }

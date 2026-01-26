@@ -15,9 +15,10 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Highlighter, BookMarked, ExternalLink, FileText, StickyNote } from "lucide-react";
+import { Highlighter, BookMarked, ExternalLink, FileText, StickyNote, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HighlightsColorOptions, type HighlightsRecord, type BookmarksRecord } from "@/lib/pocketbase-types";
+import { useTags } from "@/lib/api/queries";
 
 type ReaderSearch = {
   uploadId?: string;
@@ -46,6 +47,9 @@ interface HighlightItemProps {
 
 function HighlightItem({ highlight, pageNumber, onClick }: HighlightItemProps) {
   const color = highlight.color || HighlightsColorOptions.yellow;
+  const { data: allTags = [] } = useTags();
+
+  const tagTitles = (highlight.tags || []).map((tagId) => allTags.find((t) => t.id === tagId)?.title).filter(Boolean);
 
   return (
     <button
@@ -71,6 +75,16 @@ function HighlightItem({ highlight, pageNumber, onClick }: HighlightItemProps) {
               <span className="line-clamp-2">{highlight.note}</span>
             </div>
           )}
+          {tagTitles.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              <Tag className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+              {tagTitles.map((title, i) => (
+                <Badge key={i} variant="outline" className="text-[10px] px-1 py-0 h-4 border-muted-foreground/30">
+                  {title}
+                </Badge>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-2 mt-2">
             <Badge variant="secondary" className="text-xs">
               Page {pageNumber ?? "?"}
@@ -88,6 +102,10 @@ interface BookmarkItemProps {
 }
 
 function BookmarkItem({ bookmark, onClick }: BookmarkItemProps) {
+  const { data: allTags = [] } = useTags();
+
+  const tagTitles = (bookmark.tags || []).map((tagId) => allTags.find((t) => t.id === tagId)?.title).filter(Boolean);
+
   return (
     <button
       onClick={onClick}
@@ -98,8 +116,20 @@ function BookmarkItem({ bookmark, onClick }: BookmarkItemProps) {
         <div className="flex-1 min-w-0">
           {bookmark.label && <p className="text-sm font-medium text-foreground mb-1">{bookmark.label}</p>}
           {bookmark.preview_text && (
-            <p className="text-sm text-muted-foreground line-clamp-2">{bookmark.preview_text}</p>
+            <p className="text-sm text-muted-foreground line-clamp-2 italic">"{bookmark.preview_text}"</p>
           )}
+
+          {tagTitles.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              <Tag className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+              {tagTitles.map((title, i) => (
+                <Badge key={i} variant="outline" className="text-[10px] px-1 py-0 h-4 border-muted-foreground/30">
+                  {title}
+                </Badge>
+              ))}
+            </div>
+          )}
+
           <div className="flex items-center gap-2 mt-2">
             <Badge variant="secondary" className="text-xs">
               Page {bookmark.page_number ?? "?"}
@@ -323,7 +353,7 @@ export function AnnotationsPanel({ currentPageId, currentPageNumber, onNavigateT
       </div>
 
       <Tabs defaultValue="highlights" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="mx-4 mt-3">
+        <TabsList className="mx-auto mt-3">
           <TabsTrigger value="highlights" className="flex-1 gap-1.5">
             <Highlighter className="h-3.5 w-3.5" />
             Highlights

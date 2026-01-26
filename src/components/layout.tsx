@@ -5,12 +5,20 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import type { PropsWithChildren } from "react";
 import { AppHeader } from "./header/app-header";
 import { useReaderStore } from "@/lib/stores/reader-store";
+import { useReaderTabsStore } from "@/lib/stores/reader-tabs-store";
+import { useLocation } from "@tanstack/react-router";
 
 export default function Layout({ children }: PropsWithChildren) {
   const isReadingMode = useReaderStore((state) => state.isReadingMode);
   const currentPageId = useReaderStore((state) => state.currentPageId);
   const currentPageNumber = useReaderStore((state) => state.currentPageNumber);
   const navigateToPage = useReaderStore((state) => state.navigateToPage);
+  const tabs = useReaderTabsStore((state) => state.tabs);
+  const location = useLocation();
+
+  // Show tabs header when on reader route with tabs, otherwise show app header
+  const isReaderRoute = location.pathname.startsWith("/reader");
+  const showAppHeader = !isReadingMode && !(isReaderRoute && tabs.length > 0);
 
   return (
     <SidebarProvider
@@ -27,7 +35,7 @@ export default function Layout({ children }: PropsWithChildren) {
     >
       <LeftSidebar variant="sidebar" />
       <SidebarInset className="overflow-hidden flex flex-col h-screen">
-        {!isReadingMode && <AppHeader />}
+        {showAppHeader && <AppHeader />}
         <div className="flex flex-1 min-h-0 overflow-hidden">{children}</div>
       </SidebarInset>
       <RightSidebar

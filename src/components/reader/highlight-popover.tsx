@@ -2,9 +2,12 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { MessageSquare, Trash2, Plus } from "lucide-react";
+import { MessageSquare, Trash2, Plus, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HighlightsColorOptions } from "@/lib/pocketbase-types";
+import { useTags } from "@/lib/api/queries";
+import { useCreateTag } from "@/lib/api/mutations";
+import { CreatableCombobox } from "@/components/creatable-combobox";
 
 const HIGHLIGHT_COLORS: { value: HighlightsColorOptions; bg: string; border: string; ring: string }[] = [
   {
@@ -38,7 +41,7 @@ interface HighlightPopoverProps {
   selectedText: string;
   position: SelectionPosition | null;
   selectionRange: Range | null;
-  onHighlight: (color: HighlightsColorOptions, note?: string) => void;
+  onHighlight: (color: HighlightsColorOptions, note?: string, tags?: string[]) => void;
   onDismiss: () => void;
 }
 
@@ -52,7 +55,11 @@ export function HighlightPopover({
   const [showNoteInput, setShowNoteInput] = useState(false);
   const [note, setNote] = useState("");
   const [selectedColor, setSelectedColor] = useState<HighlightsColorOptions>(HighlightsColorOptions.yellow);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  const { data: tags = [] } = useTags();
+  const createTagMutation = useCreateTag();
 
   // Reset state when popover reopens
   useEffect(() => {
@@ -60,6 +67,7 @@ export function HighlightPopover({
       setShowNoteInput(false);
       setNote("");
       setSelectedColor(HighlightsColorOptions.yellow);
+      setSelectedTags([]);
     }
   }, [position, selectedText]);
 
@@ -71,7 +79,12 @@ export function HighlightPopover({
     const handleClickOutside = (e: MouseEvent) => {
       // Use setTimeout to allow the click to process first
       setTimeout(() => {
-        if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        // Check if the click is inside the popover or inside a portal (like the tag combobox)
+        if (
+          popoverRef.current &&
+          !popoverRef.current.contains(e.target as Node) &&
+          !(e.target as HTMLElement).closest('[data-slot="popover-content"]')
+        ) {
           onDismiss();
         }
       }, 0);
@@ -97,8 +110,25 @@ export function HighlightPopover({
   };
 
   const handleSaveWithNote = () => {
-    onHighlight(selectedColor, note);
+    onHighlight(selectedColor, note, selectedTags);
   };
+
+  const handleTagSelect = (tagId: string) => {
+    setSelectedTags((prev) => (prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
+  };
+
+  const handleTagCreate = (title: string) => {
+    createTagMutation.mutate(
+      { title },
+      {
+        onSuccess: (newTag) => {
+          setSelectedTags((prev) => [...prev, newTag.id]);
+        },
+      },
+    );
+  };
+
+  const tagOptions = tags.map((t) => ({ label: t.title || t.id, value: t.id }));
 
   if (!position || !selectedText) return null;
 
@@ -180,13 +210,29 @@ export function HighlightPopover({
             </div>
 
             {/* Note input */}
-            <Textarea
-              placeholder="Add a note..."
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className="min-h-[80px] text-sm resize-none"
-              autoFocus
-            />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-medium uppercase text-muted-foreground ml-1">Note</label>
+              <Textarea
+                placeholder="Add a note..."
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                className="min-h-[80px] text-sm resize-none"
+                autoFocus
+              />
+            </div>
+
+            {/* Tags selection */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-medium uppercase text-muted-foreground ml-1">Tags</label>
+              <CreatableCombobox
+                options={tagOptions}
+                value={selectedTags}
+                onSelect={handleTagSelect}
+                onCreate={handleTagCreate}
+                placeholder="Search or create tags..."
+                isMulti
+              />
+            </div>
 
             {/* Actions */}
             <div className="flex items-center justify-end gap-2">
@@ -208,10 +254,12 @@ interface ExistingHighlightPopoverProps {
   highlightId: string;
   color: HighlightsColorOptions;
   note?: string;
+  tags?: string[];
   text: string;
   position: SelectionPosition;
   onUpdateColor: (color: HighlightsColorOptions) => void;
   onUpdateNote: (note: string) => void;
+  onUpdateTags: (tags: string[]) => void;
   onDelete: () => void;
   onDismiss: () => void;
 }
@@ -219,26 +267,41 @@ interface ExistingHighlightPopoverProps {
 export function ExistingHighlightPopover({
   color,
   note,
+  tags: highlightTags = [],
   text,
   position,
   onUpdateColor,
   onUpdateNote,
+  onUpdateTags,
   onDelete,
   onDismiss,
 }: ExistingHighlightPopoverProps) {
   const [editingNote, setEditingNote] = useState(false);
   const [noteValue, setNoteValue] = useState(note || "");
+  const [selectedTags, setSelectedTags] = useState<string[]>(highlightTags);
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  // Reset state when note changes
+  const { data: tags = [] } = useTags();
+  const createTagMutation = useCreateTag();
+
+  // Reset state when note or tags change
   useEffect(() => {
     setNoteValue(note || "");
   }, [note]);
 
   useEffect(() => {
+    setSelectedTags(highlightTags);
+  }, [highlightTags]);
+
+  useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       setTimeout(() => {
-        if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        // Check if the click is inside the popover or inside a portal (like the tag combobox)
+        if (
+          popoverRef.current &&
+          !popoverRef.current.contains(e.target as Node) &&
+          !(e.target as HTMLElement).closest('[data-slot="popover-content"]')
+        ) {
           onDismiss();
         }
       }, 0);
@@ -260,8 +323,26 @@ export function ExistingHighlightPopover({
 
   const handleSaveNote = () => {
     onUpdateNote(noteValue);
+    onUpdateTags(selectedTags);
     setEditingNote(false);
   };
+
+  const handleTagSelect = (tagId: string) => {
+    setSelectedTags((prev) => (prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
+  };
+
+  const handleTagCreate = (title: string) => {
+    createTagMutation.mutate(
+      { title },
+      {
+        onSuccess: (newTag) => {
+          setSelectedTags((prev) => [...prev, newTag.id]);
+        },
+      },
+    );
+  };
+
+  const tagOptions = tags.map((t) => ({ label: t.title || t.id, value: t.id }));
 
   // Calculate position to appear above the highlight
   const popoverStyle = {
@@ -342,13 +423,29 @@ export function ExistingHighlightPopover({
             </div>
 
             {/* Note input */}
-            <Textarea
-              value={noteValue}
-              onChange={(e) => setNoteValue(e.target.value)}
-              placeholder="Add a note..."
-              className="min-h-[60px] text-sm resize-none"
-              autoFocus
-            />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-medium uppercase text-muted-foreground ml-1">Note</label>
+              <Textarea
+                value={noteValue}
+                onChange={(e) => setNoteValue(e.target.value)}
+                placeholder="Add a note..."
+                className="min-h-[60px] text-sm resize-none"
+                autoFocus
+              />
+            </div>
+
+            {/* Tags selection */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-medium uppercase text-muted-foreground ml-1">Tags</label>
+              <CreatableCombobox
+                options={tagOptions}
+                value={selectedTags}
+                onSelect={handleTagSelect}
+                onCreate={handleTagCreate}
+                placeholder="Search or create tags..."
+                isMulti
+              />
+            </div>
 
             <div className="flex justify-end gap-1">
               <Button variant="ghost" size="sm" onClick={() => setEditingNote(false)}>
@@ -372,12 +469,24 @@ interface HighlightMarkProps {
   highlightId: string;
   className: string;
   note?: string;
+  tags?: string[];
   children: React.ReactNode;
   onClick?: () => void;
 }
 
-export function HighlightMark({ highlightId, className, note, children, onClick }: HighlightMarkProps) {
-  if (note) {
+export function HighlightMark({
+  highlightId,
+  className,
+  note,
+  tags: highlightTags = [],
+  children,
+  onClick,
+}: HighlightMarkProps) {
+  const { data: allTags = [] } = useTags();
+
+  const tagTitles = highlightTags.map((tagId) => allTags.find((t) => t.id === tagId)?.title).filter(Boolean);
+
+  if (note || tagTitles.length > 0) {
     return (
       <TooltipProvider>
         <Tooltip delayDuration={300}>
@@ -392,11 +501,27 @@ export function HighlightMark({ highlightId, className, note, children, onClick 
           </TooltipTrigger>
           <TooltipContent
             side="top"
-            className="max-w-[280px] text-xs bg-popover text-popover-foreground border border-border"
+            className="max-w-[280px] text-xs bg-popover text-popover-foreground border border-border p-2"
           >
-            <div className="flex items-start gap-1.5">
-              <MessageSquare className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
-              <span className="break-words">{note}</span>
+            <div className="flex flex-col gap-2">
+              {note && (
+                <div className="flex items-start gap-1.5">
+                  <MessageSquare className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+                  <span className="break-words">{note}</span>
+                </div>
+              )}
+              {tagTitles.length > 0 && (
+                <div className="flex items-start gap-1.5">
+                  <Tag className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+                  <div className="flex flex-wrap gap-1">
+                    {tagTitles.map((title, i) => (
+                      <span key={i} className="bg-muted px-1 rounded-[2px]">
+                        {title}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </TooltipContent>
         </Tooltip>

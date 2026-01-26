@@ -129,6 +129,7 @@ export type BookmarksRecord = {
 	page?: RecordIdString
 	page_number?: number
 	preview_text?: string
+	tags?: RecordIdString[]
 	type?: BookmarksTypeOptions
 	updated: IsoAutoDateString
 	upload?: RecordIdString
@@ -158,6 +159,7 @@ export type HighlightsRecord = {
 	note?: string
 	page?: RecordIdString
 	start_offset?: number
+	tags?: RecordIdString[]
 	text?: string
 	updated: IsoAutoDateString
 	upload?: RecordIdString

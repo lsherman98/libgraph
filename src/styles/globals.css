@@ -165,6 +165,11 @@
   }
 }
 
+@utility overflow-wrap-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 /* Highlight colors for reader annotations */
 .highlight-yellow {
   background-color: oklch(0.95 0.12 95 / 70%);

@@ -5,6 +5,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Bookmark, BookmarkCheck, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BookmarksTypeOptions } from "@/lib/pocketbase-types";
+import { useTags } from "@/lib/api/queries";
+import { useCreateTag } from "@/lib/api/mutations";
+import { CreatableCombobox } from "@/components/creatable-combobox";
 
 interface BookmarkButtonProps {
   isBookmarked: boolean;
@@ -12,8 +15,9 @@ interface BookmarkButtonProps {
   previewText: string;
   bookmarkLabel?: string;
   bookmarkType?: BookmarksTypeOptions;
-  onAddBookmark: (label: string, type: BookmarksTypeOptions) => void;
-  onUpdateBookmark?: (label: string, type: BookmarksTypeOptions) => void;
+  bookmarkTags?: string[];
+  onAddBookmark: (label: string, type: BookmarksTypeOptions, tags: string[]) => void;
+  onUpdateBookmark?: (label: string, type: BookmarksTypeOptions, tags: string[]) => void;
   onRemoveBookmark: () => void;
   className?: string;
 }
@@ -24,6 +28,7 @@ export function BookmarkButton({
   previewText,
   bookmarkLabel = "",
   bookmarkType = BookmarksTypeOptions.bookmark,
+  bookmarkTags = [],
   onAddBookmark,
   onUpdateBookmark,
   onRemoveBookmark,
@@ -32,25 +37,48 @@ export function BookmarkButton({
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState(bookmarkLabel);
   const [selectedType, setSelectedType] = useState<BookmarksTypeOptions>(bookmarkType);
+  const [selectedTags, setSelectedTags] = useState<string[]>(bookmarkTags);
+
+  const { data: tags = [] } = useTags();
+  const createTagMutation = useCreateTag();
 
   // Sync state when props change
   const handleOpenChange = (newOpen: boolean) => {
     if (newOpen) {
       setLabel(bookmarkLabel);
       setSelectedType(bookmarkType);
+      setSelectedTags(bookmarkTags);
     }
     setOpen(newOpen);
   };
 
   const handleSave = () => {
     if (isBookmarked && onUpdateBookmark) {
-      onUpdateBookmark(label, selectedType);
+      onUpdateBookmark(label, selectedType, selectedTags);
     } else {
-      onAddBookmark(label, selectedType);
+      onAddBookmark(label, selectedType, selectedTags);
     }
     setLabel("");
+    setSelectedTags([]);
     setOpen(false);
   };
+
+  const handleTagSelect = (tagId: string) => {
+    setSelectedTags((prev) => (prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
+  };
+
+  const handleTagCreate = (title: string) => {
+    createTagMutation.mutate(
+      { title },
+      {
+        onSuccess: (newTag) => {
+          setSelectedTags((prev) => [...prev, newTag.id]);
+        },
+      },
+    );
+  };
+
+  const tagOptions = tags.map((t) => ({ label: t.title || t.id, value: t.id }));
 
   const handleRemove = () => {
     onRemoveBookmark();
@@ -98,14 +126,30 @@ export function BookmarkButton({
             </div>
 
             {/* Label input */}
-            <Input
-              placeholder="Add a label (optional)"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSave();
-              }}
-            />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-medium uppercase text-muted-foreground ml-1">Label</label>
+              <Input
+                placeholder="Add a label (optional)"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSave();
+                }}
+              />
+            </div>
+
+            {/* Tags selection */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-[10px] font-medium uppercase text-muted-foreground ml-1">Tags</label>
+              <CreatableCombobox
+                options={tagOptions}
+                value={selectedTags}
+                onSelect={handleTagSelect}
+                onCreate={handleTagCreate}
+                placeholder="Search or create tags..."
+                isMulti
+              />
+            </div>
 
             {/* Actions */}
             <div className="flex items-center justify-between">
@@ -178,14 +222,30 @@ export function BookmarkButton({
           </div>
 
           {/* Label input */}
-          <Input
-            placeholder="Add a label (optional)"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSave();
-            }}
-          />
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-medium uppercase text-muted-foreground ml-1">Label</label>
+            <Input
+              placeholder="Add a label (optional)"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSave();
+              }}
+            />
+          </div>
+
+          {/* Tags selection */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-[10px] font-medium uppercase text-muted-foreground ml-1">Tags</label>
+            <CreatableCombobox
+              options={tagOptions}
+              value={selectedTags}
+              onSelect={handleTagSelect}
+              onCreate={handleTagCreate}
+              placeholder="Search or create tags..."
+              isMulti
+            />
+          </div>
 
           {/* Actions */}
           <div className="flex justify-end gap-2">
@@ -207,7 +267,11 @@ interface BlockBookmarkIndicatorProps {
   previewText: string;
   bookmarkId?: string;
   isBookmarked: boolean;
-  onAddBookmark: (label: string, type: BookmarksTypeOptions) => void;
+  bookmarkLabel?: string;
+  bookmarkType?: BookmarksTypeOptions;
+  bookmarkTags?: string[];
+  onAddBookmark: (label: string, type: BookmarksTypeOptions, tags: string[]) => void;
+  onUpdateBookmark?: (label: string, type: BookmarksTypeOptions, tags: string[]) => void;
   onRemoveBookmark: () => void;
 }
 
@@ -215,7 +279,11 @@ export function BlockBookmarkIndicator({
   blockId,
   previewText,
   isBookmarked,
+  bookmarkLabel,
+  bookmarkType,
+  bookmarkTags,
   onAddBookmark,
+  onUpdateBookmark,
   onRemoveBookmark,
 }: BlockBookmarkIndicatorProps) {
   return (
@@ -224,7 +292,11 @@ export function BlockBookmarkIndicator({
         isBookmarked={isBookmarked}
         blockId={blockId}
         previewText={previewText}
+        bookmarkLabel={bookmarkLabel}
+        bookmarkType={bookmarkType}
+        bookmarkTags={bookmarkTags}
         onAddBookmark={onAddBookmark}
+        onUpdateBookmark={onUpdateBookmark}
         onRemoveBookmark={onRemoveBookmark}
       />
     </span>
