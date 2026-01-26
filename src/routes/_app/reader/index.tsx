@@ -1,13 +1,20 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useInfinitePages, usePageMarkdown, usePages } from "@/lib/api/queries";
+import { useInfinitePages, usePageMarkdown, usePages, usePageHighlights, useBookmarks } from "@/lib/api/queries";
+import {
+  useCreateHighlight,
+  useUpdateHighlight,
+  useDeleteHighlight,
+  useCreateBookmark,
+  useDeleteBookmark,
+} from "@/lib/api/mutations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { BookOpen, BookMarked, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from "lucide-react";
 import { pb } from "@/lib/pocketbase";
-import { Collections } from "@/lib/pocketbase-types";
+import { Collections, HighlightsColorOptions, BookmarksTypeOptions } from "@/lib/pocketbase-types";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useReaderSettings, usePageSettings, FONT_FAMILIES } from "@/lib/hooks/use-reader-settings";
@@ -17,6 +24,18 @@ import { cn, useDebouncedCallback } from "@/lib/utils";
 import { useSidebar } from "@/components/ui/sidebar";
 import { useReaderStore } from "@/lib/stores/reader-store";
 import Markdown from "react-markdown";
+import rehypeRaw from "rehype-raw";
+import { HighlightPopover, ExistingHighlightPopover, HighlightMark } from "@/components/reader/highlight-popover";
+import { BookmarkButton } from "@/components/reader/bookmark-button";
+import {
+  injectHighlightsIntoMarkdown,
+  toHighlightRanges,
+  findTextOffset,
+  getSelectionInfo,
+  findHighlightElement,
+  type SelectionInfo,
+  type HighlightRange,
+} from "@/lib/highlight-utils";
 
 type ReaderSearch = {
   uploadId?: string;
@@ -31,7 +50,190 @@ export const Route = createFileRoute("/_app/reader/")({
   },
 });
 
-function MarkdownContent({ content, isLoading }: { content: string | null | undefined; isLoading: boolean }) {
+function MarkdownContent({
+  content,
+  isLoading,
+  pageId,
+  highlights = [],
+  bookmarks = [],
+  onCreateHighlight,
+  onUpdateHighlight,
+  onDeleteHighlight,
+  onCreateBookmark,
+  onDeleteBookmark,
+}: {
+  content: string | null | undefined;
+  isLoading: boolean;
+  pageId?: string;
+  highlights?: HighlightRange[];
+  bookmarks?: { id: string; block_id: string; label?: string; type?: BookmarksTypeOptions }[];
+  onCreateHighlight?: (data: {
+    color: HighlightsColorOptions;
+    text: string;
+    note?: string;
+    start_offset: number;
+    end_offset: number;
+  }) => void;
+  onUpdateHighlight?: (id: string, data: { color?: HighlightsColorOptions; note?: string }) => void;
+  onDeleteHighlight?: (id: string) => void;
+  onCreateBookmark?: (data: {
+    block_id: string;
+    label: string;
+    type: BookmarksTypeOptions;
+    preview_text: string;
+  }) => void;
+  onDeleteBookmark?: (id: string) => void;
+}) {
+  const [selection, setSelection] = useState<SelectionInfo | null>(null);
+  const [activeHighlight, setActiveHighlight] = useState<{ element: HTMLElement; highlight: HighlightRange } | null>(
+    null,
+  );
+  const [tempHighlight, setTempHighlight] = useState<HighlightRange | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Clear native selection if we are showing a temp highlight mark
+  useEffect(() => {
+    if (tempHighlight) {
+      window.getSelection()?.removeAllRanges();
+    }
+  }, [tempHighlight]);
+
+  // Handle text selection for new highlights
+  const handleMouseUp = useCallback(
+    (e: React.MouseEvent) => {
+      // Ignore clicks inside the popover area
+      if (popoverRef.current?.contains(e.target as Node)) {
+        return;
+      }
+
+      // Check if clicking on existing highlight
+      const highlightEl = findHighlightElement(e.target as HTMLElement);
+      if (highlightEl) {
+        const highlightId = highlightEl.dataset.highlightId;
+        const highlight = highlights.find((h) => h.id === highlightId);
+        if (highlight) {
+          setActiveHighlight({
+            element: highlightEl,
+            highlight,
+          });
+          setSelection(null);
+          setTempHighlight(null);
+          return;
+        }
+      }
+
+      // Otherwise check for new selection
+      // Use requestAnimationFrame to ensure the selection is fully formed
+      requestAnimationFrame(() => {
+        const selectionInfo = getSelectionInfo();
+        if (selectionInfo && selectionInfo.text.length > 0) {
+          setSelection(selectionInfo);
+          setActiveHighlight(null);
+
+          if (content) {
+            const offsets = findTextOffset(content, selectionInfo.text);
+            if (offsets) {
+              setTempHighlight({
+                id: "temp-selection",
+                text: selectionInfo.text,
+                color: HighlightsColorOptions.yellow,
+                startOffset: offsets.start,
+                endOffset: offsets.end,
+              });
+            } else {
+              setTempHighlight(null);
+            }
+          }
+        } else {
+          setSelection(null);
+          setTempHighlight(null);
+        }
+      });
+    },
+    [highlights, content],
+  );
+
+  const handleHighlight = useCallback(
+    (color: HighlightsColorOptions, note?: string) => {
+      if (!selection || !content || !onCreateHighlight) return;
+
+      // Use pre-calculated offsets if available from temp highlight
+      let startOffset, endOffset;
+      if (tempHighlight && tempHighlight.text === selection.text) {
+        startOffset = tempHighlight.startOffset;
+        endOffset = tempHighlight.endOffset;
+      } else {
+        const offsets = findTextOffset(content, selection.text);
+        if (!offsets) {
+          console.warn("Could not find text offset for selection");
+          return;
+        }
+        startOffset = offsets.start;
+        endOffset = offsets.end;
+      }
+
+      onCreateHighlight({
+        color,
+        text: selection.text,
+        note,
+        start_offset: startOffset,
+        end_offset: endOffset,
+      });
+
+      setSelection(null);
+      setTempHighlight(null);
+      window.getSelection()?.removeAllRanges();
+    },
+    [selection, content, onCreateHighlight, tempHighlight],
+  );
+
+  const handleUpdateHighlightColor = useCallback(
+    (color: HighlightsColorOptions) => {
+      if (!activeHighlight || !onUpdateHighlight) return;
+      onUpdateHighlight(activeHighlight.highlight.id, { color });
+    },
+    [activeHighlight, onUpdateHighlight],
+  );
+
+  const handleUpdateHighlightNote = useCallback(
+    (note: string) => {
+      if (!activeHighlight || !onUpdateHighlight) return;
+      onUpdateHighlight(activeHighlight.highlight.id, { note });
+    },
+    [activeHighlight, onUpdateHighlight],
+  );
+
+  const handleDeleteActiveHighlight = useCallback(() => {
+    if (!activeHighlight || !onDeleteHighlight) return;
+    onDeleteHighlight(activeHighlight.highlight.id);
+    setActiveHighlight(null);
+  }, [activeHighlight, onDeleteHighlight]);
+
+  // Generate block ID based on page and line number
+  const getBlockId = useCallback(
+    (node: any) => {
+      if (!pageId || !node?.position?.start?.line) return undefined;
+      return `${pageId}-L${node.position.start.line}`;
+    },
+    [pageId],
+  );
+
+  // Check if a block is bookmarked
+  const isBlockBookmarked = useCallback(
+    (blockId: string) => {
+      return bookmarks.some((b) => b.block_id === blockId);
+    },
+    [bookmarks],
+  );
+
+  const getBookmarkForBlock = useCallback(
+    (blockId: string) => {
+      return bookmarks.find((b) => b.block_id === blockId);
+    },
+    [bookmarks],
+  );
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -51,30 +253,194 @@ function MarkdownContent({ content, isLoading }: { content: string | null | unde
     );
   }
 
+  // Inject highlights into markdown
+  // Combine real highlights with temp highlight if exists
+  const allHighlights = tempHighlight ? [...highlights, tempHighlight] : highlights;
+  const processedContent = injectHighlightsIntoMarkdown(content, allHighlights);
+
   return (
-    <div className="reader-content">
+    <div className="reader-content relative" ref={contentRef} onMouseUp={handleMouseUp}>
       <Markdown
+        rehypePlugins={[rehypeRaw]}
         components={{
-          h1: ({ children }) => <h1 className="text-2xl font-bold mt-8 mb-4 first:mt-0">{children}</h1>,
-          h2: ({ children }) => <h2 className="text-xl font-semibold mt-6 mb-3">{children}</h2>,
-          h3: ({ children }) => <h3 className="text-lg font-medium mt-5 mb-2">{children}</h3>,
+          h1: ({ node, children }) => {
+            const blockId = getBlockId(node);
+            const isBookmarked = blockId ? isBlockBookmarked(blockId) : false;
+            const bookmark = blockId ? getBookmarkForBlock(blockId) : undefined;
+            return (
+              <h1 id={blockId} className="text-2xl font-bold mt-8 mb-4 first:mt-0 group relative">
+                {blockId && onCreateBookmark && (
+                  <BookmarkButton
+                    isBookmarked={isBookmarked}
+                    blockId={blockId}
+                    previewText={typeof children === "string" ? children : String(children)}
+                    bookmarkLabel={bookmark?.label}
+                    bookmarkType={bookmark?.type}
+                    onAddBookmark={(label, type) =>
+                      onCreateBookmark({
+                        block_id: blockId,
+                        label,
+                        type,
+                        preview_text:
+                          typeof children === "string" ? children.slice(0, 150) : String(children).slice(0, 150),
+                      })
+                    }
+                    onRemoveBookmark={() => bookmark && onDeleteBookmark?.(bookmark.id)}
+                    className="absolute -left-8 top-1"
+                  />
+                )}
+                {children}
+              </h1>
+            );
+          },
+          h2: ({ node, children }) => {
+            const blockId = getBlockId(node);
+            const isBookmarked = blockId ? isBlockBookmarked(blockId) : false;
+            const bookmark = blockId ? getBookmarkForBlock(blockId) : undefined;
+            return (
+              <h2 id={blockId} className="text-xl font-semibold mt-6 mb-3 group relative">
+                {blockId && onCreateBookmark && (
+                  <BookmarkButton
+                    isBookmarked={isBookmarked}
+                    blockId={blockId}
+                    previewText={typeof children === "string" ? children : String(children)}
+                    bookmarkLabel={bookmark?.label}
+                    bookmarkType={bookmark?.type}
+                    onAddBookmark={(label, type) =>
+                      onCreateBookmark({
+                        block_id: blockId,
+                        label,
+                        type,
+                        preview_text:
+                          typeof children === "string" ? children.slice(0, 150) : String(children).slice(0, 150),
+                      })
+                    }
+                    onRemoveBookmark={() => bookmark && onDeleteBookmark?.(bookmark.id)}
+                    className="absolute -left-8 top-0.5"
+                  />
+                )}
+                {children}
+              </h2>
+            );
+          },
+          h3: ({ node, children }) => {
+            const blockId = getBlockId(node);
+            return (
+              <h3 id={blockId} className="text-lg font-medium mt-5 mb-2">
+                {children}
+              </h3>
+            );
+          },
           pre: ({ children }) => (
             <pre className="my-4 p-4 rounded-lg bg-black/5 dark:bg-white/5 overflow-x-auto font-mono text-sm">
               {children}
             </pre>
           ),
           code: ({ children }) => <code>{children}</code>,
-          blockquote: ({ children }) => (
-            <blockquote className="my-4 pl-4 border-l-4 border-current/20 italic opacity-90">{children}</blockquote>
-          ),
-          ul: ({ children }) => <ul className="my-4 pl-6 list-disc space-y-1">{children}</ul>,
-          ol: ({ children }) => <ol className="my-4 pl-6 list-decimal space-y-1">{children}</ol>,
+          blockquote: ({ node, children }) => {
+            const blockId = getBlockId(node);
+            return (
+              <blockquote id={blockId} className="my-4 pl-4 border-l-4 border-current/20 italic opacity-90">
+                {children}
+              </blockquote>
+            );
+          },
+          ul: ({ node, children }) => {
+            const blockId = getBlockId(node);
+            return (
+              <ul id={blockId} className="my-4 pl-6 list-disc space-y-1">
+                {children}
+              </ul>
+            );
+          },
+          ol: ({ node, children }) => {
+            const blockId = getBlockId(node);
+            return (
+              <ol id={blockId} className="my-4 pl-6 list-decimal space-y-1">
+                {children}
+              </ol>
+            );
+          },
           li: ({ children }) => <li>{children}</li>,
-          p: ({ children }) => <p className="reader-paragraph">{children}</p>,
+          p: ({ node, children }) => {
+            const blockId = getBlockId(node);
+            const isBookmarked = blockId ? isBlockBookmarked(blockId) : false;
+            const bookmark = blockId ? getBookmarkForBlock(blockId) : undefined;
+            return (
+              <p id={blockId} className="reader-paragraph group relative">
+                {blockId && onCreateBookmark && (
+                  <BookmarkButton
+                    isBookmarked={isBookmarked}
+                    blockId={blockId}
+                    previewText={typeof children === "string" ? children : String(children)}
+                    bookmarkLabel={bookmark?.label}
+                    bookmarkType={bookmark?.type}
+                    onAddBookmark={(label, type) =>
+                      onCreateBookmark({
+                        block_id: blockId,
+                        label,
+                        type,
+                        preview_text:
+                          typeof children === "string" ? children.slice(0, 150) : String(children).slice(0, 150),
+                      })
+                    }
+                    onRemoveBookmark={() => bookmark && onDeleteBookmark?.(bookmark.id)}
+                    className="absolute -left-8 top-0"
+                  />
+                )}
+                {children}
+              </p>
+            );
+          },
+          // Handle injected highlight marks
+          mark: ({ node, children, ...props }) => {
+            const highlightId = (props as any)["data-highlight-id"];
+            const className = (props as any).className || "highlight-yellow";
+            const highlight = highlights.find((h) => h.id === highlightId);
+            return (
+              <HighlightMark highlightId={highlightId} className={className} note={highlight?.note}>
+                {children}
+              </HighlightMark>
+            );
+          },
         }}
       >
-        {content}
+        {processedContent}
       </Markdown>
+
+      {/* Popover container for ref checking */}
+      <div ref={popoverRef}>
+        {/* Selection popover for new highlights */}
+        {selection && (
+          <HighlightPopover
+            selectedText={selection.text}
+            position={selection.position}
+            selectionRange={selection.range}
+            onHighlight={handleHighlight}
+            onDismiss={() => setSelection(null)}
+          />
+        )}
+
+        {/* Popover for existing highlights */}
+        {activeHighlight && (
+          <ExistingHighlightPopover
+            highlightId={activeHighlight.highlight.id}
+            color={activeHighlight.highlight.color}
+            note={activeHighlight.highlight.note}
+            text={activeHighlight.highlight.text}
+            position={{
+              x:
+                activeHighlight.element.getBoundingClientRect().left +
+                activeHighlight.element.getBoundingClientRect().width / 2,
+              y: activeHighlight.element.getBoundingClientRect().top - 10,
+            }}
+            onUpdateColor={handleUpdateHighlightColor}
+            onUpdateNote={handleUpdateHighlightNote}
+            onDelete={handleDeleteActiveHighlight}
+            onDismiss={() => setActiveHighlight(null)}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -83,14 +449,37 @@ function ScrollPageRenderer({
   page,
   onInView,
   showPageIndicator = true,
+  bookmarks = [],
+  onCreateHighlight,
+  onUpdateHighlight,
+  onDeleteHighlight,
+  onCreateBookmark,
+  onDeleteBookmark,
 }: {
   page: any;
   onInView?: (pageNumber: number) => void;
   showPageIndicator?: boolean;
+  bookmarks?: { id: string; block_id: string }[];
+  onCreateHighlight?: (
+    pageId: string,
+    data: { color: HighlightsColorOptions; text: string; note?: string; start_offset: number; end_offset: number },
+  ) => void;
+  onUpdateHighlight?: (id: string, data: { color?: HighlightsColorOptions; note?: string }) => void;
+  onDeleteHighlight?: (id: string) => void;
+  onCreateBookmark?: (
+    pageId: string,
+    pageNumber: number,
+    data: { block_id: string; label: string; type: BookmarksTypeOptions; preview_text: string },
+  ) => void;
+  onDeleteBookmark?: (id: string) => void;
 }) {
   const { data: markdown, isLoading } = usePageMarkdown(page.id);
+  const { data: pageHighlights = [] } = usePageHighlights(page.id);
   const ref = useRef<HTMLDivElement>(null);
   const hasReportedRef = useRef(false);
+
+  const highlightRanges = toHighlightRanges(pageHighlights);
+  const pageBookmarks = bookmarks.filter((b) => b.block_id?.startsWith(page.id));
 
   useEffect(() => {
     if (!onInView) return;
@@ -122,7 +511,18 @@ function ScrollPageRenderer({
           </div>
         </div>
       )}
-      <MarkdownContent content={markdown} isLoading={isLoading} />
+      <MarkdownContent
+        content={markdown}
+        isLoading={isLoading}
+        pageId={page.id}
+        highlights={highlightRanges}
+        bookmarks={pageBookmarks}
+        onCreateHighlight={onCreateHighlight ? (data) => onCreateHighlight(page.id, data) : undefined}
+        onUpdateHighlight={onUpdateHighlight}
+        onDeleteHighlight={onDeleteHighlight}
+        onCreateBookmark={onCreateBookmark ? (data) => onCreateBookmark(page.id, page.page, data) : undefined}
+        onDeleteBookmark={onDeleteBookmark}
+      />
     </article>
   );
 }
@@ -131,10 +531,29 @@ function ScrollReader({
   uploadId,
   startPage,
   onPageChange,
+  bookmarks,
+  onCreateHighlight,
+  onUpdateHighlight,
+  onDeleteHighlight,
+  onCreateBookmark,
+  onDeleteBookmark,
 }: {
   uploadId: string;
   startPage: number;
   onPageChange: (page: number) => void;
+  bookmarks: { id: string; block_id: string }[];
+  onCreateHighlight: (
+    pageId: string,
+    data: { color: HighlightsColorOptions; text: string; note?: string; start_offset: number; end_offset: number },
+  ) => void;
+  onUpdateHighlight: (id: string, data: { color?: HighlightsColorOptions; note?: string }) => void;
+  onDeleteHighlight: (id: string) => void;
+  onCreateBookmark: (
+    pageId: string,
+    pageNumber: number,
+    data: { block_id: string; label: string; type: BookmarksTypeOptions; preview_text: string },
+  ) => void;
+  onDeleteBookmark: (id: string) => void;
 }) {
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading } = useInfinitePages(uploadId, 5, 1);
 
@@ -209,7 +628,17 @@ function ScrollReader({
   return (
     <div className="space-y-8">
       {allPages.map((page) => (
-        <ScrollPageRenderer key={page.id} page={page} onInView={debouncedPageChange} />
+        <ScrollPageRenderer
+          key={page.id}
+          page={page}
+          onInView={debouncedPageChange}
+          bookmarks={bookmarks}
+          onCreateHighlight={onCreateHighlight}
+          onUpdateHighlight={onUpdateHighlight}
+          onDeleteHighlight={onDeleteHighlight}
+          onCreateBookmark={onCreateBookmark}
+          onDeleteBookmark={onDeleteBookmark}
+        />
       ))}
       <div ref={observerTarget} className="py-8 flex items-center justify-center">
         {isFetchingNextPage ? (
@@ -237,11 +666,30 @@ function PaginatedReader({
   currentPage,
   onPageChange,
   totalPages,
+  bookmarks,
+  onCreateHighlight,
+  onUpdateHighlight,
+  onDeleteHighlight,
+  onCreateBookmark,
+  onDeleteBookmark,
 }: {
   uploadId: string;
   currentPage: number;
   onPageChange: (page: number) => void;
   totalPages: number;
+  bookmarks: { id: string; block_id: string }[];
+  onCreateHighlight: (
+    pageId: string,
+    data: { color: HighlightsColorOptions; text: string; note?: string; start_offset: number; end_offset: number },
+  ) => void;
+  onUpdateHighlight: (id: string, data: { color?: HighlightsColorOptions; note?: string }) => void;
+  onDeleteHighlight: (id: string) => void;
+  onCreateBookmark: (
+    pageId: string,
+    pageNumber: number,
+    data: { block_id: string; label: string; type: BookmarksTypeOptions; preview_text: string },
+  ) => void;
+  onDeleteBookmark: (id: string) => void;
 }) {
   const { data, isLoading } = usePages(uploadId, currentPage, 1);
 
@@ -292,12 +740,66 @@ function PaginatedReader({
     );
   }
 
-  return <PaginatedPageContent pageId={page.id} />;
+  return (
+    <PaginatedPageContent
+      pageId={page.id}
+      pageNumber={page.page}
+      bookmarks={bookmarks}
+      onCreateHighlight={onCreateHighlight}
+      onUpdateHighlight={onUpdateHighlight}
+      onDeleteHighlight={onDeleteHighlight}
+      onCreateBookmark={onCreateBookmark}
+      onDeleteBookmark={onDeleteBookmark}
+    />
+  );
 }
 
-function PaginatedPageContent({ pageId }: { pageId: string }) {
+function PaginatedPageContent({
+  pageId,
+  pageNumber,
+  bookmarks,
+  onCreateHighlight,
+  onUpdateHighlight,
+  onDeleteHighlight,
+  onCreateBookmark,
+  onDeleteBookmark,
+}: {
+  pageId: string;
+  pageNumber: number;
+  bookmarks: { id: string; block_id: string }[];
+  onCreateHighlight: (
+    pageId: string,
+    data: { color: HighlightsColorOptions; text: string; note?: string; start_offset: number; end_offset: number },
+  ) => void;
+  onUpdateHighlight: (id: string, data: { color?: HighlightsColorOptions; note?: string }) => void;
+  onDeleteHighlight: (id: string) => void;
+  onCreateBookmark: (
+    pageId: string,
+    pageNumber: number,
+    data: { block_id: string; label: string; type: BookmarksTypeOptions; preview_text: string },
+  ) => void;
+  onDeleteBookmark: (id: string) => void;
+}) {
   const { data: markdown, isLoading } = usePageMarkdown(pageId);
-  return <MarkdownContent content={markdown} isLoading={isLoading} />;
+  const { data: pageHighlights = [] } = usePageHighlights(pageId);
+
+  const highlightRanges = toHighlightRanges(pageHighlights);
+  const pageBookmarks = bookmarks.filter((b) => b.block_id?.startsWith(pageId));
+
+  return (
+    <MarkdownContent
+      content={markdown}
+      isLoading={isLoading}
+      pageId={pageId}
+      highlights={highlightRanges}
+      bookmarks={pageBookmarks}
+      onCreateHighlight={(data) => onCreateHighlight(pageId, data)}
+      onUpdateHighlight={onUpdateHighlight}
+      onDeleteHighlight={onDeleteHighlight}
+      onCreateBookmark={(data) => onCreateBookmark(pageId, pageNumber, data)}
+      onDeleteBookmark={onDeleteBookmark}
+    />
+  );
 }
 
 function RouteComponent() {
@@ -305,7 +807,7 @@ function RouteComponent() {
   const { uploadId } = Route.useSearch();
   const [upload, setUpload] = useState<any>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const { isReadingMode, setReadingMode } = useReaderStore();
+  const { isReadingMode, setReadingMode, setCurrentPageState, setNavigateToPage } = useReaderStore();
   const readerContainerRef = useRef<HTMLDivElement>(null);
   const { setOpen, setOpenRight, open: leftSidebarOpen, openRight: rightSidebarOpen } = useSidebar();
   const previousSidebarState = useRef({ left: true, right: true });
@@ -314,6 +816,117 @@ function RouteComponent() {
 
   const { data: firstPageData } = usePages(uploadId ?? null, 1, 1);
   const totalPages = firstPageData?.totalItems || 0;
+
+  // Get current page data for annotations panel
+  const { data: currentPageData } = usePages(uploadId ?? null, pageSettings.currentPage, 1);
+  const currentPageId = currentPageData?.items[0]?.id ?? null;
+
+  // Use refs to avoid stale closures and infinite loops
+  const setCurrentPageRef = useRef(setCurrentPage);
+  const viewModeRef = useRef(settings.viewMode);
+  setCurrentPageRef.current = setCurrentPage;
+  viewModeRef.current = settings.viewMode;
+
+  // Sync current page state to store for annotations panel
+  useEffect(() => {
+    setCurrentPageState(currentPageId, pageSettings.currentPage);
+  }, [currentPageId, pageSettings.currentPage, setCurrentPageState]);
+
+  // Set up navigation callback for annotations panel (stable reference)
+  const navigateToPageFromAnnotation = useCallback((pageNumber: number, _blockId?: string) => {
+    setCurrentPageRef.current(pageNumber);
+    if (viewModeRef.current === "scroll") {
+      setTimeout(() => {
+        const el = document.getElementById(`page-${pageNumber}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 100);
+    }
+  }, []);
+
+  useEffect(() => {
+    setNavigateToPage(navigateToPageFromAnnotation);
+    return () => setNavigateToPage(null);
+  }, [navigateToPageFromAnnotation, setNavigateToPage]);
+
+  // Highlights and bookmarks
+  const { data: bookmarksData = [] } = useBookmarks(uploadId ?? null);
+  const createHighlightMutation = useCreateHighlight();
+  const updateHighlightMutation = useUpdateHighlight();
+  const deleteHighlightMutation = useDeleteHighlight();
+  const createBookmarkMutation = useCreateBookmark();
+  const deleteBookmarkMutation = useDeleteBookmark();
+
+  // Map bookmarks to simpler format for components
+  const bookmarks = bookmarksData.map((b) => ({
+    id: b.id,
+    block_id: b.block_id,
+    label: b.label || "",
+    type: b.type as BookmarksTypeOptions,
+  }));
+
+  // Highlight handlers
+  const handleCreateHighlight = useCallback(
+    (
+      pageId: string,
+      data: { color: HighlightsColorOptions; text: string; note?: string; start_offset: number; end_offset: number },
+    ) => {
+      if (!uploadId) return;
+      createHighlightMutation.mutate({
+        upload: uploadId,
+        page: pageId,
+        color: data.color,
+        text: data.text,
+        note: data.note,
+        start_offset: data.start_offset,
+        end_offset: data.end_offset,
+      });
+    },
+    [uploadId, createHighlightMutation],
+  );
+
+  const handleUpdateHighlight = useCallback(
+    (id: string, data: { color?: HighlightsColorOptions; note?: string }) => {
+      updateHighlightMutation.mutate({ id, data });
+    },
+    [updateHighlightMutation],
+  );
+
+  const handleDeleteHighlight = useCallback(
+    (id: string) => {
+      deleteHighlightMutation.mutate(id);
+    },
+    [deleteHighlightMutation],
+  );
+
+  // Bookmark handlers
+  const handleCreateBookmark = useCallback(
+    (
+      pageId: string,
+      pageNumber: number,
+      data: { block_id: string; label: string; type: BookmarksTypeOptions; preview_text: string },
+    ) => {
+      if (!uploadId) return;
+      createBookmarkMutation.mutate({
+        upload: uploadId,
+        page: pageId,
+        page_number: pageNumber,
+        block_id: data.block_id,
+        label: data.label,
+        type: data.type,
+        preview_text: data.preview_text,
+      });
+    },
+    [uploadId, createBookmarkMutation],
+  );
+
+  const handleDeleteBookmark = useCallback(
+    (id: string) => {
+      deleteBookmarkMutation.mutate(id);
+    },
+    [deleteBookmarkMutation],
+  );
 
   useEffect(() => {
     if (uploadId) {
@@ -559,7 +1172,7 @@ function RouteComponent() {
           <ScrollArea className="h-full w-full">
             <div className="w-full">
               <div
-                className="mx-auto px-6 py-8"
+                className="mx-auto pl-10 pr-6 py-8"
                 style={{
                   fontFamily: FONT_FAMILIES[settings.fontFamily].value,
                   fontSize: `${settings.fontSize}px`,
@@ -588,6 +1201,12 @@ function RouteComponent() {
                     uploadId={uploadId}
                     startPage={pageSettings.currentPage}
                     onPageChange={handlePageChange}
+                    bookmarks={bookmarks}
+                    onCreateHighlight={handleCreateHighlight}
+                    onUpdateHighlight={handleUpdateHighlight}
+                    onDeleteHighlight={handleDeleteHighlight}
+                    onCreateBookmark={handleCreateBookmark}
+                    onDeleteBookmark={handleDeleteBookmark}
                   />
                 ) : (
                   <PaginatedReader
@@ -595,6 +1214,12 @@ function RouteComponent() {
                     currentPage={pageSettings.currentPage}
                     onPageChange={handlePageChange}
                     totalPages={totalPages}
+                    bookmarks={bookmarks}
+                    onCreateHighlight={handleCreateHighlight}
+                    onUpdateHighlight={handleUpdateHighlight}
+                    onDeleteHighlight={handleDeleteHighlight}
+                    onCreateBookmark={handleCreateBookmark}
+                    onDeleteBookmark={handleDeleteBookmark}
                   />
                 )}
               </div>

@@ -12,7 +12,9 @@ export enum Collections {
 	Otps = "_otps",
 	Superusers = "_superusers",
 	Authors = "authors",
+	Bookmarks = "bookmarks",
 	Edges = "edges",
+	Highlights = "highlights",
 	Nodes = "nodes",
 	Pages = "pages",
 	Tags = "tags",
@@ -115,12 +117,51 @@ export type AuthorsRecord = {
 	user?: RecordIdString
 }
 
+export enum BookmarksTypeOptions {
+	"bookmark" = "bookmark",
+	"favorite" = "favorite",
+}
+export type BookmarksRecord = {
+	block_id?: string
+	created: IsoAutoDateString
+	id: string
+	label?: string
+	page?: RecordIdString
+	page_number?: number
+	preview_text?: string
+	type?: BookmarksTypeOptions
+	updated: IsoAutoDateString
+	upload?: RecordIdString
+	user?: RecordIdString
+}
+
 export type EdgesRecord = {
 	created: IsoAutoDateString
 	id: string
 	source?: RecordIdString
 	target?: RecordIdString
 	updated: IsoAutoDateString
+}
+
+export enum HighlightsColorOptions {
+	"yellow" = "yellow",
+	"green" = "green",
+	"blue" = "blue",
+	"pink" = "pink",
+	"purple" = "purple",
+}
+export type HighlightsRecord = {
+	color?: HighlightsColorOptions
+	created: IsoAutoDateString
+	end_offset?: number
+	id: string
+	note?: string
+	page?: RecordIdString
+	start_offset?: number
+	text?: string
+	updated: IsoAutoDateString
+	upload?: RecordIdString
+	user?: RecordIdString
 }
 
 export enum NodesTypeOptions {
@@ -167,6 +208,8 @@ export enum UploadsTypeOptions {
 	"article" = "article",
 	"podcast" = "podcast",
 	"lecture" = "lecture",
+	"youtube" = "youtube",
+	"essay" = "essay",
 }
 
 export enum UploadsStatusOptions {
@@ -180,6 +223,7 @@ export type UploadsRecord = {
 	created: IsoAutoDateString
 	file?: FileNameString
 	id: string
+	num_pages?: number
 	status?: UploadsStatusOptions
 	tags?: RecordIdString[]
 	title?: string
@@ -209,7 +253,9 @@ export type MfasResponse<Texpand = unknown> = Required<MfasRecord> & BaseSystemF
 export type OtpsResponse<Texpand = unknown> = Required<OtpsRecord> & BaseSystemFields<Texpand>
 export type SuperusersResponse<Texpand = unknown> = Required<SuperusersRecord> & AuthSystemFields<Texpand>
 export type AuthorsResponse<Texpand = unknown> = Required<AuthorsRecord> & BaseSystemFields<Texpand>
+export type BookmarksResponse<Texpand = unknown> = Required<BookmarksRecord> & BaseSystemFields<Texpand>
 export type EdgesResponse<Texpand = unknown> = Required<EdgesRecord> & BaseSystemFields<Texpand>
+export type HighlightsResponse<Texpand = unknown> = Required<HighlightsRecord> & BaseSystemFields<Texpand>
 export type NodesResponse<Texpand = unknown> = Required<NodesRecord> & BaseSystemFields<Texpand>
 export type PagesResponse<Texpand = unknown> = Required<PagesRecord> & BaseSystemFields<Texpand>
 export type TagsResponse<Texpand = unknown> = Required<TagsRecord> & BaseSystemFields<Texpand>
@@ -226,7 +272,9 @@ export type CollectionRecords = {
 	_otps: OtpsRecord
 	_superusers: SuperusersRecord
 	authors: AuthorsRecord
+	bookmarks: BookmarksRecord
 	edges: EdgesRecord
+	highlights: HighlightsRecord
 	nodes: NodesRecord
 	pages: PagesRecord
 	tags: TagsRecord
@@ -242,7 +290,9 @@ export type CollectionResponses = {
 	_otps: OtpsResponse
 	_superusers: SuperusersResponse
 	authors: AuthorsResponse
+	bookmarks: BookmarksResponse
 	edges: EdgesResponse
+	highlights: HighlightsResponse
 	nodes: NodesResponse
 	pages: PagesResponse
 	tags: TagsResponse

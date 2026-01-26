@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { upload, createAuthor, createTag, createTopic } from "./api";
+import { upload, createAuthor, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark } from "./api";
 import { handleError } from "../utils";
 import { Collections, type Create } from "../pocketbase-types";
 
@@ -49,4 +49,110 @@ export function useCreateTopic() {
             queryClient.invalidateQueries({ queryKey: ["topics"] });
         },
     })
+}
+
+// Highlights mutations
+export function useCreateHighlight() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (record: Create<Collections.Highlights>) => createHighlight(record),
+        onMutate: async (newHighlight) => {
+            // Cancel any outgoing refetches
+            await queryClient.cancelQueries({ queryKey: ["highlights", "page", newHighlight.page] });
+
+            // Snapshot the previous value
+            const previousHighlights = queryClient.getQueryData(["highlights", "page", newHighlight.page]);
+
+            // Optimistically update to the new value
+            queryClient.setQueryData(["highlights", "page", newHighlight.page], (old: any[]) => {
+                const optimisticHighlight = {
+                    collectionId: 'highlights',
+                    collectionName: Collections.Highlights,
+                    id: 'temp-' + Date.now(),
+                    created: new Date().toISOString(),
+                    updated: new Date().toISOString(),
+                    ...newHighlight
+                };
+                return old ? [...old, optimisticHighlight] : [optimisticHighlight];
+            });
+
+            // Return a context object with the snapshotted value
+            return { previousHighlights };
+        },
+        onError: (err, newHighlight, context) => {
+            handleError(err);
+            // If the mutation fails, use the context returned from onMutate to roll back
+            if (context?.previousHighlights) {
+                queryClient.setQueryData(["highlights", "page", newHighlight.page], context.previousHighlights);
+            }
+        },
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: ["highlights"] });
+            queryClient.invalidateQueries({ queryKey: ["highlights", "page", data.page] });
+        },
+    });
+}
+
+export function useUpdateHighlight() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.Highlights>> }) =>
+            updateHighlight(id, data),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["highlights"] });
+        },
+    });
+}
+
+export function useDeleteHighlight() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (id: string) => deleteHighlight(id),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["highlights"] });
+        },
+    });
+}
+
+// Bookmarks mutations
+export function useCreateBookmark() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (record: Create<Collections.Bookmarks>) => createBookmark(record),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
+        },
+    });
+}
+
+export function useUpdateBookmark() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.Bookmarks>> }) =>
+            updateBookmark(id, data),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
+        },
+    });
+}
+
+export function useDeleteBookmark() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (id: string) => deleteBookmark(id),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
+        },
+    });
 }

@@ -1,22 +1,31 @@
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-} from "@/components/ui/sidebar";
+import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar";
+import { AnnotationsPanel } from "@/components/reader/annotations-panel";
+import { Highlighter } from "lucide-react";
 
-export function RightSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+interface RightSidebarProps extends React.ComponentProps<typeof Sidebar> {
+  currentPageId?: string;
+  currentPageNumber?: number;
+  onNavigateToPage?: (pageNumber: number, blockId?: string) => void;
+}
+
+export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPage, ...props }: RightSidebarProps) {
   return (
     <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarHeader>
+      <SidebarHeader className="border-b">
         <SidebarMenu>
-          <SidebarMenuItem></SidebarMenuItem>
+          <SidebarMenuItem className="flex items-center gap-2 px-2 py-1">
+            <Highlighter className="h-4 w-4" />
+            <span className="font-semibold text-sm">Annotations</span>
+          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent></SidebarContent>
-      <SidebarFooter></SidebarFooter>
+      <SidebarContent className="p-0">
+        <AnnotationsPanel
+          currentPageId={currentPageId}
+          currentPageNumber={currentPageNumber}
+          onNavigateToPage={onNavigateToPage}
+        />
+      </SidebarContent>
     </Sidebar>
   );
 }

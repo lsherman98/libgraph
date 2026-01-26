@@ -8,6 +8,9 @@ import { useReaderStore } from "@/lib/stores/reader-store";
 
 export default function Layout({ children }: PropsWithChildren) {
   const isReadingMode = useReaderStore((state) => state.isReadingMode);
+  const currentPageId = useReaderStore((state) => state.currentPageId);
+  const currentPageNumber = useReaderStore((state) => state.currentPageNumber);
+  const navigateToPage = useReaderStore((state) => state.navigateToPage);
 
   return (
     <SidebarProvider
@@ -27,7 +30,18 @@ export default function Layout({ children }: PropsWithChildren) {
         {!isReadingMode && <AppHeader />}
         <div className="flex flex-1 min-h-0 overflow-hidden">{children}</div>
       </SidebarInset>
-      <RightSidebar variant="sidebar" side="right" />
+      <RightSidebar
+        variant="sidebar"
+        side="right"
+        style={
+          {
+            "--sidebar-width": "calc(var(--spacing) * 90)",
+          } as React.CSSProperties
+        }
+        currentPageId={currentPageId ?? undefined}
+        currentPageNumber={currentPageNumber ?? undefined}
+        onNavigateToPage={navigateToPage ?? undefined}
+      />
     </SidebarProvider>
   );
 }

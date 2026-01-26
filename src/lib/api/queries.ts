@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useInfiniteQuery } from "@tanstack/react-query";
-import { getAuthors, getFirstPage, getPages, getPageUrl, getTags, getTopics, getUploads } from "./api";
+import { getAuthors, getFirstPage, getPages, getPageUrl, getTags, getTopics, getUploads, getHighlights, getHighlightsForPage, getBookmarks } from "./api";
 
 export function useAuthors() {
     return useQuery({
@@ -72,5 +72,34 @@ export function useInfinitePages(uploadId: string | null, perPage: number = 5, i
         initialPageParam: initialPage,
         getNextPageParam: (lastPage) => lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
         enabled: !!uploadId
+    });
+}
+
+// Highlights hooks
+export function useHighlights(uploadId: string | null) {
+    return useQuery({
+        queryKey: ["highlights", uploadId],
+        queryFn: () => uploadId ? getHighlights(uploadId) : [],
+        enabled: !!uploadId,
+        placeholderData: keepPreviousData
+    });
+}
+
+export function usePageHighlights(pageId: string | null) {
+    return useQuery({
+        queryKey: ["highlights", "page", pageId],
+        queryFn: () => pageId ? getHighlightsForPage(pageId) : [],
+        enabled: !!pageId,
+        placeholderData: keepPreviousData
+    });
+}
+
+// Bookmarks hooks
+export function useBookmarks(uploadId: string | null) {
+    return useQuery({
+        queryKey: ["bookmarks", uploadId],
+        queryFn: () => uploadId ? getBookmarks(uploadId) : [],
+        enabled: !!uploadId,
+        placeholderData: keepPreviousData
     });
 }

@@ -58,3 +58,66 @@ export const getPages = async (uploadId: string, page = 1, perPage = 5) => {
         sort: 'page'
     });
 }
+
+// Highlights API
+export const getHighlights = async (uploadId: string) => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) return [];
+    return await pb.collection(Collections.Highlights).getFullList({
+        filter: `upload = "${uploadId}" && user = "${userId}"`,
+        sort: 'created'
+    });
+}
+
+export const getHighlightsForPage = async (pageId: string) => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) return [];
+    return await pb.collection(Collections.Highlights).getFullList({
+        filter: `page = "${pageId}" && user = "${userId}"`,
+        sort: 'start_offset'
+    });
+}
+
+export const createHighlight = async (data: Create<Collections.Highlights>) => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) throw new Error("User not authenticated");
+    return await pb.collection(Collections.Highlights).create({
+        ...data,
+        user: userId
+    });
+}
+
+export const updateHighlight = async (id: string, data: Partial<Create<Collections.Highlights>>) => {
+    return await pb.collection(Collections.Highlights).update(id, data);
+}
+
+export const deleteHighlight = async (id: string) => {
+    return await pb.collection(Collections.Highlights).delete(id);
+}
+
+// Bookmarks API
+export const getBookmarks = async (uploadId: string) => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) return [];
+    return await pb.collection(Collections.Bookmarks).getFullList({
+        filter: `upload = "${uploadId}" && user = "${userId}"`,
+        sort: 'page_number'
+    });
+}
+
+export const createBookmark = async (data: Create<Collections.Bookmarks>) => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) throw new Error("User not authenticated");
+    return await pb.collection(Collections.Bookmarks).create({
+        ...data,
+        user: userId
+    });
+}
+
+export const updateBookmark = async (id: string, data: Partial<Create<Collections.Bookmarks>>) => {
+    return await pb.collection(Collections.Bookmarks).update(id, data);
+}
+
+export const deleteBookmark = async (id: string) => {
+    return await pb.collection(Collections.Bookmarks).delete(id);
+}
