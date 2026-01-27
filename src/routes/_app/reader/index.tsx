@@ -4,7 +4,9 @@ import { BookOpen, BookMarked } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useReaderTabsStore } from "@/lib/stores/reader-tabs-store";
+import { useWriterTabsStore } from "@/lib/stores/writer-tabs-store";
 import { ReaderTabBar } from "@/components/reader/reader-tab-bar";
+import { UnifiedTabBar } from "@/components/unified-tab-bar";
 import { SplitReaderView } from "@/components/reader/split-reader-view";
 import { ReaderPane } from "@/components/reader/reader-pane";
 
@@ -68,12 +70,16 @@ function RouteComponent() {
     );
   }
 
+  // Get writer tabs to determine if we should show unified tab bar
+  const writerTabs = useWriterTabsStore((state) => state.tabs);
+  const showUnifiedTabs = tabs.length > 0 && writerTabs.length > 0;
+
   // Has tabs - show tabbed interface
   if (tabs.length > 0) {
     return (
       <TooltipProvider>
         <div className="h-full w-full flex flex-col overflow-hidden">
-          <ReaderTabBar onAddTab={handleAddTab} />
+          {showUnifiedTabs ? <UnifiedTabBar /> : <ReaderTabBar onAddTab={handleAddTab} />}
           <div className="flex-1 min-h-0">
             <SplitReaderView className="h-full" />
           </div>

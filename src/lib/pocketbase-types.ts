@@ -22,6 +22,7 @@ export enum Collections {
 	Topics = "topics",
 	Uploads = "uploads",
 	Users = "users",
+	WritingProjects = "writing_projects",
 }
 
 // Alias types for improved usability
@@ -278,6 +279,27 @@ export type UsersRecord = {
 	verified?: boolean
 }
 
+export enum WritingProjectsStatusOptions {
+	"draft" = "draft",
+	"published" = "published",
+	"archived" = "archived",
+}
+export type WritingProjectsRecord = {
+	bookmarks?: RecordIdString[]
+	content?: HTMLString
+	created: IsoAutoDateString
+	highlights?: RecordIdString[]
+	id: string
+	notes?: RecordIdString[]
+	status?: WritingProjectsStatusOptions
+	tags?: RecordIdString[]
+	title?: string
+	topics?: RecordIdString[]
+	updated: IsoAutoDateString
+	uploads?: RecordIdString[]
+	user?: RecordIdString
+}
+
 // Response types include system fields and match responses from the PocketBase API
 export type AuthoriginsResponse<Texpand = unknown> = Required<AuthoriginsRecord> & BaseSystemFields<Texpand>
 export type ExternalauthsResponse<Texpand = unknown> = Required<ExternalauthsRecord> & BaseSystemFields<Texpand>
@@ -295,6 +317,7 @@ export type TagsResponse<Texpand = unknown> = Required<TagsRecord> & BaseSystemF
 export type TopicsResponse<Texpand = unknown> = Required<TopicsRecord> & BaseSystemFields<Texpand>
 export type UploadsResponse<Texpand = unknown> = Required<UploadsRecord> & BaseSystemFields<Texpand>
 export type UsersResponse<Texpand = unknown> = Required<UsersRecord> & AuthSystemFields<Texpand>
+export type WritingProjectsResponse<Texpand = unknown> = Required<WritingProjectsRecord> & BaseSystemFields<Texpand>
 
 // Types containing all Records and Responses, useful for creating typing helper functions
 
@@ -315,6 +338,7 @@ export type CollectionRecords = {
 	topics: TopicsRecord
 	uploads: UploadsRecord
 	users: UsersRecord
+	writing_projects: WritingProjectsRecord
 }
 
 export type CollectionResponses = {
@@ -334,6 +358,7 @@ export type CollectionResponses = {
 	topics: TopicsResponse
 	uploads: UploadsResponse
 	users: UsersResponse
+	writing_projects: WritingProjectsResponse
 }
 
 // Utility types for create/update operations

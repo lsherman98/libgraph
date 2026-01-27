@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { upload, createAuthor, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createNode, updateNode, deleteNode, createEdge, updateEdge, deleteEdge } from "./api";
+import { upload, createAuthor, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createNode, updateNode, deleteNode, createEdge, updateEdge, deleteEdge, createWritingProject, updateWritingProject, deleteWritingProject } from "./api";
 import { handleError } from "../utils";
 import { Collections, type Create } from "../pocketbase-types";
 
@@ -274,6 +274,45 @@ export function useDeleteEdge() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["edges"] });
             queryClient.invalidateQueries({ queryKey: ["graph"] });
+        },
+    });
+}
+
+// Writing Projects mutations
+export function useCreateWritingProject() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (record: Create<Collections.WritingProjects>) => createWritingProject(record),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["writingProjects"] });
+        },
+    });
+}
+
+export function useUpdateWritingProject() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.WritingProjects>> }) =>
+            updateWritingProject(id, data),
+        onError: handleError,
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ["writingProjects"] });
+            queryClient.invalidateQueries({ queryKey: ["writingProject", variables.id] });
+        },
+    });
+}
+
+export function useDeleteWritingProject() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (id: string) => deleteWritingProject(id),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["writingProjects"] });
         },
     });
 }

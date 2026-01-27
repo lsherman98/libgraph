@@ -9,7 +9,7 @@ import (
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/graph"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/uploads"
 
-	// _ "github.com/lsherman98/pb-template/pocketbase/migrations"
+	// _ "github.com/lsherman98/libgraph/pocketbase/migrations"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"

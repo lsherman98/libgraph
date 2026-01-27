@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useInfiniteQuery } from "@tanstack/react-query";
-import { getAuthors, getFirstPage, getPages, getPageUrl, getTags, getTopics, getUploads, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData } from "./api";
+import { getAuthors, getFirstPage, getPages, getPageUrl, getTags, getTopics, getUploads, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials } from "./api";
 
 export function useAuthors() {
     return useQuery({
@@ -155,6 +155,33 @@ export function useGraphData() {
     return useQuery({
         queryKey: ["graph"],
         queryFn: getGraphData,
+        placeholderData: keepPreviousData
+    });
+}
+
+// Writing Projects hooks
+export function useWritingProjects() {
+    return useQuery({
+        queryKey: ["writingProjects"],
+        queryFn: getWritingProjects,
+        placeholderData: keepPreviousData
+    });
+}
+
+export function useWritingProject(id: string | null) {
+    return useQuery({
+        queryKey: ["writingProject", id],
+        queryFn: () => id ? getWritingProject(id) : null,
+        enabled: !!id,
+        placeholderData: keepPreviousData
+    });
+}
+
+// Workspace materials hook - returns all uploads, highlights, bookmarks, notes for the writer workspace
+export function useWorkspaceMaterials() {
+    return useQuery({
+        queryKey: ["workspaceMaterials"],
+        queryFn: getWorkspaceMaterials,
         placeholderData: keepPreviousData
     });
 }

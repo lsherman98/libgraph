@@ -274,3 +274,69 @@ export const getGraphData = async (): Promise<{ nodes: EnrichedNodesResponse[]; 
     // by fetching the related record from the appropriate collection based on node.type
     return { nodes: nodes as EnrichedNodesResponse[], edges: edges as EdgesResponse[] };
 }
+
+// Writing Projects API
+export const getWritingProjects = async () => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) return [];
+    return await pb.collection(Collections.WritingProjects).getFullList({
+        filter: `user = "${userId}"`,
+        sort: '-updated',
+        expand: 'tags,topics'
+    });
+}
+
+export const getWritingProject = async (id: string) => {
+    return await pb.collection(Collections.WritingProjects).getOne(id, {
+        expand: 'tags,topics,linked_uploads,linked_highlights,linked_bookmarks,linked_notes'
+    });
+}
+
+export const createWritingProject = async (data: Create<Collections.WritingProjects>) => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) throw new Error("User not authenticated");
+    return await pb.collection(Collections.WritingProjects).create({
+        ...data,
+        user: userId
+    });
+}
+
+export const updateWritingProject = async (id: string, data: Partial<Create<Collections.WritingProjects>>) => {
+    return await pb.collection(Collections.WritingProjects).update(id, data);
+}
+
+export const deleteWritingProject = async (id: string) => {
+    return await pb.collection(Collections.WritingProjects).delete(id);
+}
+
+// Get all user's research materials for the workspace
+export const getWorkspaceMaterials = async () => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) return { uploads: [], highlights: [], bookmarks: [], notes: [] };
+
+    const [uploads, highlights, bookmarks, notes] = await Promise.all([
+        pb.collection(Collections.Uploads).getFullList({
+            filter: `user = "${userId}"`,
+            sort: '-created',
+            expand: 'author,tags'
+        }),
+        pb.collection(Collections.Highlights).getFullList({
+            filter: `user = "${userId}"`,
+            sort: '-created',
+            expand: 'upload,tags'
+        }),
+        pb.collection(Collections.Bookmarks).getFullList({
+            filter: `user = "${userId}"`,
+            sort: '-created',
+            expand: 'upload,tags'
+        }),
+        pb.collection(Collections.Notes).getFullList({
+            filter: `user = "${userId}"`,
+            sort: '-created',
+            expand: 'upload,tags'
+        })
+    ]);
+
+    return { uploads, highlights, bookmarks, notes };
+}
+
