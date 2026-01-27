@@ -28,7 +28,6 @@ const nodeTypeLabels: Record<NodesTypeOptions | "all", string> = {
   [NodesTypeOptions.highlight]: "Highlights",
   [NodesTypeOptions.bookmark]: "Bookmarks",
   [NodesTypeOptions.page]: "Pages",
-  [NodesTypeOptions.file]: "Files",
 };
 
 export function GraphToolbar({

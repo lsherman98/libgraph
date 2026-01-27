@@ -1,5 +1,6 @@
 import { pb } from "../pocketbase"
-import { Collections, type Create } from "../pocketbase-types"
+import { Collections, type Create, type EdgesResponse } from "../pocketbase-types"
+import type { EnrichedNodesResponse } from "../types"
 
 export async function getPageUrl(id: string) {
     const [record, token] = await Promise.all([
@@ -252,7 +253,8 @@ export const deleteEdge = async (id: string) => {
 }
 
 // Graph data for visualization - returns all nodes and edges for the current user
-export const getGraphData = async () => {
+// The backend enriches each node with record_data based on its type and record id
+export const getGraphData = async (): Promise<{ nodes: EnrichedNodesResponse[]; edges: EdgesResponse[] }> => {
     const userId = pb.authStore.record?.id;
     if (!userId) return { nodes: [], edges: [] };
 
@@ -268,5 +270,7 @@ export const getGraphData = async () => {
         })
     ]);
 
-    return { nodes, edges };
+    // The PocketBase OnRecordEnrich hook automatically adds record_data to each node
+    // by fetching the related record from the appropriate collection based on node.type
+    return { nodes: nodes as EnrichedNodesResponse[], edges: edges as EdgesResponse[] };
 }

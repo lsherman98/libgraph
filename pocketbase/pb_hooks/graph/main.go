@@ -28,12 +28,11 @@ const (
 	EdgeTypeAuthoredBy  EdgeType = "authored_by"
 	EdgeTypeTaggedWith  EdgeType = "tagged_with"
 	EdgeTypeBelongsTo   EdgeType = "belongs_to"
-	EdgeTypeReferences  EdgeType = "references"
-	EdgeTypeContains    EdgeType = "contains"
+	EdgeTypeCites       EdgeType = "cites"
 	EdgeTypeRelatedTo   EdgeType = "related_to"
 	EdgeTypeHighlightOf EdgeType = "highlight_of"
 	EdgeTypeBookmarkOf  EdgeType = "bookmark_of"
-	EdgeTypeUserCreated EdgeType = "user_created"
+	EdgeTypeContains    EdgeType = "containes"
 )
 
 // Init initializes all graph-related hooks
@@ -45,8 +44,65 @@ func Init(app *pocketbase.PocketBase) error {
 	registerHighlightHooks(app)
 	registerBookmarkHooks(app)
 	registerPageHooks(app)
+	registerNodeEnrichmentHook(app)
 
 	return nil
+}
+
+// getCollectionForNodeType returns the collection name for a given node type
+func getCollectionForNodeType(nodeType string) string {
+	switch NodeType(nodeType) {
+	case NodeTypeUpload:
+		return collections.Uploads
+	case NodeTypeHighlight:
+		return collections.Highlights
+	case NodeTypeBookmark:
+		return collections.Bookmarks
+	case NodeTypeAuthor:
+		return collections.Authors
+	case NodeTypeTag:
+		return collections.Tags
+	case NodeTypeTopic:
+		return collections.Topics
+	case NodeTypePage:
+		return collections.Pages
+	default:
+		return ""
+	}
+}
+
+// registerNodeEnrichmentHook adds the record data to each node response
+func registerNodeEnrichmentHook(app *pocketbase.PocketBase) {
+	app.OnRecordEnrich(collections.Nodes).BindFunc(func(e *core.RecordEnrichEvent) error {
+		nodeType := e.Record.GetString("type")
+		recordId := e.Record.GetString("record")
+
+		if nodeType == "" || recordId == "" {
+			return e.Next()
+		}
+
+		collectionName := getCollectionForNodeType(nodeType)
+		if collectionName == "" {
+			return e.Next()
+		}
+
+		// Fetch the related record
+		record, err := app.FindRecordById(collectionName, recordId)
+		if err != nil {
+			e.App.Logger().Warn("Failed to fetch record for node enrichment",
+				"nodeId", e.Record.Id,
+				"recordId", recordId,
+				"collection", collectionName,
+				"error", err,
+			)
+			return e.Next()
+		}
+
+		// Add the record data to the node's response
+		e.Record.Set("record_data", record.PublicExport())
+
+		return e.Next()
+	})
 }
 
 // Helper function to create a node for a record

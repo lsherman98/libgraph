@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
 import dagre from "dagre";
-import { NodesTypeOptions, EdgesTypeOptions, type NodesResponse, type EdgesResponse } from "@/lib/pocketbase-types";
+import { NodesTypeOptions, EdgesTypeOptions, type EdgesResponse } from "@/lib/pocketbase-types";
+import type { EnrichedNodesResponse } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -65,12 +66,6 @@ const typeConfig: Record<
     bgColor: "bg-gray-100 dark:bg-gray-900/30",
     stroke: "#6b7280",
   },
-  [NodesTypeOptions.file]: {
-    icon: FileIcon,
-    color: "text-cyan-600 dark:text-cyan-400",
-    bgColor: "bg-cyan-100 dark:bg-cyan-900/30",
-    stroke: "#06b6d4",
-  },
 };
 
 // Edge type colors
@@ -78,19 +73,18 @@ const edgeTypeColors: Record<EdgesTypeOptions, string> = {
   [EdgesTypeOptions.authored_by]: "#9333ea",
   [EdgesTypeOptions.tagged_with]: "#22c55e",
   [EdgesTypeOptions.belongs_to]: "#f97316",
-  [EdgesTypeOptions.references]: "#3b82f6",
-  [EdgesTypeOptions.contains]: "#6b7280",
+  [EdgesTypeOptions.cites]: "#3b82f6",
   [EdgesTypeOptions.related_to]: "#ec4899",
   [EdgesTypeOptions.highlight_of]: "#eab308",
   [EdgesTypeOptions.bookmark_of]: "#ef4444",
-  [EdgesTypeOptions.user_created]: "#14b8a6",
+  [EdgesTypeOptions.contains]: "#6b7280",
 };
 
 interface LayoutNode {
   id: string;
-  label: string;
   type: NodesTypeOptions;
   record?: string;
+  label: string;
   x: number;
   y: number;
   width: number;
@@ -106,11 +100,27 @@ interface LayoutEdge {
 }
 
 interface DagreGraphViewProps {
-  nodes: NodesResponse[];
+  nodes: EnrichedNodesResponse[];
   edges: EdgesResponse[];
   filterType: NodesTypeOptions | "all";
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
+}
+
+// Helper to get display label from enriched node
+function getNodeLabel(node: EnrichedNodesResponse): string {
+  if (node.record_data) {
+    const data = node.record_data;
+    if ("title" in data && data.title) return data.title;
+    if ("name" in data && data.name) return data.name;
+    if ("label" in data && data.label) return data.label;
+    if ("text" in data && data.text) {
+      const text = data.text;
+      return text.length > 30 ? text.slice(0, 30) + "..." : text;
+    }
+    if ("page" in data && data.page) return `Page ${data.page}`;
+  }
+  return node.record || "Untitled";
 }
 
 const NODE_WIDTH = 160;
@@ -164,9 +174,9 @@ export function DagreGraphView({ nodes, edges, filterType, selectedNodeId, onSel
       const dagreNode = g.node(node.id);
       return {
         id: node.id,
-        label: node.name || "Untitled",
         type: node.type as NodesTypeOptions,
         record: node.record,
+        label: getNodeLabel(node),
         x: dagreNode?.x || 0,
         y: dagreNode?.y || 0,
         width: NODE_WIDTH,
@@ -348,7 +358,7 @@ export function DagreGraphView({ nodes, edges, filterType, selectedNodeId, onSel
 
             {/* Render nodes */}
             {layoutNodes.map((node) => {
-              const config = typeConfig[node.type] || typeConfig[NodesTypeOptions.file];
+              const config = typeConfig[node.type] || typeConfig[NodesTypeOptions.upload];
               const Icon = config.icon;
               const isSelected = selectedNodeId === node.id;
 
@@ -391,7 +401,7 @@ export function DagreGraphView({ nodes, edges, filterType, selectedNodeId, onSel
                     </div>
                   </foreignObject>
 
-                  {/* Label */}
+                  {/* Node label */}
                   <foreignObject x={36} y={6} width={node.width - 44} height={20}>
                     <div className="text-xs font-medium truncate leading-5" title={node.label}>
                       {node.label}

@@ -1,28 +1,16 @@
 import { useState, useMemo, useCallback } from "react";
 import { useGraphData } from "@/lib/api/queries";
-import { NodesTypeOptions, EdgesTypeOptions, type NodesResponse, type EdgesResponse } from "@/lib/pocketbase-types";
+import { NodesTypeOptions, type EdgesResponse } from "@/lib/pocketbase-types";
+import type { EnrichedNodesResponse } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { GraphToolbar, type ViewMode } from "./graph-toolbar";
-import { GraphNodeDetails } from "./graph-node-details";
+import { NodeDetailDialog } from "./node-detail-dialog";
 import { DagreGraphView } from "./dagre-graph-view";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  FileText,
-  User,
-  Tag,
-  FolderOpen,
-  Highlighter,
-  Bookmark,
-  FileIcon,
-  ChevronRight,
-  ChevronDown,
-  Search,
-  Circle,
-  GitBranch,
-} from "lucide-react";
+import { User, Tag, FolderOpen, FileIcon, ChevronRight, ChevronDown, Search, Circle, GitBranch } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Types for the tree structure
@@ -31,6 +19,7 @@ export type GraphNodeData = {
   label: string;
   type: NodesTypeOptions;
   record?: string;
+  record_data?: EnrichedNodesResponse["record_data"];
 };
 
 type TreeNode = GraphNodeData & {
@@ -38,25 +27,8 @@ type TreeNode = GraphNodeData & {
   edges: EdgesResponse[];
 };
 
-// For compatibility with GraphNodeDetails
-export type GraphNodeType = {
-  id: string;
-  type: "graphNode";
-  position: { x: number; y: number };
-  data: {
-    label: string;
-    type: NodesTypeOptions;
-    record?: string;
-  };
-};
-
 // Type configuration for icons and colors
-const typeConfig: Record<NodesTypeOptions, { icon: React.ElementType; color: string; bgColor: string }> = {
-  [NodesTypeOptions.upload]: {
-    icon: FileText,
-    color: "text-blue-600 dark:text-blue-400",
-    bgColor: "bg-blue-100 dark:bg-blue-900/30",
-  },
+const typeConfig: Partial<Record<NodesTypeOptions, { icon: React.ElementType; color: string; bgColor: string }>> = {
   [NodesTypeOptions.author]: {
     icon: User,
     color: "text-purple-600 dark:text-purple-400",
@@ -72,51 +44,45 @@ const typeConfig: Record<NodesTypeOptions, { icon: React.ElementType; color: str
     color: "text-orange-600 dark:text-orange-400",
     bgColor: "bg-orange-100 dark:bg-orange-900/30",
   },
-  [NodesTypeOptions.highlight]: {
-    icon: Highlighter,
-    color: "text-yellow-600 dark:text-yellow-400",
-    bgColor: "bg-yellow-100 dark:bg-yellow-900/30",
-  },
-  [NodesTypeOptions.bookmark]: {
-    icon: Bookmark,
-    color: "text-red-600 dark:text-red-400",
-    bgColor: "bg-red-100 dark:bg-red-900/30",
-  },
-  [NodesTypeOptions.page]: {
-    icon: FileIcon,
-    color: "text-gray-600 dark:text-gray-400",
-    bgColor: "bg-gray-100 dark:bg-gray-900/30",
-  },
-  [NodesTypeOptions.file]: {
+  [NodesTypeOptions.upload]: {
     icon: FileIcon,
     color: "text-cyan-600 dark:text-cyan-400",
     bgColor: "bg-cyan-100 dark:bg-cyan-900/30",
   },
 };
 
-// Edge type colors for relationship indicators
-const edgeTypeColors: Record<EdgesTypeOptions, string> = {
-  [EdgesTypeOptions.authored_by]: "bg-purple-500",
-  [EdgesTypeOptions.tagged_with]: "bg-green-500",
-  [EdgesTypeOptions.belongs_to]: "bg-orange-500",
-  [EdgesTypeOptions.references]: "bg-blue-500",
-  [EdgesTypeOptions.contains]: "bg-gray-500",
-  [EdgesTypeOptions.related_to]: "bg-pink-500",
-  [EdgesTypeOptions.highlight_of]: "bg-yellow-500",
-  [EdgesTypeOptions.bookmark_of]: "bg-red-500",
-  [EdgesTypeOptions.user_created]: "bg-teal-500",
-};
+// Default edge color (edges don't have a type field in the schema)
+const defaultEdgeColor = "bg-gray-500";
+
+// Helper to get display label from enriched node
+function getNodeLabel(node: EnrichedNodesResponse): string {
+  if (node.record_data) {
+    const data = node.record_data;
+    // Try to get a meaningful label from the record data
+    if ("title" in data && data.title) return data.title;
+    if ("name" in data && data.name) return data.name;
+    if ("label" in data && data.label) return data.label;
+    if ("text" in data && data.text) return data.text.slice(0, 50) + (data.text.length > 50 ? "..." : "");
+    if ("page" in data && data.page) return `Page ${data.page}`;
+  }
+  return node.record || "Untitled";
+}
 
 // Build tree structure from nodes and edges
-function buildTree(nodes: NodesResponse[], edges: EdgesResponse[], filterType: NodesTypeOptions | "all"): TreeNode[] {
+function buildTree(
+  nodes: EnrichedNodesResponse[],
+  edges: EdgesResponse[],
+  filterType: NodesTypeOptions | "all",
+): TreeNode[] {
   // Create a map of nodes
   const nodeMap = new Map<string, TreeNode>();
   nodes.forEach((node) => {
     nodeMap.set(node.id, {
       id: node.id,
-      label: node.name || "Untitled",
+      label: getNodeLabel(node),
       type: node.type as NodesTypeOptions,
       record: node.record,
+      record_data: node.record_data,
       children: [],
       edges: [],
     });
@@ -134,11 +100,10 @@ function buildTree(nodes: NodesResponse[], edges: EdgesResponse[], filterType: N
       // Add edge info to source
       sourceNode.edges.push(edge);
 
-      // For hierarchical display, consider "contains", "belongs_to" as parent-child
-      if (edge.type === EdgesTypeOptions.contains || edge.type === EdgesTypeOptions.belongs_to) {
-        sourceNode.children.push(targetNode);
-        hasParent.add(edge.target);
-      }
+      // For hierarchical display, add target as child of source
+      // Since edges don't have a type field, we treat all edges as parent-child relationships
+      sourceNode.children.push(targetNode);
+      hasParent.add(edge.target);
     }
   });
 
@@ -171,7 +136,7 @@ interface TreeItemProps {
 }
 
 function TreeItem({ node, level, expanded, selected, onToggle, onSelect, searchTerm }: TreeItemProps) {
-  const config = typeConfig[node.type] || typeConfig[NodesTypeOptions.file];
+  const config = typeConfig[node.type] ?? typeConfig[NodesTypeOptions.upload]!;
   const Icon = config.icon;
   const hasChildren = node.children.length > 0;
   const isExpanded = expanded.has(node.id);
@@ -236,18 +201,9 @@ function TreeItem({ node, level, expanded, selected, onToggle, onSelect, searchT
 
         {node.edges.length > 0 && (
           <div className="flex gap-0.5 ml-1">
-            {Array.from(new Set(node.edges.map((e) => e.type)))
-              .slice(0, 3)
-              .map((edgeType, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    "w-1.5 h-1.5 rounded-full",
-                    edgeTypeColors[edgeType as EdgesTypeOptions] || "bg-gray-400",
-                  )}
-                  title={edgeType?.replace(/_/g, " ")}
-                />
-              ))}
+            {node.edges.slice(0, 3).map((_, i) => (
+              <div key={i} className={cn("w-1.5 h-1.5 rounded-full", defaultEdgeColor)} title="Connection" />
+            ))}
           </div>
         )}
       </div>
@@ -281,7 +237,7 @@ interface GroupHeaderProps {
 }
 
 function GroupHeader({ type, count, expanded, onToggle }: GroupHeaderProps) {
-  const config = typeConfig[type] || typeConfig[NodesTypeOptions.file];
+  const config = typeConfig[type] ?? typeConfig[NodesTypeOptions.upload]!;
   const Icon = config.icon;
 
   return (
@@ -318,7 +274,7 @@ export function GraphCanvas() {
   // Build tree structure
   const treeData = useMemo(() => {
     if (!graphData?.nodes || !graphData?.edges) return [];
-    return buildTree(graphData.nodes as NodesResponse[], graphData.edges as EdgesResponse[], filterType);
+    return buildTree(graphData.nodes as EnrichedNodesResponse[], graphData.edges as EdgesResponse[], filterType);
   }, [graphData?.nodes, graphData?.edges, filterType]);
 
   // Group nodes by type for grouped view
@@ -334,21 +290,19 @@ export function GraphCanvas() {
   }, [treeData]);
 
   // Get selected node data
-  const selectedNode = useMemo((): GraphNodeType | null => {
+  const selectedNode = useMemo((): EnrichedNodesResponse | null => {
     if (!selectedNodeId || !graphData?.nodes) return null;
-    const node = (graphData.nodes as NodesResponse[]).find((n) => n.id === selectedNodeId);
-    if (!node) return null;
-    return {
-      id: node.id,
-      type: "graphNode" as const,
-      position: { x: 0, y: 0 },
-      data: {
-        label: node.name || "Untitled",
-        type: node.type as NodesTypeOptions,
-        record: node.record,
-      },
-    };
+    const node = (graphData.nodes as EnrichedNodesResponse[]).find((n) => n.id === selectedNodeId);
+    return node || null;
   }, [selectedNodeId, graphData?.nodes]);
+
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+
+  // Open detail dialog when a node is selected
+  const handleSelectNode = useCallback((node: TreeNode) => {
+    setSelectedNodeId(node.id);
+    setDetailDialogOpen(true);
+  }, []);
 
   const toggleExpanded = useCallback((id: string) => {
     setExpanded((prev) => {
@@ -393,10 +347,6 @@ export function GraphCanvas() {
     setExpanded(new Set());
     setCollapsedGroups(new Set(Object.keys(groupedNodes) as NodesTypeOptions[]));
   }, [groupedNodes]);
-
-  const handleSelectNode = useCallback((node: TreeNode) => {
-    setSelectedNodeId(node.id);
-  }, []);
 
   // Stats
   const nodeCount = graphData?.nodes?.length || 0;
@@ -526,25 +476,26 @@ export function GraphCanvas() {
         </Card>
       ) : (
         <DagreGraphView
-          nodes={(graphData?.nodes as NodesResponse[]) || []}
+          nodes={(graphData?.nodes as EnrichedNodesResponse[]) || []}
           edges={(graphData?.edges as EdgesResponse[]) || []}
           filterType={filterType}
           selectedNodeId={selectedNodeId}
-          onSelectNode={setSelectedNodeId}
-        />
-      )}
-
-      {/* Right sidebar - Node details */}
-      {selectedNode && (
-        <GraphNodeDetails
-          node={selectedNode}
-          onClose={() => setSelectedNodeId(null)}
-          onDelete={() => {
-            // Read-only mode - no delete
-            setSelectedNodeId(null);
+          onSelectNode={(nodeId) => {
+            setSelectedNodeId(nodeId);
+            setDetailDialogOpen(true);
           }}
         />
       )}
+
+      {/* Node detail dialog */}
+      <NodeDetailDialog
+        node={selectedNode}
+        open={detailDialogOpen}
+        onOpenChange={(open) => {
+          setDetailDialogOpen(open);
+          if (!open) setSelectedNodeId(null);
+        }}
+      />
     </div>
   );
 }

@@ -137,11 +137,22 @@ export type BookmarksRecord = {
 	user?: RecordIdString
 }
 
+export enum EdgesTypeOptions {
+	"authored_by" = "authored_by",
+	"tagged_with" = "tagged_with",
+	"belongs_to" = "belongs_to",
+	"cites" = "cites",
+	"related_to" = "related_to",
+	"highlight_of" = "highlight_of",
+	"bookmark_of" = "bookmark_of",
+	"contains" = "contains",
+}
 export type EdgesRecord = {
 	created: IsoAutoDateString
 	id: string
 	source?: RecordIdString
 	target?: RecordIdString
+	type?: EdgesTypeOptions
 	updated: IsoAutoDateString
 	user?: RecordIdString
 }
@@ -172,7 +183,10 @@ export enum NodesTypeOptions {
 	"author" = "author",
 	"tag" = "tag",
 	"topic" = "topic",
-	"file" = "file",
+	"upload" = "upload",
+	"highlight" = "highlight",
+	"bookmark" = "bookmark",
+	"page" = "page",
 }
 export type NodesRecord = {
 	created: IsoAutoDateString
