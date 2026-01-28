@@ -1,18 +1,34 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export interface WriterTab {
+// Base tab interface with common properties
+interface BaseTab {
     id: string;
-    projectId: string;
     title: string;
-    isDirty: boolean; // Has unsaved changes
 }
+
+// Reader tab extends base with reader-specific properties
+export interface ReaderTab extends BaseTab {
+    type: "reader";
+    uploadId: string;
+    currentPage: number;
+}
+
+// Writer tab extends base with writer-specific properties
+export interface WriterTab extends BaseTab {
+    type: "writer";
+    projectId: string;
+    isDirty: boolean;
+}
+
+// Union type for all tab types
+export type WorkspaceTab = ReaderTab | WriterTab;
 
 export type SplitMode = "none" | "horizontal";
 
-interface WriterTabsStore {
+interface WorkspaceTabsStore {
     // Tab state
-    tabs: WriterTab[];
+    tabs: WorkspaceTab[];
     activeTabId: string | null;
 
     // Split view state
@@ -22,22 +38,24 @@ interface WriterTabsStore {
     // Panel sizes (percentages)
     panelSizes: number[];
 
-    // Workspace panel state
+    // Workspace panel state (for writer tabs)
     workspacePanelOpen: boolean;
     workspacePanelSize: number[];
 
-    // Actions
-    addTab: (projectId: string, title: string) => string;
+    // Tab actions
+    addReaderTab: (uploadId: string, title: string) => string;
+    addWriterTab: (projectId: string, title: string) => string;
     removeTab: (tabId: string) => void;
     setActiveTab: (tabId: string) => void;
     updateTabTitle: (tabId: string, title: string) => void;
-    setTabDirty: (tabId: string, isDirty: boolean) => void;
+    updateReaderTabPage: (tabId: string, page: number) => void;
+    setWriterTabDirty: (tabId: string, isDirty: boolean) => void;
 
     // Split view actions
     setSplitMode: (mode: SplitMode) => void;
     setSplitTab: (tabId: string | null) => void;
     setPanelSizes: (sizes: number[]) => void;
-    openInSplit: (projectId: string, title: string) => void;
+    openInSplit: (tab: { type: "reader"; uploadId: string; title: string } | { type: "writer"; projectId: string; title: string }) => void;
     closeSplit: () => void;
 
     // Workspace panel actions
@@ -46,16 +64,23 @@ interface WriterTabsStore {
     setWorkspacePanelSize: (sizes: number[]) => void;
 
     // Utilities
-    getTab: (tabId: string) => WriterTab | undefined;
+    getTab: (tabId: string) => WorkspaceTab | undefined;
+    getReaderTab: (tabId: string) => ReaderTab | undefined;
+    getWriterTab: (tabId: string) => WriterTab | undefined;
+    getTabByUploadId: (uploadId: string) => ReaderTab | undefined;
     getTabByProjectId: (projectId: string) => WriterTab | undefined;
     reorderTabs: (fromIndex: number, toIndex: number) => void;
+
+    // Filtered getters
+    getReaderTabs: () => ReaderTab[];
+    getWriterTabs: () => WriterTab[];
 }
 
-function generateTabId(): string {
-    return `writer-tab-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+function generateTabId(type: "reader" | "writer"): string {
+    return `${type}-tab-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 }
 
-export const useWriterTabsStore = create<WriterTabsStore>()(
+export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
     persist(
         (set, get) => ({
             tabs: [],
@@ -66,7 +91,33 @@ export const useWriterTabsStore = create<WriterTabsStore>()(
             workspacePanelOpen: true,
             workspacePanelSize: [70, 30],
 
-            addTab: (projectId: string, title: string) => {
+            addReaderTab: (uploadId: string, title: string) => {
+                const state = get();
+                const existingTab = state.getTabByUploadId(uploadId);
+                if (existingTab) {
+                    if (state.activeTabId !== existingTab.id) {
+                        set({ activeTabId: existingTab.id });
+                    }
+                    return existingTab.id;
+                }
+
+                const newTab: ReaderTab = {
+                    id: generateTabId("reader"),
+                    type: "reader",
+                    uploadId,
+                    title,
+                    currentPage: 1,
+                };
+
+                set((state) => ({
+                    tabs: [...state.tabs, newTab],
+                    activeTabId: newTab.id,
+                }));
+
+                return newTab.id;
+            },
+
+            addWriterTab: (projectId: string, title: string) => {
                 const state = get();
                 const existingTab = state.getTabByProjectId(projectId);
                 if (existingTab) {
@@ -77,7 +128,8 @@ export const useWriterTabsStore = create<WriterTabsStore>()(
                 }
 
                 const newTab: WriterTab = {
-                    id: generateTabId(),
+                    id: generateTabId("writer"),
+                    type: "writer",
                     projectId,
                     title,
                     isDirty: false,
@@ -101,6 +153,7 @@ export const useWriterTabsStore = create<WriterTabsStore>()(
                 let newActiveTabId = state.activeTabId;
                 let newSplitTabId = state.splitTabId;
 
+                // If closing the active tab, switch to adjacent tab
                 if (state.activeTabId === tabId) {
                     if (newTabs.length > 0) {
                         const newIndex = Math.min(tabIndex, newTabs.length - 1);
@@ -110,6 +163,7 @@ export const useWriterTabsStore = create<WriterTabsStore>()(
                     }
                 }
 
+                // If closing the split tab, close split mode
                 if (state.splitTabId === tabId) {
                     newSplitTabId = null;
                 }
@@ -134,10 +188,22 @@ export const useWriterTabsStore = create<WriterTabsStore>()(
                 }));
             },
 
-            setTabDirty: (tabId: string, isDirty: boolean) => {
+            updateReaderTabPage: (tabId: string, page: number) => {
                 set((state) => ({
                     tabs: state.tabs.map((tab) =>
-                        tab.id === tabId ? { ...tab, isDirty } : tab
+                        tab.id === tabId && tab.type === "reader"
+                            ? { ...tab, currentPage: page }
+                            : tab
+                    ),
+                }));
+            },
+
+            setWriterTabDirty: (tabId: string, isDirty: boolean) => {
+                set((state) => ({
+                    tabs: state.tabs.map((tab) =>
+                        tab.id === tabId && tab.type === "writer"
+                            ? { ...tab, isDirty }
+                            : tab
                     ),
                 }));
             },
@@ -147,6 +213,7 @@ export const useWriterTabsStore = create<WriterTabsStore>()(
                 if (mode === "none") {
                     set({ splitMode: "none", splitTabId: null });
                 } else {
+                    // If enabling split mode without a split tab, use the next available tab
                     if (!state.splitTabId && state.tabs.length > 1) {
                         const otherTab = state.tabs.find((t) => t.id !== state.activeTabId);
                         set({ splitMode: mode, splitTabId: otherTab?.id ?? null });
@@ -164,22 +231,40 @@ export const useWriterTabsStore = create<WriterTabsStore>()(
                 set({ panelSizes: sizes });
             },
 
-            openInSplit: (projectId: string, title: string) => {
+            openInSplit: (tabData) => {
                 const state = get();
                 let tabId: string;
 
-                const existingTab = state.getTabByProjectId(projectId);
-                if (existingTab) {
-                    tabId = existingTab.id;
+                if (tabData.type === "reader") {
+                    const existingTab = state.getTabByUploadId(tabData.uploadId);
+                    if (existingTab) {
+                        tabId = existingTab.id;
+                    } else {
+                        const newTab: ReaderTab = {
+                            id: generateTabId("reader"),
+                            type: "reader",
+                            uploadId: tabData.uploadId,
+                            title: tabData.title,
+                            currentPage: 1,
+                        };
+                        set((s) => ({ tabs: [...s.tabs, newTab] }));
+                        tabId = newTab.id;
+                    }
                 } else {
-                    const newTab: WriterTab = {
-                        id: generateTabId(),
-                        projectId,
-                        title,
-                        isDirty: false,
-                    };
-                    set((s) => ({ tabs: [...s.tabs, newTab] }));
-                    tabId = newTab.id;
+                    const existingTab = state.getTabByProjectId(tabData.projectId);
+                    if (existingTab) {
+                        tabId = existingTab.id;
+                    } else {
+                        const newTab: WriterTab = {
+                            id: generateTabId("writer"),
+                            type: "writer",
+                            projectId: tabData.projectId,
+                            title: tabData.title,
+                            isDirty: false,
+                        };
+                        set((s) => ({ tabs: [...s.tabs, newTab] }));
+                        tabId = newTab.id;
+                    }
                 }
 
                 set({
@@ -208,8 +293,22 @@ export const useWriterTabsStore = create<WriterTabsStore>()(
                 return get().tabs.find((t) => t.id === tabId);
             },
 
+            getReaderTab: (tabId: string) => {
+                const tab = get().tabs.find((t) => t.id === tabId);
+                return tab?.type === "reader" ? tab : undefined;
+            },
+
+            getWriterTab: (tabId: string) => {
+                const tab = get().tabs.find((t) => t.id === tabId);
+                return tab?.type === "writer" ? tab : undefined;
+            },
+
+            getTabByUploadId: (uploadId: string) => {
+                return get().tabs.find((t): t is ReaderTab => t.type === "reader" && t.uploadId === uploadId);
+            },
+
             getTabByProjectId: (projectId: string) => {
-                return get().tabs.find((t) => t.projectId === projectId);
+                return get().tabs.find((t): t is WriterTab => t.type === "writer" && t.projectId === projectId);
             },
 
             reorderTabs: (fromIndex: number, toIndex: number) => {
@@ -220,9 +319,17 @@ export const useWriterTabsStore = create<WriterTabsStore>()(
                     return { tabs: newTabs };
                 });
             },
+
+            getReaderTabs: () => {
+                return get().tabs.filter((t): t is ReaderTab => t.type === "reader");
+            },
+
+            getWriterTabs: () => {
+                return get().tabs.filter((t): t is WriterTab => t.type === "writer");
+            },
         }),
         {
-            name: "writer-tabs-storage",
+            name: "workspace-tabs-storage",
             partialize: (state) => ({
                 tabs: state.tabs,
                 activeTabId: state.activeTabId,

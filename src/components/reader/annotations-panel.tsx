@@ -28,6 +28,9 @@ import {
 
 type ReaderSearch = {
   uploadId?: string;
+  // New workspace format
+  id?: string;
+  type?: "upload" | "project";
 };
 
 interface AnnotationsPanelProps {
@@ -346,7 +349,8 @@ function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate 
 
 export function AnnotationsPanel({ currentPageId, currentPageNumber, onNavigateToPage }: AnnotationsPanelProps) {
   const search = useSearch({ strict: false }) as ReaderSearch;
-  const uploadId = search.uploadId ?? null;
+  // Support both old format (uploadId) and new format (id with type=upload)
+  const uploadId = search.uploadId ?? (search.type === "upload" ? search.id : null) ?? null;
 
   const [showCurrentPageOnly, setShowCurrentPageOnly] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);

@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useNavigate } from "@tanstack/react-router";
-import { useReaderTabsStore } from "@/lib/stores/reader-tabs-store";
+import { useWorkspaceTabsStore } from "@/lib/stores/workspace-tabs-store";
 
 type ViewMode = "linked" | "browse";
 
@@ -68,7 +68,7 @@ export function WorkspacePanel({
   const [viewMode, setViewMode] = useState<ViewMode>("linked");
   const { data: materials, isLoading } = useWorkspaceMaterials();
   const navigate = useNavigate();
-  const addReaderTab = useReaderTabsStore((state) => state.addTab);
+  const addReaderTab = useWorkspaceTabsStore((state) => state.addReaderTab);
 
   const filterBySearch = <T extends { id: string }>(items: T[], searchFields: (keyof T)[]): T[] => {
     if (!searchQuery) return items;
@@ -130,7 +130,7 @@ export function WorkspacePanel({
 
   const handleOpenDocument = (uploadId: string, title: string) => {
     addReaderTab(uploadId, title);
-    navigate({ to: "/reader", search: { uploadId } });
+    navigate({ to: "/workspace", search: { id: uploadId, type: "upload" } });
   };
 
   return (

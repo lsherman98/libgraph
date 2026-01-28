@@ -5,8 +5,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import type { PropsWithChildren } from "react";
 import { AppHeader } from "./header/app-header";
 import { useReaderStore } from "@/lib/stores/reader-store";
-import { useReaderTabsStore } from "@/lib/stores/reader-tabs-store";
-import { useWriterTabsStore } from "@/lib/stores/writer-tabs-store";
+import { useWorkspaceTabsStore } from "@/lib/stores/workspace-tabs-store";
 import { useLocation } from "@tanstack/react-router";
 
 export default function Layout({ children }: PropsWithChildren) {
@@ -14,15 +13,12 @@ export default function Layout({ children }: PropsWithChildren) {
   const currentPageId = useReaderStore((state) => state.currentPageId);
   const currentPageNumber = useReaderStore((state) => state.currentPageNumber);
   const navigateToPage = useReaderStore((state) => state.navigateToPage);
-  const readerTabs = useReaderTabsStore((state) => state.tabs);
-  const writerTabs = useWriterTabsStore((state) => state.tabs);
+  const workspaceTabs = useWorkspaceTabsStore((state) => state.tabs);
   const location = useLocation();
 
-  // Show tabs header when on reader/writer route with tabs, otherwise show app header
-  const isReaderRoute = location.pathname.startsWith("/reader");
-  const isWriterRoute = location.pathname.startsWith("/writer");
-  const showAppHeader =
-    !isReadingMode && !(isReaderRoute && readerTabs.length > 0) && !(isWriterRoute && writerTabs.length > 0);
+  // Show tabs header when on workspace route with tabs, otherwise show app header
+  const isWorkspaceRoute = location.pathname.startsWith("/workspace");
+  const showAppHeader = !isReadingMode && !(isWorkspaceRoute && workspaceTabs.length > 0);
 
   return (
     <SidebarProvider
