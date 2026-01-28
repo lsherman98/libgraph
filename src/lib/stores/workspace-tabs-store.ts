@@ -38,10 +38,6 @@ interface WorkspaceTabsStore {
     // Panel sizes (percentages)
     panelSizes: number[];
 
-    // Workspace panel state (for writer tabs)
-    workspacePanelOpen: boolean;
-    workspacePanelSize: number[];
-
     // Tab actions
     addReaderTab: (uploadId: string, title: string) => string;
     addWriterTab: (projectId: string, title: string) => string;
@@ -57,11 +53,6 @@ interface WorkspaceTabsStore {
     setPanelSizes: (sizes: number[]) => void;
     openInSplit: (tab: { type: "reader"; uploadId: string; title: string } | { type: "writer"; projectId: string; title: string }) => void;
     closeSplit: () => void;
-
-    // Workspace panel actions
-    toggleWorkspacePanel: () => void;
-    setWorkspacePanelOpen: (open: boolean) => void;
-    setWorkspacePanelSize: (sizes: number[]) => void;
 
     // Utilities
     getTab: (tabId: string) => WorkspaceTab | undefined;
@@ -88,8 +79,6 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
             splitMode: "none",
             splitTabId: null,
             panelSizes: [50, 50],
-            workspacePanelOpen: true,
-            workspacePanelSize: [70, 30],
 
             addReaderTab: (uploadId: string, title: string) => {
                 const state = get();
@@ -277,18 +266,6 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
                 set({ splitMode: "none", splitTabId: null });
             },
 
-            toggleWorkspacePanel: () => {
-                set((state) => ({ workspacePanelOpen: !state.workspacePanelOpen }));
-            },
-
-            setWorkspacePanelOpen: (open: boolean) => {
-                set({ workspacePanelOpen: open });
-            },
-
-            setWorkspacePanelSize: (sizes: number[]) => {
-                set({ workspacePanelSize: sizes });
-            },
-
             getTab: (tabId: string) => {
                 return get().tabs.find((t) => t.id === tabId);
             },
@@ -336,8 +313,6 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
                 splitMode: state.splitMode,
                 splitTabId: state.splitTabId,
                 panelSizes: state.panelSizes,
-                workspacePanelOpen: state.workspacePanelOpen,
-                workspacePanelSize: state.workspacePanelSize,
             }),
         }
     )

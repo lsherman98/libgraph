@@ -27,154 +27,122 @@ import {
   Link as LinkIcon,
   Highlighter,
   CodeSquare,
+  MoreHorizontal,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Toggle } from "@/components/ui/toggle";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+type OverflowAction =
+  | { type: "separator" }
+  | { type: "item"; label: string; icon: LucideIcon; action: () => void; active?: boolean };
 
 interface EditorToolbarProps {
   editor: ReturnType<typeof useEditor>;
 }
 
 function EditorToolbar({ editor }: EditorToolbarProps) {
+  const toolbarRef = useRef<HTMLDivElement>(null);
+
   if (!editor) return null;
 
-  return (
-    <div className="flex items-center gap-1 p-2 border-b bg-muted/30 flex-wrap">
-      {/* Undo/Redo */}
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => editor.chain().focus().undo().run()}
-        disabled={!editor.can().undo()}
-      >
-        <Undo className="h-4 w-4" />
-      </Button>
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => editor.chain().focus().redo().run()}
-        disabled={!editor.can().redo()}
-      >
-        <Redo className="h-4 w-4" />
-      </Button>
+  const showHeadings = true;
+  const showLists = true;
+  const showBlocks = true;
+  const showOverflow = false;
 
-      <Separator orientation="vertical" className="h-6 mx-1" />
+  // Actions to show in overflow menu when hidden from toolbar
+  const overflowActions: OverflowAction[] = [];
 
-      {/* Headings */}
-      <Toggle
-        size="sm"
-        pressed={editor.isActive("heading", { level: 1 })}
-        onPressedChange={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-      >
-        <Heading1 className="h-4 w-4" />
-      </Toggle>
-      <Toggle
-        size="sm"
-        pressed={editor.isActive("heading", { level: 2 })}
-        onPressedChange={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-      >
-        <Heading2 className="h-4 w-4" />
-      </Toggle>
-      <Toggle
-        size="sm"
-        pressed={editor.isActive("heading", { level: 3 })}
-        onPressedChange={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-      >
-        <Heading3 className="h-4 w-4" />
-      </Toggle>
+  if (!showHeadings) {
+    overflowActions.push(
+      {
+        type: "item",
+        label: "Heading 1",
+        icon: Heading1,
+        action: () => editor.chain().focus().toggleHeading({ level: 1 }).run(),
+        active: editor.isActive("heading", { level: 1 }),
+      },
+      {
+        type: "item",
+        label: "Heading 2",
+        icon: Heading2,
+        action: () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
+        active: editor.isActive("heading", { level: 2 }),
+      },
+      {
+        type: "item",
+        label: "Heading 3",
+        icon: Heading3,
+        action: () => editor.chain().focus().toggleHeading({ level: 3 }).run(),
+        active: editor.isActive("heading", { level: 3 }),
+      },
+      { type: "separator" },
+    );
+  }
 
-      <Separator orientation="vertical" className="h-6 mx-1" />
+  if (!showLists) {
+    overflowActions.push(
+      {
+        type: "item",
+        label: "Bullet List",
+        icon: List,
+        action: () => editor.chain().focus().toggleBulletList().run(),
+        active: editor.isActive("bulletList"),
+      },
+      {
+        type: "item",
+        label: "Numbered List",
+        icon: ListOrdered,
+        action: () => editor.chain().focus().toggleOrderedList().run(),
+        active: editor.isActive("orderedList"),
+      },
+      {
+        type: "item",
+        label: "Task List",
+        icon: ListTodo,
+        action: () => editor.chain().focus().toggleTaskList().run(),
+        active: editor.isActive("taskList"),
+      },
+      { type: "separator" },
+    );
+  }
 
-      {/* Text formatting */}
-      <Toggle
-        size="sm"
-        pressed={editor.isActive("bold")}
-        onPressedChange={() => editor.chain().focus().toggleBold().run()}
-      >
-        <Bold className="h-4 w-4" />
-      </Toggle>
-      <Toggle
-        size="sm"
-        pressed={editor.isActive("italic")}
-        onPressedChange={() => editor.chain().focus().toggleItalic().run()}
-      >
-        <Italic className="h-4 w-4" />
-      </Toggle>
-      <Toggle
-        size="sm"
-        pressed={editor.isActive("strike")}
-        onPressedChange={() => editor.chain().focus().toggleStrike().run()}
-      >
-        <Strikethrough className="h-4 w-4" />
-      </Toggle>
-      <Toggle
-        size="sm"
-        pressed={editor.isActive("code")}
-        onPressedChange={() => editor.chain().focus().toggleCode().run()}
-      >
-        <Code className="h-4 w-4" />
-      </Toggle>
-      <Toggle
-        size="sm"
-        pressed={editor.isActive("highlight")}
-        onPressedChange={() => editor.chain().focus().toggleHighlight().run()}
-      >
-        <Highlighter className="h-4 w-4" />
-      </Toggle>
-
-      <Separator orientation="vertical" className="h-6 mx-1" />
-
-      {/* Lists */}
-      <Toggle
-        size="sm"
-        pressed={editor.isActive("bulletList")}
-        onPressedChange={() => editor.chain().focus().toggleBulletList().run()}
-      >
-        <List className="h-4 w-4" />
-      </Toggle>
-      <Toggle
-        size="sm"
-        pressed={editor.isActive("orderedList")}
-        onPressedChange={() => editor.chain().focus().toggleOrderedList().run()}
-      >
-        <ListOrdered className="h-4 w-4" />
-      </Toggle>
-      <Toggle
-        size="sm"
-        pressed={editor.isActive("taskList")}
-        onPressedChange={() => editor.chain().focus().toggleTaskList().run()}
-      >
-        <ListTodo className="h-4 w-4" />
-      </Toggle>
-
-      <Separator orientation="vertical" className="h-6 mx-1" />
-
-      {/* Blocks */}
-      <Toggle
-        size="sm"
-        pressed={editor.isActive("blockquote")}
-        onPressedChange={() => editor.chain().focus().toggleBlockquote().run()}
-      >
-        <Quote className="h-4 w-4" />
-      </Toggle>
-      <Toggle
-        size="sm"
-        pressed={editor.isActive("codeBlock")}
-        onPressedChange={() => editor.chain().focus().toggleCodeBlock().run()}
-      >
-        <CodeSquare className="h-4 w-4" />
-      </Toggle>
-      <Button variant="ghost" size="sm" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-        <Minus className="h-4 w-4" />
-      </Button>
-
-      <Separator orientation="vertical" className="h-6 mx-1" />
-
-      {/* Link */}
-      <Toggle
-        size="sm"
-        pressed={editor.isActive("link")}
-        onPressedChange={() => {
+  if (!showBlocks) {
+    overflowActions.push(
+      {
+        type: "item",
+        label: "Quote",
+        icon: Quote,
+        action: () => editor.chain().focus().toggleBlockquote().run(),
+        active: editor.isActive("blockquote"),
+      },
+      {
+        type: "item",
+        label: "Code Block",
+        icon: CodeSquare,
+        action: () => editor.chain().focus().toggleCodeBlock().run(),
+        active: editor.isActive("codeBlock"),
+      },
+      {
+        type: "item",
+        label: "Horizontal Rule",
+        icon: Minus,
+        action: () => editor.chain().focus().setHorizontalRule().run(),
+      },
+      { type: "separator" },
+      {
+        type: "item",
+        label: "Link",
+        icon: LinkIcon,
+        action: () => {
           if (editor.isActive("link")) {
             editor.chain().focus().unsetLink().run();
           } else {
@@ -183,10 +151,195 @@ function EditorToolbar({ editor }: EditorToolbarProps) {
               editor.chain().focus().setLink({ href: url }).run();
             }
           }
-        }}
-      >
-        <LinkIcon className="h-4 w-4" />
-      </Toggle>
+        },
+        active: editor.isActive("link"),
+      },
+    );
+  }
+
+  return (
+    <div ref={toolbarRef} className="flex flex-wrap items-center gap-1 p-2 border-b bg-muted/30 w-full shrink-0">
+      {/* Undo/Redo */}
+      <div className="flex items-center gap-0.5 mr-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => editor.chain().focus().undo().run()}
+          disabled={!editor.can().undo()}
+        >
+          <Undo className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => editor.chain().focus().redo().run()}
+          disabled={!editor.can().redo()}
+        >
+          <Redo className="h-4 w-4" />
+        </Button>
+      </div>
+
+      {/* Headings */}
+      {showHeadings && (
+        <div className="flex items-center gap-0.5 mr-1">
+          <Toggle
+            size="sm"
+            pressed={editor.isActive("heading", { level: 1 })}
+            onPressedChange={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+          >
+            <Heading1 className="h-4 w-4" />
+          </Toggle>
+          <Toggle
+            size="sm"
+            pressed={editor.isActive("heading", { level: 2 })}
+            onPressedChange={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+          >
+            <Heading2 className="h-4 w-4" />
+          </Toggle>
+          <Toggle
+            size="sm"
+            pressed={editor.isActive("heading", { level: 3 })}
+            onPressedChange={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+          >
+            <Heading3 className="h-4 w-4" />
+          </Toggle>
+        </div>
+      )}
+
+      {/* Text formatting */}
+      <div className="flex items-center gap-0.5 mr-1">
+        <Toggle
+          size="sm"
+          pressed={editor.isActive("bold")}
+          onPressedChange={() => editor.chain().focus().toggleBold().run()}
+        >
+          <Bold className="h-4 w-4" />
+        </Toggle>
+        <Toggle
+          size="sm"
+          pressed={editor.isActive("italic")}
+          onPressedChange={() => editor.chain().focus().toggleItalic().run()}
+        >
+          <Italic className="h-4 w-4" />
+        </Toggle>
+        <Toggle
+          size="sm"
+          pressed={editor.isActive("strike")}
+          onPressedChange={() => editor.chain().focus().toggleStrike().run()}
+        >
+          <Strikethrough className="h-4 w-4" />
+        </Toggle>
+        <Toggle
+          size="sm"
+          pressed={editor.isActive("code")}
+          onPressedChange={() => editor.chain().focus().toggleCode().run()}
+        >
+          <Code className="h-4 w-4" />
+        </Toggle>
+        <Toggle
+          size="sm"
+          pressed={editor.isActive("highlight")}
+          onPressedChange={() => editor.chain().focus().toggleHighlight().run()}
+        >
+          <Highlighter className="h-4 w-4" />
+        </Toggle>
+      </div>
+
+      {/* Lists */}
+      {showLists && (
+        <div className="flex items-center gap-0.5 mr-1">
+          <Toggle
+            size="sm"
+            pressed={editor.isActive("bulletList")}
+            onPressedChange={() => editor.chain().focus().toggleBulletList().run()}
+          >
+            <List className="h-4 w-4" />
+          </Toggle>
+          <Toggle
+            size="sm"
+            pressed={editor.isActive("orderedList")}
+            onPressedChange={() => editor.chain().focus().toggleOrderedList().run()}
+          >
+            <ListOrdered className="h-4 w-4" />
+          </Toggle>
+          <Toggle
+            size="sm"
+            pressed={editor.isActive("taskList")}
+            onPressedChange={() => editor.chain().focus().toggleTaskList().run()}
+          >
+            <ListTodo className="h-4 w-4" />
+          </Toggle>
+        </div>
+      )}
+
+      {/* Blocks */}
+      {showBlocks && (
+        <div className="flex items-center gap-0.5">
+          <Toggle
+            size="sm"
+            pressed={editor.isActive("blockquote")}
+            onPressedChange={() => editor.chain().focus().toggleBlockquote().run()}
+          >
+            <Quote className="h-4 w-4" />
+          </Toggle>
+          <Toggle
+            size="sm"
+            pressed={editor.isActive("codeBlock")}
+            onPressedChange={() => editor.chain().focus().toggleCodeBlock().run()}
+          >
+            <CodeSquare className="h-4 w-4" />
+          </Toggle>
+          <Button variant="ghost" size="sm" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
+            <Minus className="h-4 w-4" />
+          </Button>
+          <Toggle
+            size="sm"
+            pressed={editor.isActive("link")}
+            onPressedChange={() => {
+              if (editor.isActive("link")) {
+                editor.chain().focus().unsetLink().run();
+              } else {
+                const url = window.prompt("Enter URL:");
+                if (url) {
+                  editor.chain().focus().setLink({ href: url }).run();
+                }
+              }
+            }}
+          >
+            <LinkIcon className="h-4 w-4" />
+          </Toggle>
+        </div>
+      )}
+
+      {/* Overflow menu for hidden actions */}
+      {showOverflow && overflowActions.length > 0 && (
+        <>
+          <Separator orientation="vertical" className="h-6 mx-1" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm">
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {overflowActions.map((item, index) => {
+                if (item.type === "separator") {
+                  // Don't render separator at the end
+                  if (index === overflowActions.length - 1) return null;
+                  return <DropdownMenuSeparator key={index} />;
+                }
+                const Icon = item.icon;
+                return (
+                  <DropdownMenuItem key={index} onClick={item.action} className={item.active ? "bg-accent" : ""}>
+                    <Icon className="h-4 w-4 mr-2" />
+                    {item.label}
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </>
+      )}
     </div>
   );
 }

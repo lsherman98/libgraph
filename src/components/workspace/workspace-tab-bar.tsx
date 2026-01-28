@@ -1,5 +1,5 @@
-import { useCallback } from "react";
-import { X, Plus, FileText, PenLine, Columns2, Square, PanelRight, Save } from "lucide-react";
+import { useCallback, useState } from "react";
+import { X, Plus, FileText, PenLine, Columns2, Square, Save, BookMarked } from "lucide-react";
 import {
   useWorkspaceTabsStore,
   type WorkspaceTab,
@@ -18,6 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface WorkspaceTabBarProps {
   onSave?: () => void;
@@ -26,19 +27,9 @@ interface WorkspaceTabBarProps {
 
 export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
   const navigate = useNavigate();
-  const {
-    tabs,
-    activeTabId,
-    splitMode,
-    splitTabId,
-    workspacePanelOpen,
-    setActiveTab,
-    removeTab,
-    setSplitMode,
-    closeSplit,
-    toggleWorkspacePanel,
-    getTab,
-  } = useWorkspaceTabsStore();
+  const [splitPromptOpen, setSplitPromptOpen] = useState(false);
+  const { tabs, activeTabId, splitMode, splitTabId, setActiveTab, removeTab, setSplitMode, closeSplit, getTab } =
+    useWorkspaceTabsStore();
 
   const activeTab = activeTabId ? getTab(activeTabId) : null;
   const activeWriterTab = activeTab?.type === "writer" ? (activeTab as WriterTab) : null;
@@ -82,10 +73,13 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
   const handleSplitToggle = useCallback(() => {
     if (splitMode === "horizontal") {
       closeSplit();
-    } else {
+    } else if (tabs.length > 1) {
       setSplitMode("horizontal");
+    } else {
+      // Only 1 tab, prompt user to open another
+      setSplitPromptOpen(true);
     }
-  }, [splitMode, setSplitMode, closeSplit]);
+  }, [splitMode, setSplitMode, closeSplit, tabs.length]);
 
   if (tabs.length === 0) {
     return null;
@@ -146,48 +140,60 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
           </Tooltip>
         )}
 
-        {/* Split view toggle */}
-        {tabs.length > 1 && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={splitMode === "horizontal" ? "secondary" : "ghost"}
-                size="icon"
-                className="h-8 w-8"
-                onClick={handleSplitToggle}
-              >
-                {splitMode === "horizontal" ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{splitMode === "horizontal" ? "Close split view" : "Split view"}</TooltipContent>
-          </Tooltip>
-        )}
+        {/* Split view toggle - always visible */}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={splitMode === "horizontal" ? "secondary" : "ghost"}
+              size="icon"
+              className="h-8 w-8"
+              onClick={handleSplitToggle}
+            >
+              {splitMode === "horizontal" ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>{splitMode === "horizontal" ? "Close split view" : "Split view"}</TooltipContent>
+        </Tooltip>
 
         <Separator orientation="vertical" className="h-4" />
-
-        {/* Workspace panel toggle (only relevant when active tab is writer) */}
-        {activeTab?.type === "writer" && (
-          <>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant={workspacePanelOpen ? "secondary" : "ghost"}
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={toggleWorkspacePanel}
-                >
-                  <PanelRight className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{workspacePanelOpen ? "Hide workspace" : "Show workspace"}</TooltipContent>
-            </Tooltip>
-            <Separator orientation="vertical" className="h-4" />
-          </>
-        )}
 
         {/* Right sidebar trigger */}
         <SidebarTrigger side="right" className="-mr-1" />
       </div>
+
+      {/* Split prompt dialog */}
+      <Dialog open={splitPromptOpen} onOpenChange={setSplitPromptOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Open Another Tab</DialogTitle>
+            <DialogDescription>
+              To use split view, you need to have at least two tabs open. Open a document or writing project to
+              continue.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 justify-center pt-4">
+            <Button
+              onClick={() => {
+                setSplitPromptOpen(false);
+                navigate({ to: "/documents" });
+              }}
+            >
+              <BookMarked className="mr-2 h-4 w-4" />
+              Browse Documents
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSplitPromptOpen(false);
+                navigate({ to: "/documents", search: { tab: "projects" } });
+              }}
+            >
+              <PenLine className="mr-2 h-4 w-4" />
+              Writing Projects
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }

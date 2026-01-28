@@ -6,10 +6,10 @@ import {
   type WorkspaceTab,
 } from "@/lib/stores/workspace-tabs-store";
 import { ReaderPane } from "@/components/reader/reader-pane";
-import { WriterEditorPane, WorkspacePanel } from "@/components/writer";
+import { WriterEditorPane } from "@/components/writer";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { useWritingProject } from "@/lib/api/queries";
-import { useUpdateWritingProject } from "@/lib/api/mutations";
+import { cn } from "@/lib/utils";
 
 interface SplitWorkspaceViewProps {
   className?: string;
@@ -32,13 +32,10 @@ export function SplitWorkspaceView({
     splitMode,
     splitTabId,
     panelSizes,
-    workspacePanelOpen,
-    workspacePanelSize,
     updateReaderTabPage,
     updateTabTitle,
     setWriterTabDirty,
     setPanelSizes,
-    setWorkspacePanelSize,
   } = useWorkspaceTabsStore();
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
@@ -113,15 +110,12 @@ export function SplitWorkspaceView({
     } else {
       const writerTab = tab as WriterTab;
       return (
-        <WriterPaneWithWorkspace
+        <WriterPane
           key={tab.id}
           tab={writerTab}
           localContent={localContent || ""}
           project={project}
           onContentChange={onContentChange}
-          workspacePanelOpen={workspacePanelOpen}
-          workspacePanelSize={workspacePanelSize}
-          setWorkspacePanelSize={setWorkspacePanelSize}
         />
       );
     }
@@ -144,13 +138,7 @@ export function SplitWorkspaceView({
 
   // Split view mode - can mix reader and writer panes
   return (
-    <ResizablePanelGroup
-      className={className}
-      onLayoutChange={(layout) => {
-        const sizes = Object.values(layout);
-        setPanelSizes(sizes);
-      }}
-    >
+    <ResizablePanelGroup className={cn("flex h-full w-full", className)}>
       <ResizablePanel defaultSize={panelSizes[0]} minSize={20}>
         <div className="h-full w-full overflow-hidden">
           {renderPane(
@@ -178,126 +166,25 @@ export function SplitWorkspaceView({
   );
 }
 
-// Helper component to render writer pane with optional workspace panel
-interface WriterPaneWithWorkspaceProps {
+// Helper component to render writer pane
+interface WriterPaneProps {
   tab: WriterTab;
   localContent: string;
   project: any;
   onContentChange?: (content: string) => void;
-  workspacePanelOpen: boolean;
-  workspacePanelSize: number[];
-  setWorkspacePanelSize: (sizes: number[]) => void;
 }
 
-function WriterPaneWithWorkspace({
-  tab,
-  localContent,
-  project,
-  onContentChange,
-  workspacePanelOpen,
-  workspacePanelSize,
-  setWorkspacePanelSize,
-}: WriterPaneWithWorkspaceProps) {
-  const updateProject = useUpdateWritingProject();
-
+function WriterPane({ tab, localContent, project, onContentChange }: WriterPaneProps) {
   if (!project) {
     return <div className="flex items-center justify-center h-full text-muted-foreground">Loading project...</div>;
   }
 
   return (
-    <ResizablePanelGroup
-      onLayoutChange={(layout) => {
-        const sizes = Object.values(layout);
-        setWorkspacePanelSize(sizes);
-      }}
-    >
-      <ResizablePanel defaultSize={workspacePanelOpen ? workspacePanelSize[0] : 100} minSize={40}>
-        <WriterEditorPane
-          projectId={tab.projectId}
-          content={localContent}
-          onContentChange={onContentChange ?? (() => {})}
-          className="h-full"
-        />
-      </ResizablePanel>
-      {workspacePanelOpen && (
-        <>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={workspacePanelSize[1]} minSize={20} maxSize={50}>
-            <WorkspacePanel
-              projectId={tab.projectId}
-              linkedUploads={project?.uploads || []}
-              linkedHighlights={project?.highlights || []}
-              linkedBookmarks={project?.bookmarks || []}
-              linkedNotes={project?.notes || []}
-              onLinkUpload={(id) =>
-                updateProject.mutate({
-                  id: tab.projectId,
-                  data: {
-                    uploads: [...(project?.uploads || []), id],
-                  },
-                })
-              }
-              onUnlinkUpload={(id) =>
-                updateProject.mutate({
-                  id: tab.projectId,
-                  data: {
-                    uploads: (project?.uploads || []).filter((u: string) => u !== id),
-                  },
-                })
-              }
-              onLinkHighlight={(id) =>
-                updateProject.mutate({
-                  id: tab.projectId,
-                  data: {
-                    highlights: [...(project?.highlights || []), id],
-                  },
-                })
-              }
-              onUnlinkHighlight={(id) =>
-                updateProject.mutate({
-                  id: tab.projectId,
-                  data: {
-                    highlights: (project?.highlights || []).filter((h: string) => h !== id),
-                  },
-                })
-              }
-              onLinkBookmark={(id) =>
-                updateProject.mutate({
-                  id: tab.projectId,
-                  data: {
-                    bookmarks: [...(project?.bookmarks || []), id],
-                  },
-                })
-              }
-              onUnlinkBookmark={(id) =>
-                updateProject.mutate({
-                  id: tab.projectId,
-                  data: {
-                    bookmarks: (project?.bookmarks || []).filter((b: string) => b !== id),
-                  },
-                })
-              }
-              onLinkNote={(id) =>
-                updateProject.mutate({
-                  id: tab.projectId,
-                  data: {
-                    notes: [...(project?.notes || []), id],
-                  },
-                })
-              }
-              onUnlinkNote={(id) =>
-                updateProject.mutate({
-                  id: tab.projectId,
-                  data: {
-                    notes: (project?.notes || []).filter((n: string) => n !== id),
-                  },
-                })
-              }
-              className="h-full"
-            />
-          </ResizablePanel>
-        </>
-      )}
-    </ResizablePanelGroup>
+    <WriterEditorPane
+      projectId={tab.projectId}
+      content={localContent}
+      onContentChange={onContentChange ?? (() => {})}
+      className="h-full"
+    />
   );
 }
