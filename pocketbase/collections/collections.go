@@ -14,4 +14,5 @@ const (
 	Bookmarks           = "bookmarks"
 	Nodes               = "nodes"
 	Edges               = "edges"
+	Notes               = "notes"
 )

@@ -143,10 +143,9 @@ export enum EdgesTypeOptions {
 	"tagged_with" = "tagged_with",
 	"belongs_to" = "belongs_to",
 	"cites" = "cites",
-	"related_to" = "related_to",
 	"highlight_of" = "highlight_of",
 	"bookmark_of" = "bookmark_of",
-	"contains" = "contains",
+	"note_of" = "note_of",
 }
 export type EdgesRecord = {
 	created: IsoAutoDateString
@@ -167,10 +166,10 @@ export enum HighlightsColorOptions {
 }
 export type HighlightsRecord = {
 	color?: HighlightsColorOptions
+	comment?: string
 	created: IsoAutoDateString
 	end_offset?: number
 	id: string
-	note?: string
 	page?: RecordIdString
 	start_offset?: number
 	tags?: RecordIdString[]
@@ -187,12 +186,12 @@ export enum NodesTypeOptions {
 	"upload" = "upload",
 	"highlight" = "highlight",
 	"bookmark" = "bookmark",
-	"page" = "page",
+	"note" = "note",
 }
 export type NodesRecord = {
 	created: IsoAutoDateString
 	id: string
-	record?: string
+	record_id?: string
 	type?: NodesTypeOptions
 	updated: IsoAutoDateString
 	user?: RecordIdString
