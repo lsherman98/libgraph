@@ -3,19 +3,13 @@ import { useGraphData } from "@/lib/api/queries";
 import type { EdgesResponse } from "@/lib/pocketbase-types";
 import type { EnrichedNodesResponse } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Network, Sparkles } from "lucide-react";
 import { NodeDetailDialog } from "./node-detail-dialog";
 import { ForceGraphView } from "./force-graph-view";
-import { PixiGraphView } from "./pixi";
-
-type ViewMode = "graph" | "pixi";
 
 export function GraphCanvas() {
   const { data: graphData, isLoading, error } = useGraphData();
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("graph");
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
 
   // Get selected node data
@@ -57,34 +51,13 @@ export function GraphCanvas() {
 
   return (
     <div className="flex-1 h-full flex flex-col p-4 overflow-hidden">
-      {/* View mode toggle */}
-      <div className="mb-3 flex justify-end">
-        <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as ViewMode)} size="sm">
-          <ToggleGroupItem value="graph" aria-label="Graph view">
-            <Network className="h-4 w-4 mr-1" />
-            Graph
-          </ToggleGroupItem>
-          <ToggleGroupItem value="pixi" aria-label="Pixi view">
-            <Sparkles className="h-4 w-4 mr-1" />
-            Pixi
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </div>
-
       {/* Graph view */}
-      {viewMode === "graph" ? (
-        <ForceGraphView
-          nodes={(graphData?.nodes as EnrichedNodesResponse[]) || []}
-          edges={(graphData?.edges as EdgesResponse[]) || []}
-          selectedNodeId={selectedNodeId}
-          onSelectNode={handleSelectNode}
-        />
-      ) : (
-        <PixiGraphView
-          nodes={(graphData?.nodes as EnrichedNodesResponse[]) || []}
-          edges={(graphData?.edges as EdgesResponse[]) || []}
-        />
-      )}
+      <ForceGraphView
+        nodes={(graphData?.nodes as EnrichedNodesResponse[]) || []}
+        edges={(graphData?.edges as EdgesResponse[]) || []}
+        selectedNodeId={selectedNodeId}
+        onSelectNode={handleSelectNode}
+      />
 
       {/* Node detail dialog */}
       <NodeDetailDialog

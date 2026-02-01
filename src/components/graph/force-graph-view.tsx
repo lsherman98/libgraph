@@ -29,6 +29,7 @@ interface GraphNode extends d3.SimulationNodeDatum {
   type: NodesTypeOptions;
   label: string;
   radius: number;
+  displayLabel: string; // Truncated label for display inside node
 }
 
 interface GraphEdge extends d3.SimulationLinkDatum<GraphNode> {
@@ -47,14 +48,19 @@ export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode }: F
 
   useEffect(() => {
     // Transform nodes
-    const graphNodes: GraphNode[] = nodes.map((node) => ({
-      id: node.id,
-      type: node.type as NodesTypeOptions,
-      label: node.id, // Just showing node id as requested
-      radius: node.id === selectedNodeId ? 8 : 5,
-      x: 0,
-      y: 0,
-    }));
+    const graphNodes: GraphNode[] = nodes.map((node) => {
+      const label = node.id;
+      const truncatedLabel = label.length > 6 ? label.slice(0, 6) + "…" : label;
+      return {
+        id: node.id,
+        type: node.type as NodesTypeOptions,
+        label: label,
+        displayLabel: truncatedLabel,
+        radius: node.id === selectedNodeId ? 28 : 24, // Larger radius to fit text inside
+        x: 0,
+        y: 0,
+      };
+    });
 
     // Transform edges
     const graphEdges: GraphEdge[] = edges
@@ -79,10 +85,18 @@ export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode }: F
 
     const g = svg.append("g");
 
-    // Zoom behavior
+    // Define bounds for constraining the graph to the viewport
+    const padding = 100; // Allow some padding outside viewport
+    const bounds: [[number, number], [number, number]] = [
+      [-padding, -padding],
+      [width + padding, height + padding],
+    ];
+
+    // Zoom behavior with constraints
     const zoom = d3
       .zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.1, 4])
+      .scaleExtent([0.5, 2]) // Limit zoom: 0.5x out, 2x in
+      .translateExtent(bounds) // Constrain panning to bounds
       .on("zoom", (event) => {
         g.attr("transform", event.transform);
       });
@@ -97,11 +111,16 @@ export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode }: F
         d3
           .forceLink<GraphNode, GraphEdge>(graphData.edges)
           .id((d) => d.id)
-          .distance(100),
+          .distance(120),
       )
-      .force("charge", d3.forceManyBody().strength(-300))
+      .force("charge", d3.forceManyBody().strength(-400))
       .force("center", d3.forceCenter(width / 2, height / 2))
-      .force("collide", d3.forceCollide().radius(20));
+      .force(
+        "collide",
+        d3.forceCollide().radius((d) => (d as GraphNode).radius + 5),
+      )
+      .force("x", d3.forceX(width / 2).strength(0.05)) // Keep nodes centered horizontally
+      .force("y", d3.forceY(height / 2).strength(0.05)); // Keep nodes centered vertically
 
     // Render edges
     const link = g
@@ -134,14 +153,17 @@ export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode }: F
         onSelectNode(d.id);
       });
 
-    // Node labels (ID)
+    // Node labels (inside the node)
     node
       .append("text")
-      .text((d) => d.label)
-      .attr("x", 8)
-      .attr("y", 3)
-      .attr("font-size", "10px")
-      .attr("fill", theme === "dark" ? "#ccc" : "#333")
+      .text((d) => d.displayLabel)
+      .attr("x", 0)
+      .attr("y", 0)
+      .attr("text-anchor", "middle")
+      .attr("dominant-baseline", "central")
+      .attr("font-size", "9px")
+      .attr("font-weight", "500")
+      .attr("fill", "#ffffff")
       .style("pointer-events", "none"); // Let clicks pass through to circle
 
     // Update positions on tick
@@ -169,8 +191,11 @@ export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode }: F
 
     function dragended(event: d3.D3DragEvent<any, GraphNode, any>, d: GraphNode) {
       if (!event.active) simulation.alphaTarget(0);
+      // Release the fixed position so physics can reset the node
       d.fx = null;
       d.fy = null;
+      // Reheat the simulation to let physics settle the graph
+      simulation.alpha(0.3).restart();
     }
 
     // Cleanup
