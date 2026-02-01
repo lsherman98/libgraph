@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Network, Sparkles } from "lucide-react";
 import { NodeDetailDialog } from "./node-detail-dialog";
-import { DagreGraphView } from "./dagre-graph-view";
+import { ForceGraphView } from "./force-graph-view";
 import { PixiGraphView } from "./pixi";
 
 type ViewMode = "graph" | "pixi";
@@ -26,8 +26,13 @@ export function GraphCanvas() {
   }, [selectedNodeId, graphData?.nodes]);
 
   const handleSelectNode = useCallback((nodeId: string) => {
-    setSelectedNodeId(nodeId);
-    setDetailDialogOpen(true);
+    if (nodeId) {
+       setSelectedNodeId(nodeId);
+       setDetailDialogOpen(true);
+    } else {
+       setSelectedNodeId(null);
+       setDetailDialogOpen(false);
+    }
   }, []);
 
   if (isLoading) {
@@ -68,7 +73,7 @@ export function GraphCanvas() {
 
       {/* Graph view */}
       {viewMode === "graph" ? (
-        <DagreGraphView
+        <ForceGraphView
           nodes={(graphData?.nodes as EnrichedNodesResponse[]) || []}
           edges={(graphData?.edges as EdgesResponse[]) || []}
           selectedNodeId={selectedNodeId}
