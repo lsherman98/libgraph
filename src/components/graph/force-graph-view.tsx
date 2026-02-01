@@ -41,7 +41,7 @@ export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode }: F
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const { theme } = useTheme();
-  
+
   // Transform relevant data for d3
   const [graphData, setGraphData] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] }>({ nodes: [], edges: [] });
 
@@ -58,7 +58,7 @@ export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode }: F
 
     // Transform edges
     const graphEdges: GraphEdge[] = edges
-      .filter(e => nodes.find(n => n.id === e.source) && nodes.find(n => n.id === e.target))
+      .filter((e) => nodes.find((n) => n.id === e.source) && nodes.find((n) => n.id === e.target))
       .map((edge) => ({
         source: edge.source,
         target: edge.target,
@@ -80,7 +80,8 @@ export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode }: F
     const g = svg.append("g");
 
     // Zoom behavior
-    const zoom = d3.zoom<SVGSVGElement, unknown>()
+    const zoom = d3
+      .zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.1, 4])
       .on("zoom", (event) => {
         g.attr("transform", event.transform);
@@ -89,14 +90,22 @@ export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode }: F
     svg.call(zoom);
 
     // Force simulation
-    const simulation = d3.forceSimulation<GraphNode>(graphData.nodes)
-      .force("link", d3.forceLink<GraphNode, GraphEdge>(graphData.edges).id((d) => d.id).distance(100))
+    const simulation = d3
+      .forceSimulation<GraphNode>(graphData.nodes)
+      .force(
+        "link",
+        d3
+          .forceLink<GraphNode, GraphEdge>(graphData.edges)
+          .id((d) => d.id)
+          .distance(100),
+      )
       .force("charge", d3.forceManyBody().strength(-300))
       .force("center", d3.forceCenter(width / 2, height / 2))
       .force("collide", d3.forceCollide().radius(20));
 
     // Render edges
-    const link = g.append("g")
+    const link = g
+      .append("g")
       .attr("stroke", "#999")
       .attr("stroke-opacity", 0.6)
       .selectAll("line")
@@ -105,19 +114,18 @@ export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode }: F
       .attr("stroke-width", 1.5);
 
     // Render nodes
-    const node = g.append("g")
+    const node = g
+      .append("g")
       .attr("stroke", "#fff")
       .attr("stroke-width", 1.5)
       .selectAll("g")
       .data(graphData.nodes)
       .join("g")
-      .call(d3.drag<SVGGElement, GraphNode>()
-        .on("start", dragstarted)
-        .on("drag", dragged)
-        .on("end", dragended));
+      .call(d3.drag<any, GraphNode>().on("start", dragstarted).on("drag", dragged).on("end", dragended));
 
     // Node circles
-    node.append("circle")
+    node
+      .append("circle")
       .attr("r", (d) => d.radius)
       .attr("fill", (d) => typeColors[d.type] || "#ffffff")
       .attr("cursor", "pointer")
@@ -127,7 +135,8 @@ export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode }: F
       });
 
     // Node labels (ID)
-    node.append("text")
+    node
+      .append("text")
       .text((d) => d.label)
       .attr("x", 8)
       .attr("y", 3)
@@ -143,26 +152,25 @@ export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode }: F
         .attr("x2", (d) => (d.target as GraphNode).x!)
         .attr("y2", (d) => (d.target as GraphNode).y!);
 
-      node
-        .attr("transform", (d) => `translate(${d.x},${d.y})`);
+      node.attr("transform", (d) => `translate(${d.x},${d.y})`);
     });
 
     // Drag functions
-    function dragstarted(event: d3.D3DragEvent<SVGGElement, GraphNode, unknown>, d: GraphNode) {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
-        d.fx = d.x;
-        d.fy = d.y;
+    function dragstarted(event: d3.D3DragEvent<any, GraphNode, any>, d: GraphNode) {
+      if (!event.active) simulation.alphaTarget(0.3).restart();
+      d.fx = d.x;
+      d.fy = d.y;
     }
 
-    function dragged(event: d3.D3DragEvent<SVGGElement, GraphNode, unknown>, d: GraphNode) {
-        d.fx = event.x;
-        d.fy = event.y;
+    function dragged(event: d3.D3DragEvent<any, GraphNode, any>, d: GraphNode) {
+      d.fx = event.x;
+      d.fy = event.y;
     }
 
-    function dragended(event: d3.D3DragEvent<SVGGElement, GraphNode, unknown>, d: GraphNode) {
-        if (!event.active) simulation.alphaTarget(0);
-        d.fx = null;
-        d.fy = null;
+    function dragended(event: d3.D3DragEvent<any, GraphNode, any>, d: GraphNode) {
+      if (!event.active) simulation.alphaTarget(0);
+      d.fx = null;
+      d.fy = null;
     }
 
     // Cleanup

@@ -27,11 +27,11 @@ export function GraphCanvas() {
 
   const handleSelectNode = useCallback((nodeId: string) => {
     if (nodeId) {
-       setSelectedNodeId(nodeId);
-       setDetailDialogOpen(true);
+      setSelectedNodeId(nodeId);
+      setDetailDialogOpen(true);
     } else {
-       setSelectedNodeId(null);
-       setDetailDialogOpen(false);
+      setSelectedNodeId(null);
+      setDetailDialogOpen(false);
     }
   }, []);
 
