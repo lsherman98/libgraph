@@ -8,10 +8,7 @@ import { useEngine } from "./World";
 // Extend pixi.js with Graphics
 extend({ Graphics: PIXIGraphics });
 
-export const extractCoordinates = (vertice: {
-  x: number;
-  y: number;
-}): [number, number] => [vertice.x, vertice.y];
+export const extractCoordinates = (vertice: { x: number; y: number }): [number, number] => [vertice.x, vertice.y];
 
 export interface PixiNodeType {
   key: string;

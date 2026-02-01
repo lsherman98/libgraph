@@ -25,10 +25,7 @@ interface PixiGraphViewProps {
 }
 
 // Create nodes with random positions
-function createPixiNodes(
-  nodes: EnrichedNodesResponse[],
-  scale: number
-): PixiNodeType[] {
+function createPixiNodes(nodes: EnrichedNodesResponse[], scale: number): PixiNodeType[] {
   return nodes.map((node) => ({
     key: node.id,
     position: {
@@ -62,9 +59,9 @@ export function PixiGraphView({ nodes: rawNodes, edges: rawEdges }: PixiGraphVie
     const updateDimensions = () => {
       if (containerRef.current) {
         const { width, height } = containerRef.current.getBoundingClientRect();
-        setDimensions({ 
-          width: Math.max(400, width - 32), 
-          height: Math.max(400, height - 32) 
+        setDimensions({
+          width: Math.max(400, width - 32),
+          height: Math.max(400, height - 32),
         });
       }
     };
@@ -77,10 +74,7 @@ export function PixiGraphView({ nodes: rawNodes, edges: rawEdges }: PixiGraphVie
   const scale = Math.min(dimensions.width, dimensions.height);
 
   // Create initial node positions
-  const initialNodes = useMemo(
-    () => createPixiNodes(rawNodes, scale),
-    [rawNodes, scale]
-  );
+  const initialNodes = useMemo(() => createPixiNodes(rawNodes, scale), [rawNodes, scale]);
 
   const [pixiNodes, setPixiNodes] = useState<PixiNodeType[]>(initialNodes);
 
@@ -104,13 +98,7 @@ export function PixiGraphView({ nodes: rawNodes, edges: rawEdges }: PixiGraphVie
   return (
     <Card className="flex-1 flex flex-col overflow-hidden" ref={containerRef}>
       <div className="flex-1 flex items-center justify-center p-4 bg-zinc-900 rounded-lg m-2">
-        <Application
-          width={scale}
-          height={scale}
-          resolution={RESOLUTION}
-          antialias={true}
-          background="#18181b"
-        >
+        <Application width={scale} height={scale} resolution={RESOLUTION} antialias={true} background="#18181b">
           <World>
             <PixiBorder scale={scale} />
             <Mouse>
@@ -133,12 +121,7 @@ export function PixiGraphView({ nodes: rawNodes, edges: rawEdges }: PixiGraphVie
               {/* Draw nodes and labels */}
               {pixiNodes.map((node) => (
                 <React.Fragment key={node.key}>
-                  <PixiLabel
-                    text={node.key}
-                    x={node.position.x}
-                    y={node.position.y + 18}
-                    color="#a1a1aa"
-                  />
+                  <PixiLabel text={node.key} x={node.position.x} y={node.position.y + 18} color="#a1a1aa" />
                   <PixiNode
                     x={node.position.x}
                     y={node.position.y}

@@ -15,9 +15,7 @@ export const World: React.FC<{
     engine.constraintIterations = 7;
   }, [engine]);
 
-  useTick((delta) => Matter.Engine.update(engine, delta * (1000 / 60)));
+  useTick((delta) => Matter.Engine.update(engine, Number(delta) * (1000 / 60)));
 
-  return (
-    <EngineContext.Provider value={engine}>{children}</EngineContext.Provider>
-  );
+  return <EngineContext.Provider value={engine}>{children}</EngineContext.Provider>;
 };

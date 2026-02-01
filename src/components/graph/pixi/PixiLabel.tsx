@@ -22,7 +22,7 @@ export const PixiLabel = (props: PixiLabelProps) => {
         fontWeight: "400",
         align: "center",
       }),
-    [props.color]
+    [props.color],
   );
 
   // Create and add text to stage

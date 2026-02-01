@@ -54,12 +54,7 @@ export function GraphCanvas() {
     <div className="flex-1 h-full flex flex-col p-4 overflow-hidden">
       {/* View mode toggle */}
       <div className="mb-3 flex justify-end">
-        <ToggleGroup
-          type="single"
-          value={viewMode}
-          onValueChange={(v) => v && setViewMode(v as ViewMode)}
-          size="sm"
-        >
+        <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && setViewMode(v as ViewMode)} size="sm">
           <ToggleGroupItem value="graph" aria-label="Graph view">
             <Network className="h-4 w-4 mr-1" />
             Graph

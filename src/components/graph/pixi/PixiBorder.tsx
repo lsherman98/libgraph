@@ -17,22 +17,10 @@ const BorderInternal: React.FC<BorderProps> = ({ scale }) => {
   const s = scale;
   return (
     <>
-      <Shape
-        config={{ x: s / 2, y: s + 50, width: s, height: 100 }}
-        options={{ isStatic: true }}
-      />
-      <Shape
-        config={{ x: s / 2, y: -50, width: s, height: 100 }}
-        options={{ isStatic: true }}
-      />
-      <Shape
-        config={{ x: -50, y: s / 2, width: 100, height: s }}
-        options={{ isStatic: true }}
-      />
-      <Shape
-        config={{ x: s + 50, y: s / 2, width: 100, height: s }}
-        options={{ isStatic: true }}
-      />
+      <Shape config={{ x: s / 2, y: s + 50, width: s, height: 100 }} options={{ isStatic: true }} />
+      <Shape config={{ x: s / 2, y: -50, width: s, height: 100 }} options={{ isStatic: true }} />
+      <Shape config={{ x: -50, y: s / 2, width: 100, height: s }} options={{ isStatic: true }} />
+      <Shape config={{ x: s + 50, y: s / 2, width: 100, height: s }} options={{ isStatic: true }} />
     </>
   );
 };
@@ -68,13 +56,7 @@ const Shape = ({
   React.useEffect(() => {
     if (!engine) return;
 
-    body.current = Matter.Bodies.rectangle(
-      config.x,
-      config.y,
-      config.width,
-      config.height,
-      options
-    );
+    body.current = Matter.Bodies.rectangle(config.x, config.y, config.width, config.height, options);
 
     Matter.World.add(engine.world, body.current);
 
@@ -91,7 +73,7 @@ const Shape = ({
     g.clear();
     const verts = b.vertices;
     if (verts.length === 0) return;
-    
+
     g.moveTo(...extractCoordinates(verts[0]));
     for (let j = 1; j < verts.length; j += 1) {
       g.lineTo(...extractCoordinates(verts[j]));
