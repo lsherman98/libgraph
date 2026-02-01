@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, useCallback, useEffect } from "react";
+import type { ComponentType } from "react";
 import dagre from "dagre";
 import { NodesTypeOptions, EdgesTypeOptions, type EdgesResponse } from "@/lib/pocketbase-types";
 import type { EnrichedNodesResponse } from "@/lib/types";
@@ -22,7 +23,7 @@ import { Button } from "@/components/ui/button";
 // Type configuration for icons and colors
 const typeConfig: Record<
   NodesTypeOptions,
-  { icon: React.ElementType; color: string; bgColor: string; stroke: string }
+  { icon: ComponentType<{ className?: string }>; color: string; bgColor: string; stroke: string }
 > = {
   [NodesTypeOptions.upload]: {
     icon: FileText,
@@ -102,7 +103,6 @@ interface LayoutEdge {
 interface DagreGraphViewProps {
   nodes: EnrichedNodesResponse[];
   edges: EdgesResponse[];
-  filterType: NodesTypeOptions | "all";
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
 }
@@ -126,19 +126,16 @@ function getNodeLabel(node: EnrichedNodesResponse): string {
 const NODE_WIDTH = 160;
 const NODE_HEIGHT = 50;
 
-export function DagreGraphView({ nodes, edges, filterType, selectedNodeId, onSelectNode }: DagreGraphViewProps) {
+export function DagreGraphView({ nodes, edges, selectedNodeId, onSelectNode }: DagreGraphViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 
-  // Filter nodes based on type
-  const filteredNodes = useMemo(() => {
-    if (filterType === "all") return nodes;
-    return nodes.filter((n) => n.type === filterType);
-  }, [nodes, filterType]);
+  // Use all nodes (no filtering)
+  const filteredNodes = nodes;
 
-  // Filter edges to only include those between visible nodes
+  // Use all edges between visible nodes
   const filteredEdges = useMemo(() => {
     const nodeIds = new Set(filteredNodes.map((n) => n.id));
     return edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));

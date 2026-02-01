@@ -1,45 +1,18 @@
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Filter, GitBranch, Circle, ChevronsUpDown, ChevronsDownUp, List, Network } from "lucide-react";
-import { NodesTypeOptions } from "@/lib/pocketbase-types";
+import { GitBranch, Circle, Network, Sparkles } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
-export type ViewMode = "tree" | "graph";
+export type ViewMode = "graph" | "pixi";
 
 interface GraphToolbarProps {
-  filterType: NodesTypeOptions | "all";
-  onFilterChange: (type: NodesTypeOptions | "all") => void;
   nodeCount: number;
   edgeCount: number;
-  onExpandAll: () => void;
-  onCollapseAll: () => void;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
 }
 
-const nodeTypeLabels: Record<NodesTypeOptions | "all", string> = {
-  all: "All Types",
-  [NodesTypeOptions.upload]: "Uploads",
-  [NodesTypeOptions.author]: "Authors",
-  [NodesTypeOptions.tag]: "Tags",
-  [NodesTypeOptions.topic]: "Topics",
-  [NodesTypeOptions.highlight]: "Highlights",
-  [NodesTypeOptions.bookmark]: "Bookmarks",
-  [NodesTypeOptions.page]: "Pages",
-};
-
-export function GraphToolbar({
-  filterType,
-  onFilterChange,
-  nodeCount,
-  edgeCount,
-  onExpandAll,
-  onCollapseAll,
-  viewMode,
-  onViewModeChange,
-}: GraphToolbarProps) {
+export function GraphToolbar({ nodeCount, edgeCount, viewMode, onViewModeChange }: GraphToolbarProps) {
   return (
     <Card className="shadow-lg w-56 shrink-0">
       <CardHeader className="py-3 px-4">
@@ -56,47 +29,18 @@ export function GraphToolbar({
             type="single"
             value={viewMode}
             onValueChange={(v) => v && onViewModeChange(v as ViewMode)}
-            className="justify-start"
+            className="justify-start flex-wrap"
           >
-            <ToggleGroupItem value="tree" aria-label="Tree view" className="flex-1">
-              <List className="h-4 w-4 mr-1" />
-              Tree
-            </ToggleGroupItem>
             <ToggleGroupItem value="graph" aria-label="Graph view" className="flex-1">
               <Network className="h-4 w-4 mr-1" />
               Graph
             </ToggleGroupItem>
+            <ToggleGroupItem value="pixi" aria-label="Pixi view" className="flex-1">
+              <Sparkles className="h-4 w-4 mr-1" />
+              Pixi
+            </ToggleGroupItem>
           </ToggleGroup>
         </div>
-
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <Select value={filterType} onValueChange={(v) => onFilterChange(v as NodesTypeOptions | "all")}>
-            <SelectTrigger className="w-full h-8 text-xs">
-              <SelectValue placeholder="Filter by type" />
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(nodeTypeLabels).map(([value, label]) => (
-                <SelectItem key={value} value={value} className="text-xs">
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {viewMode === "tree" && (
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={onExpandAll}>
-              <ChevronsUpDown className="h-3.5 w-3.5 mr-1" />
-              Expand
-            </Button>
-            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={onCollapseAll}>
-              <ChevronsDownUp className="h-3.5 w-3.5 mr-1" />
-              Collapse
-            </Button>
-          </div>
-        )}
 
         <div className="flex items-center justify-between text-xs text-muted-foreground border-t pt-2">
           <div className="flex items-center gap-1">
