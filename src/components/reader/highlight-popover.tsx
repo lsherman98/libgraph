@@ -1,13 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { MessageSquare, Trash2, Plus, Tag } from "lucide-react";
+import { MessageSquare, Trash2, MessageSquarePlus, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HighlightsColorOptions } from "@/lib/pocketbase-types";
 import { useTags } from "@/lib/api/queries";
-import { useCreateTag } from "@/lib/api/mutations";
-import { CreatableCombobox } from "@/components/creatable-combobox";
 
 const HIGHLIGHT_COLORS: { value: HighlightsColorOptions; bg: string; border: string; ring: string }[] = [
   {
@@ -42,6 +39,7 @@ interface HighlightPopoverProps {
   position: SelectionPosition | null;
   selectionRange: Range | null;
   onHighlight: (color: HighlightsColorOptions, note?: string, tags?: string[]) => void;
+  onOpenEditor: () => void;
   onDismiss: () => void;
 }
 
@@ -50,30 +48,10 @@ export function HighlightPopover({
   position,
   selectionRange: _selectionRange,
   onHighlight,
+  onOpenEditor,
   onDismiss,
 }: HighlightPopoverProps) {
-  const [showNoteInput, setShowNoteInput] = useState(false);
-  const [note, setNote] = useState("");
-  const [selectedColor, setSelectedColor] = useState<HighlightsColorOptions>(HighlightsColorOptions.yellow);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const popoverRef = useRef<HTMLDivElement>(null);
-
-  const { data: tags = [] } = useTags();
-  const createTagMutation = useCreateTag();
-
-  // Reset state when popover reopens
-  useEffect(() => {
-    if (position && selectedText) {
-      setShowNoteInput(false);
-      setNote("");
-      setSelectedColor(HighlightsColorOptions.yellow);
-      setSelectedTags([]);
-    }
-  }, [position, selectedText]);
-
-  // We rely on the native browser selection to show what text is selected
-  // Creating a temporary DOM element here conflicts with React's rendering
-  // when optimistic updates occur (race condition between removing temp mark and adding real mark)
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -109,27 +87,6 @@ export function HighlightPopover({
     onHighlight(color);
   };
 
-  const handleSaveWithNote = () => {
-    onHighlight(selectedColor, note, selectedTags);
-  };
-
-  const handleTagSelect = (tagId: string) => {
-    setSelectedTags((prev) => (prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
-  };
-
-  const handleTagCreate = (title: string) => {
-    createTagMutation.mutate(
-      { title },
-      {
-        onSuccess: (newTag) => {
-          setSelectedTags((prev) => [...prev, newTag.id]);
-        },
-      },
-    );
-  };
-
-  const tagOptions = tags.map((t) => ({ label: t.title || t.id, value: t.id }));
-
   if (!position || !selectedText) return null;
 
   // Calculate position accounting for scroll
@@ -148,103 +105,43 @@ export function HighlightPopover({
       onMouseUp={(e) => e.stopPropagation()} // Prevent parent mouseUp handler from clearing selection
     >
       <div className="bg-popover text-popover-foreground border border-border rounded-lg shadow-md p-1.5">
-        {!showNoteInput ? (
-          /* Color swatches - all in one line */
-          <div className="flex items-center gap-1">
-            {HIGHLIGHT_COLORS.map((color) => (
-              <button
-                key={color.value}
-                className={cn(
-                  "w-6 h-6 rounded-full transition-all hover:scale-110 ring-2 ring-offset-1 ring-offset-background",
-                  color.bg,
-                  "ring-transparent hover:ring-foreground/20",
-                )}
-                onMouseDown={(e) => {
-                  e.preventDefault(); // Prevent losing selection
-                  e.stopPropagation();
-                }}
-                onClick={() => handleColorClick(color.value)}
-                title={`Highlight ${color.value}`}
-              />
-            ))}
-
-            {/* Divider */}
-            <div className="w-px h-5 bg-border mx-0.5" />
-
-            {/* Add Note button */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
+        {/* Color swatches - all in one line */}
+        <div className="flex items-center gap-1">
+          {HIGHLIGHT_COLORS.map((color) => (
+            <button
+              key={color.value}
+              className={cn(
+                "w-6 h-6 rounded-full transition-all hover:scale-110 ring-2 ring-offset-1 ring-offset-background",
+                color.bg,
+                "ring-transparent hover:ring-foreground/20",
+              )}
               onMouseDown={(e) => {
-                e.preventDefault();
+                e.preventDefault(); // Prevent losing selection
                 e.stopPropagation();
               }}
-              onClick={() => setShowNoteInput(true)}
-              title="Add note"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2 min-w-[280px] p-1">
-            {/* Selected text preview */}
-            <div className="text-xs text-muted-foreground line-clamp-2 italic px-1">
-              "{selectedText.slice(0, 100)}
-              {selectedText.length > 100 ? "..." : ""}"
-            </div>
+              onClick={() => handleColorClick(color.value)}
+              title={`Highlight ${color.value}`}
+            />
+          ))}
 
-            {/* Color selection in note mode */}
-            <div className="flex items-center gap-1.5">
-              {HIGHLIGHT_COLORS.map((color) => (
-                <button
-                  key={color.value}
-                  className={cn(
-                    "w-5 h-5 rounded-full transition-all hover:scale-110 ring-2 ring-offset-1 ring-offset-background",
-                    color.bg,
-                    selectedColor === color.value ? color.ring : "ring-transparent",
-                  )}
-                  onClick={() => setSelectedColor(color.value)}
-                />
-              ))}
-            </div>
+          {/* Divider */}
+          <div className="w-px h-5 bg-border mx-0.5" />
 
-            {/* Note input */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-medium uppercase text-muted-foreground ml-1">Note</label>
-              <Textarea
-                placeholder="Add a note..."
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                className="min-h-[80px] text-sm resize-none"
-                autoFocus
-              />
-            </div>
-
-            {/* Tags selection */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-medium uppercase text-muted-foreground ml-1">Tags</label>
-              <CreatableCombobox
-                options={tagOptions}
-                value={selectedTags}
-                onSelect={handleTagSelect}
-                onCreate={handleTagCreate}
-                placeholder="Search or create tags..."
-                isMulti
-              />
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setShowNoteInput(false)}>
-                Cancel
-              </Button>
-              <Button size="sm" onClick={handleSaveWithNote}>
-                Save
-              </Button>
-            </div>
-          </div>
-        )}
+          {/* Open in sidebar button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
+            onClick={onOpenEditor}
+            title="Add note & tags"
+          >
+            <MessageSquarePlus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -258,8 +155,7 @@ interface ExistingHighlightPopoverProps {
   text: string;
   position: SelectionPosition;
   onUpdateColor: (color: HighlightsColorOptions) => void;
-  onUpdateNote: (note: string) => void;
-  onUpdateTags: (tags: string[]) => void;
+  onOpenEditor: () => void;
   onDelete: () => void;
   onDismiss: () => void;
 }
@@ -267,31 +163,13 @@ interface ExistingHighlightPopoverProps {
 export function ExistingHighlightPopover({
   color,
   note,
-  tags: highlightTags = [],
-  text,
   position,
   onUpdateColor,
-  onUpdateNote,
-  onUpdateTags,
+  onOpenEditor,
   onDelete,
   onDismiss,
 }: ExistingHighlightPopoverProps) {
-  const [editingNote, setEditingNote] = useState(false);
-  const [noteValue, setNoteValue] = useState(note || "");
-  const [selectedTags, setSelectedTags] = useState<string[]>(highlightTags);
   const popoverRef = useRef<HTMLDivElement>(null);
-
-  const { data: tags = [] } = useTags();
-  const createTagMutation = useCreateTag();
-
-  // Reset state when note or tags change
-  useEffect(() => {
-    setNoteValue(note || "");
-  }, [note]);
-
-  useEffect(() => {
-    setSelectedTags(highlightTags);
-  }, [highlightTags]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -321,29 +199,6 @@ export function ExistingHighlightPopover({
     };
   }, [onDismiss]);
 
-  const handleSaveNote = () => {
-    onUpdateNote(noteValue);
-    onUpdateTags(selectedTags);
-    setEditingNote(false);
-  };
-
-  const handleTagSelect = (tagId: string) => {
-    setSelectedTags((prev) => (prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
-  };
-
-  const handleTagCreate = (title: string) => {
-    createTagMutation.mutate(
-      { title },
-      {
-        onSuccess: (newTag) => {
-          setSelectedTags((prev) => [...prev, newTag.id]);
-        },
-      },
-    );
-  };
-
-  const tagOptions = tags.map((t) => ({ label: t.title || t.id, value: t.id }));
-
   // Calculate position to appear above the highlight
   const popoverStyle = {
     left: `${position.x}px`,
@@ -360,103 +215,59 @@ export function ExistingHighlightPopover({
       onMouseUp={(e) => e.stopPropagation()}
     >
       <div className="bg-popover text-popover-foreground border border-border rounded-lg shadow-md p-1.5">
-        {!editingNote ? (
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-1">
-              {/* Color swatches */}
-              {HIGHLIGHT_COLORS.map((c) => (
-                <button
-                  key={c.value}
-                  className={cn(
-                    "w-5 h-5 rounded-full transition-all hover:scale-110 ring-2 ring-offset-1 ring-offset-background",
-                    c.bg,
-                    color === c.value ? c.ring : "ring-transparent",
-                  )}
-                  onClick={() => onUpdateColor(c.value)}
-                />
-              ))}
-
-              {/* Divider */}
-              <div className="w-px h-4 bg-border mx-0.5" />
-
-              {/* Add Note button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => setEditingNote(true)}
-                title={note ? "Edit Note" : "Add Note"}
-              >
-                <MessageSquare className="h-3.5 w-3.5" />
-              </Button>
-
-              {/* Delete button */}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
-                onClick={onDelete}
-                title="Delete highlight"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-
-            {/* Show note preview if exists and not editing */}
-            {note && (
-              <div
-                className="text-xs text-muted-foreground pt-1.5 border-t border-border cursor-pointer hover:text-foreground transition-colors max-w-[220px] truncate"
-                onClick={() => setEditingNote(true)}
-                title={note}
-              >
-                <MessageSquare className="h-3 w-3 inline-block mr-1 -mt-0.5" />
-                {note}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-2 min-w-[280px] p-1">
-            {/* Text preview */}
-            <div className="text-xs text-muted-foreground line-clamp-2 italic">
-              "{text.slice(0, 80)}
-              {text.length > 80 ? "..." : ""}"
-            </div>
-
-            {/* Note input */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-medium uppercase text-muted-foreground ml-1">Note</label>
-              <Textarea
-                value={noteValue}
-                onChange={(e) => setNoteValue(e.target.value)}
-                placeholder="Add a note..."
-                className="min-h-[60px] text-sm resize-none"
-                autoFocus
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-1">
+            {/* Color swatches */}
+            {HIGHLIGHT_COLORS.map((c) => (
+              <button
+                key={c.value}
+                className={cn(
+                  "w-5 h-5 rounded-full transition-all hover:scale-110 ring-2 ring-offset-1 ring-offset-background",
+                  c.bg,
+                  color === c.value ? c.ring : "ring-transparent",
+                )}
+                onClick={() => onUpdateColor(c.value)}
               />
-            </div>
+            ))}
 
-            {/* Tags selection */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] font-medium uppercase text-muted-foreground ml-1">Tags</label>
-              <CreatableCombobox
-                options={tagOptions}
-                value={selectedTags}
-                onSelect={handleTagSelect}
-                onCreate={handleTagCreate}
-                placeholder="Search or create tags..."
-                isMulti
-              />
-            </div>
+            {/* Divider */}
+            <div className="w-px h-4 bg-border mx-0.5" />
 
-            <div className="flex justify-end gap-1">
-              <Button variant="ghost" size="sm" onClick={() => setEditingNote(false)}>
-                Cancel
-              </Button>
-              <Button size="sm" onClick={handleSaveNote}>
-                Save
-              </Button>
-            </div>
+            {/* Edit in sidebar button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onClick={onOpenEditor}
+              title={note ? "Edit note & tags" : "Add note & tags"}
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+            </Button>
+
+            {/* Delete button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={onDelete}
+              title="Delete highlight"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
           </div>
-        )}
+
+          {/* Show note preview if exists */}
+          {note && (
+            <div
+              className="text-xs text-muted-foreground pt-1.5 border-t border-border cursor-pointer hover:text-foreground transition-colors max-w-[220px] truncate"
+              onClick={onOpenEditor}
+              title={note}
+            >
+              <MessageSquare className="h-3 w-3 inline-block mr-1 -mt-0.5" />
+              {note}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

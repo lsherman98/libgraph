@@ -1,10 +1,13 @@
 import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar";
 import { AnnotationsPanel } from "@/components/reader/annotations-panel";
+import { HighlightEditorPanel } from "@/components/reader/highlight-editor-panel";
+import { BookmarkEditorPanel, NoteEditorPanel } from "@/components/reader/bookmark-note-editor-panel";
 import { WorkspacePanel } from "@/components/writer";
-import { Highlighter, Layers } from "lucide-react";
+import { Highlighter, Layers, PenLine, Bookmark, StickyNote } from "lucide-react";
 import { useWorkspaceTabsStore, type WriterTab } from "@/lib/stores/workspace-tabs-store";
 import { useWritingProject } from "@/lib/api/queries";
 import { useUpdateWritingProject } from "@/lib/api/mutations";
+import { useReaderStore } from "@/lib/stores/reader-store";
 
 interface RightSidebarProps extends React.ComponentProps<typeof Sidebar> {
   currentPageId?: string;
@@ -13,7 +16,7 @@ interface RightSidebarProps extends React.ComponentProps<typeof Sidebar> {
 }
 
 export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPage, ...props }: RightSidebarProps) {
-  const { tabs, activeTabId, getTab } = useWorkspaceTabsStore();
+  const { activeTabId, getTab } = useWorkspaceTabsStore();
   const activeTab = activeTabId ? getTab(activeTabId) : null;
   const isWriterTab = activeTab?.type === "writer";
   const writerTab = isWriterTab ? (activeTab as WriterTab) : null;
@@ -111,23 +114,73 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
     );
   }
 
+  const pendingHighlight = useReaderStore((state) => state.pendingHighlight);
+  const editingHighlight = useReaderStore((state) => state.editingHighlight);
+  const pendingBookmark = useReaderStore((state) => state.pendingBookmark);
+  const editingBookmark = useReaderStore((state) => state.editingBookmark);
+  const pendingNote = useReaderStore((state) => state.pendingNote);
+  const editingNote = useReaderStore((state) => state.editingNote);
+
+  const isHighlightEditorOpen = !!pendingHighlight || !!editingHighlight;
+  const isBookmarkEditorOpen = !!pendingBookmark || !!editingBookmark;
+  const isNoteEditorOpen = !!pendingNote || !!editingNote;
+
+  // Determine which header to show
+  const getHeaderContent = () => {
+    if (isHighlightEditorOpen) {
+      return (
+        <>
+          <PenLine className="h-4 w-4" />
+          <span className="font-semibold text-sm">{editingHighlight ? "Edit Highlight" : "New Highlight"}</span>
+        </>
+      );
+    }
+    if (isBookmarkEditorOpen) {
+      return (
+        <>
+          <Bookmark className="h-4 w-4 text-amber-500" />
+          <span className="font-semibold text-sm">{editingBookmark ? "Edit Bookmark" : "New Bookmark"}</span>
+        </>
+      );
+    }
+    if (isNoteEditorOpen) {
+      return (
+        <>
+          <StickyNote className="h-4 w-4 text-blue-500" />
+          <span className="font-semibold text-sm">{editingNote ? "Edit Note" : "New Note"}</span>
+        </>
+      );
+    }
+    return (
+      <>
+        <Highlighter className="h-4 w-4" />
+        <span className="font-semibold text-sm">Annotations</span>
+      </>
+    );
+  };
+
+  // Determine which content to show
+  const getContent = () => {
+    if (isHighlightEditorOpen) return <HighlightEditorPanel />;
+    if (isBookmarkEditorOpen) return <BookmarkEditorPanel />;
+    if (isNoteEditorOpen) return <NoteEditorPanel />;
+    return (
+      <AnnotationsPanel
+        currentPageId={currentPageId}
+        currentPageNumber={currentPageNumber}
+        onNavigateToPage={onNavigateToPage}
+      />
+    );
+  };
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader className="border-b">
         <SidebarMenu>
-          <SidebarMenuItem className="flex items-center gap-2 px-2 py-1.5">
-            <Highlighter className="h-4 w-4" />
-            <span className="font-semibold text-sm">Annotations</span>
-          </SidebarMenuItem>
+          <SidebarMenuItem className="flex items-center gap-2 px-2">{getHeaderContent()}</SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent className="p-0">
-        <AnnotationsPanel
-          currentPageId={currentPageId}
-          currentPageNumber={currentPageNumber}
-          onNavigateToPage={onNavigateToPage}
-        />
-      </SidebarContent>
+      <SidebarContent className="p-0">{getContent()}</SidebarContent>
     </Sidebar>
   );
 }

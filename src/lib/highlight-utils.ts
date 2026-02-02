@@ -11,6 +11,7 @@ export interface HighlightRange {
     note?: string;
     tags?: string[];
     text: string;
+    isPending?: boolean; // For temp highlights being edited in sidebar
 }
 
 /**
@@ -31,7 +32,12 @@ export function toHighlightRanges(highlights: HighlightsResponse[]): HighlightRa
 /**
  * Get highlight color class for Tailwind
  */
-export function getHighlightBgClass(color: HighlightsColorOptions): string {
+export function getHighlightBgClass(color: HighlightsColorOptions, isPending?: boolean): string {
+    // Pending highlights show as gray
+    if (isPending) {
+        return "highlight-pending";
+    }
+
     switch (color) {
         case HighlightsColorOptions.yellow:
             return "highlight-yellow";
@@ -67,7 +73,7 @@ export function injectHighlightsIntoMarkdown(
     let result = markdown;
 
     for (const highlight of sorted) {
-        const { startOffset, endOffset, id, color } = highlight;
+        const { startOffset, endOffset, id, color, isPending } = highlight;
 
         // Validate offsets
         if (startOffset < 0 || endOffset > result.length || startOffset >= endOffset) {
@@ -79,8 +85,13 @@ export function injectHighlightsIntoMarkdown(
         const highlightedText = result.slice(startOffset, endOffset);
         const after = result.slice(endOffset);
 
-        // Use grey color for temp selection, otherwise use the highlight color
-        const colorClass = id === 'temp-selection' ? 'temp-selection-highlight' : getHighlightBgClass(color);
+        // Use grey color for temp selection or pending highlights, otherwise use the highlight color
+        let colorClass: string;
+        if (id === 'temp-selection' || isPending) {
+            colorClass = 'highlight-pending';
+        } else {
+            colorClass = getHighlightBgClass(color);
+        }
         result = `${before}<mark class="${colorClass}" data-highlight-id="${id}">${highlightedText}</mark>${after}`;
     }
 

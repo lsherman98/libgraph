@@ -1,0 +1,229 @@
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { X, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { HighlightsColorOptions } from "@/lib/pocketbase-types";
+import { useTags } from "@/lib/api/queries";
+import { useCreateTag } from "@/lib/api/mutations";
+import { CreatableCombobox } from "@/components/creatable-combobox";
+import { useReaderStore } from "@/lib/stores/reader-store";
+
+const HIGHLIGHT_COLORS: { value: HighlightsColorOptions; bg: string; border: string; ring: string; label: string }[] = [
+  {
+    value: HighlightsColorOptions.yellow,
+    bg: "bg-yellow-300/70",
+    border: "border-yellow-400",
+    ring: "ring-yellow-400",
+    label: "Yellow",
+  },
+  {
+    value: HighlightsColorOptions.green,
+    bg: "bg-green-300/70",
+    border: "border-green-400",
+    ring: "ring-green-400",
+    label: "Green",
+  },
+  {
+    value: HighlightsColorOptions.blue,
+    bg: "bg-blue-300/70",
+    border: "border-blue-400",
+    ring: "ring-blue-400",
+    label: "Blue",
+  },
+  {
+    value: HighlightsColorOptions.pink,
+    bg: "bg-pink-300/70",
+    border: "border-pink-400",
+    ring: "ring-pink-400",
+    label: "Pink",
+  },
+  {
+    value: HighlightsColorOptions.purple,
+    bg: "bg-purple-300/70",
+    border: "border-purple-400",
+    ring: "ring-purple-400",
+    label: "Purple",
+  },
+];
+
+export function HighlightEditorPanel() {
+  const pendingHighlight = useReaderStore((state) => state.pendingHighlight);
+  const editingHighlight = useReaderStore((state) => state.editingHighlight);
+  const setPendingHighlight = useReaderStore((state) => state.setPendingHighlight);
+  const setEditingHighlight = useReaderStore((state) => state.setEditingHighlight);
+  const createHighlightFn = useReaderStore((state) => state.createHighlightFn);
+  const updateHighlightFn = useReaderStore((state) => state.updateHighlightFn);
+  const deleteHighlightFn = useReaderStore((state) => state.deleteHighlightFn);
+
+  const isEditing = !!editingHighlight;
+  const highlight = editingHighlight || pendingHighlight;
+
+  const [selectedColor, setSelectedColor] = useState<HighlightsColorOptions>(
+    highlight?.color || HighlightsColorOptions.yellow,
+  );
+  const [note, setNote] = useState(isEditing ? editingHighlight?.note || "" : "");
+  const [selectedTags, setSelectedTags] = useState<string[]>(isEditing ? editingHighlight?.tags || [] : []);
+
+  const { data: tags = [] } = useTags();
+  const createTagMutation = useCreateTag();
+
+  // Reset state when highlight changes
+  useEffect(() => {
+    if (editingHighlight) {
+      setSelectedColor(editingHighlight.color);
+      setNote(editingHighlight.note || "");
+      setSelectedTags(editingHighlight.tags || []);
+    } else if (pendingHighlight) {
+      setSelectedColor(pendingHighlight.color);
+      setNote("");
+      setSelectedTags([]);
+    }
+  }, [editingHighlight, pendingHighlight]);
+
+  const handleClose = () => {
+    setPendingHighlight(null);
+    setEditingHighlight(null);
+  };
+
+  const handleSave = () => {
+    if (isEditing && editingHighlight && updateHighlightFn) {
+      updateHighlightFn(editingHighlight.id, {
+        color: selectedColor,
+        note: note || undefined,
+        tags: selectedTags.length > 0 ? selectedTags : undefined,
+      });
+    } else if (pendingHighlight && createHighlightFn) {
+      createHighlightFn({
+        color: selectedColor,
+        text: pendingHighlight.text,
+        note: note || undefined,
+        tags: selectedTags.length > 0 ? selectedTags : undefined,
+        start_offset: pendingHighlight.startOffset,
+        end_offset: pendingHighlight.endOffset,
+      });
+    }
+    handleClose();
+  };
+
+  const handleDelete = () => {
+    if (isEditing && editingHighlight && deleteHighlightFn) {
+      deleteHighlightFn(editingHighlight.id);
+    }
+    handleClose();
+  };
+
+  const handleTagSelect = (tagId: string) => {
+    setSelectedTags((prev) => (prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
+  };
+
+  const handleTagCreate = (title: string) => {
+    createTagMutation.mutate(
+      { title },
+      {
+        onSuccess: (newTag) => {
+          setSelectedTags((prev) => [...prev, newTag.id]);
+        },
+      },
+    );
+  };
+
+  const tagOptions = tags.map((t) => ({ label: t.title || t.id, value: t.id }));
+
+  if (!highlight) return null;
+
+  const colorConfig = HIGHLIGHT_COLORS.find((c) => c.value === selectedColor);
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3 border-b">
+        <h3 className="font-semibold text-sm">{isEditing ? "Edit Highlight" : "New Highlight"}</h3>
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleClose}>
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
+
+      <ScrollArea className="flex-1">
+        <div className="p-4 space-y-5">
+          {/* Selected text preview */}
+          <div>
+            <label className="text-xs font-medium uppercase text-muted-foreground mb-2 block">Selected Text</label>
+            <div className={cn("p-3 rounded-lg text-sm", colorConfig?.bg || "bg-yellow-300/70")}>
+              <p className="text-foreground line-clamp-4">"{highlight.text}"</p>
+            </div>
+          </div>
+
+          {/* Color selection */}
+          <div>
+            <label className="text-xs font-medium uppercase text-muted-foreground mb-2 block">Color</label>
+            <div className="flex items-center gap-2">
+              {HIGHLIGHT_COLORS.map((color) => (
+                <button
+                  key={color.value}
+                  className={cn(
+                    "w-8 h-8 rounded-full transition-all hover:scale-110 ring-2 ring-offset-2 ring-offset-background",
+                    color.bg,
+                    selectedColor === color.value ? color.ring : "ring-transparent",
+                  )}
+                  onClick={() => setSelectedColor(color.value)}
+                  title={color.label}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* Note input */}
+          <div>
+            <label className="text-xs font-medium uppercase text-muted-foreground mb-2 block">Note</label>
+            <Textarea
+              placeholder="Add a note about this highlight..."
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="min-h-[120px] text-sm resize-none"
+            />
+          </div>
+
+          {/* Tags selection */}
+          <div>
+            <label className="text-xs font-medium uppercase text-muted-foreground mb-2 block">Tags</label>
+            <CreatableCombobox
+              options={tagOptions}
+              value={selectedTags}
+              onSelect={handleTagSelect}
+              onCreate={handleTagCreate}
+              placeholder="Search or create tags..."
+              isMulti
+            />
+          </div>
+        </div>
+      </ScrollArea>
+
+      {/* Footer actions */}
+      <div className="flex items-center justify-between gap-2 p-4 border-t">
+        {isEditing ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={handleDelete}
+          >
+            <Trash2 className="h-4 w-4 mr-1" />
+            Delete
+          </Button>
+        ) : (
+          <div />
+        )}
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={handleSave}>
+            {isEditing ? "Update" : "Save"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,14 +1,12 @@
 import { useState, useMemo } from "react";
-import { useSearch } from "@tanstack/react-router";
 import { useHighlights, useBookmarks, useNotes, usePageMarkdown, usePages, useTags } from "@/lib/api/queries";
-import { useCreateNote, useUpdateNote, useDeleteNote } from "@/lib/api/mutations";
+import { useDeleteNote } from "@/lib/api/mutations";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -17,7 +15,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Highlighter, BookMarked, ExternalLink, FileText, StickyNote, Tag, Pencil, Trash2, Plus } from "lucide-react";
+import { Highlighter, BookMarked, ExternalLink, FileText, Tag, Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   HighlightsColorOptions,
@@ -25,15 +23,10 @@ import {
   type BookmarksRecord,
   type NotesRecord,
 } from "@/lib/pocketbase-types";
-
-type ReaderSearch = {
-  uploadId?: string;
-  // New workspace format
-  id?: string;
-  type?: "upload" | "project";
-};
+import { useReaderStore } from "@/lib/stores/reader-store";
 
 interface AnnotationsPanelProps {
+  // Props are now optional - we prefer reading from the store
   currentPageId?: string;
   currentPageNumber?: number;
   onNavigateToPage?: (pageNumber: number, blockId?: string) => void;
@@ -123,10 +116,10 @@ function BookmarkItem({ bookmark, onClick }: BookmarkItemProps) {
       <div className="flex items-start gap-2">
         <BookMarked className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
         <div className="flex-1 min-w-0">
-          {bookmark.label && <p className="text-sm font-medium text-foreground mb-1">{bookmark.label}</p>}
           {bookmark.preview_text && (
             <p className="text-sm text-muted-foreground line-clamp-2 italic">"{bookmark.preview_text}"</p>
           )}
+          {bookmark.label && <p className="text-sm text-foreground mt-1">{bookmark.label}</p>}
 
           {tagTitles.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
@@ -143,11 +136,6 @@ function BookmarkItem({ bookmark, onClick }: BookmarkItemProps) {
             <Badge variant="secondary" className="text-xs">
               Page {bookmark.page_number ?? "?"}
             </Badge>
-            {bookmark.type === "favorite" && (
-              <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
-                Favorite
-              </Badge>
-            )}
           </div>
         </div>
       </div>
@@ -157,12 +145,11 @@ function BookmarkItem({ bookmark, onClick }: BookmarkItemProps) {
 
 interface NoteItemProps {
   note: NotesRecord;
-  onEdit: () => void;
   onDelete: () => void;
   onClick: () => void;
 }
 
-function NoteItem({ note, onEdit, onDelete, onClick }: NoteItemProps) {
+function NoteItem({ note, onDelete, onClick }: NoteItemProps) {
   const { data: allTags = [] } = useTags();
 
   const tagTitles = (note.tags || []).map((tagId) => allTags.find((t) => t.id === tagId)?.title).filter(Boolean);
@@ -192,9 +179,6 @@ function NoteItem({ note, onEdit, onDelete, onClick }: NoteItemProps) {
             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onClick} title="View in context">
                 <ExternalLink className="h-3 w-3" />
-              </Button>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onEdit} title="Edit note">
-                <Pencil className="h-3 w-3" />
               </Button>
               <Button
                 variant="ghost"
@@ -347,10 +331,22 @@ function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate 
   );
 }
 
-export function AnnotationsPanel({ currentPageId, currentPageNumber, onNavigateToPage }: AnnotationsPanelProps) {
-  const search = useSearch({ strict: false }) as ReaderSearch;
-  // Support both old format (uploadId) and new format (id with type=upload)
-  const uploadId = search.uploadId ?? (search.type === "upload" ? search.id : null) ?? null;
+export function AnnotationsPanel({
+  currentPageId: propPageId,
+  currentPageNumber: propPageNumber,
+  onNavigateToPage: propNavigateToPage,
+}: AnnotationsPanelProps) {
+  // Read from store as primary source, fall back to props for backwards compatibility
+  const storeUploadId = useReaderStore((state) => state.currentUploadId);
+  const storePageId = useReaderStore((state) => state.currentPageId);
+  const storePageNumber = useReaderStore((state) => state.currentPageNumber);
+  const storeNavigateToPage = useReaderStore((state) => state.navigateToPage);
+
+  // Use store values, falling back to props if store is empty
+  const uploadId = storeUploadId;
+  const currentPageId = storePageId ?? propPageId ?? null;
+  const currentPageNumber = storePageNumber ?? propPageNumber ?? null;
+  const onNavigateToPage = storeNavigateToPage ?? propNavigateToPage ?? null;
 
   const [showCurrentPageOnly, setShowCurrentPageOnly] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -358,34 +354,16 @@ export function AnnotationsPanel({ currentPageId, currentPageNumber, onNavigateT
   const [previewItem, setPreviewItem] = useState<HighlightsRecord | BookmarksRecord | NotesRecord | null>(null);
   const [previewPageNumber, setPreviewPageNumber] = useState<number | undefined>();
 
-  // Note editing state
-  const [editingNote, setEditingNote] = useState<NotesRecord | null>(null);
-  const [isCreatingNote, setIsCreatingNote] = useState(false);
-  const [noteContent, setNoteContent] = useState("");
-
   const { data: allHighlights = [] } = useHighlights(uploadId);
   const { data: allBookmarks = [] } = useBookmarks(uploadId);
   const { data: allNotes = [] } = useNotes(uploadId);
   const { data: pagesData } = usePages(uploadId, 1, 1000); // Get all pages to map page IDs to numbers
-
-  const createNoteMutation = useCreateNote();
-  const updateNoteMutation = useUpdateNote();
-  const deleteNoteMutation = useDeleteNote();
 
   // Create a map of page ID to page number
   const pageIdToNumber = useMemo(() => {
     const map = new Map<string, number>();
     pagesData?.items.forEach((page) => {
       map.set(page.id, page.page);
-    });
-    return map;
-  }, [pagesData]);
-
-  // Create a map of page number to page ID
-  const pageNumberToId = useMemo(() => {
-    const map = new Map<number, string>();
-    pagesData?.items.forEach((page) => {
-      map.set(page.page, page.id);
     });
     return map;
   }, [pagesData]);
@@ -428,61 +406,7 @@ export function AnnotationsPanel({ currentPageId, currentPageNumber, onNavigateT
     setPreviewOpen(true);
   };
 
-  const handleStartCreateNote = () => {
-    setIsCreatingNote(true);
-    setEditingNote(null);
-    setNoteContent("");
-  };
-
-  const handleStartEditNote = (note: NotesRecord) => {
-    setEditingNote(note);
-    setIsCreatingNote(false);
-    setNoteContent(note.content || "");
-  };
-
-  const handleCancelNoteEdit = () => {
-    setEditingNote(null);
-    setIsCreatingNote(false);
-    setNoteContent("");
-  };
-
-  const handleSaveNote = () => {
-    if (!noteContent.trim() || !uploadId) return;
-
-    if (isCreatingNote) {
-      createNoteMutation.mutate(
-        {
-          content: noteContent.trim(),
-          upload: uploadId,
-          page: currentPageId ? currentPageId : pageNumberToId.get(currentPageNumber || 1),
-          page_number: currentPageNumber || 1,
-        },
-        {
-          onSuccess: () => {
-            setIsCreatingNote(false);
-            setNoteContent("");
-          },
-        },
-      );
-    } else if (editingNote) {
-      updateNoteMutation.mutate(
-        {
-          id: editingNote.id,
-          data: { content: noteContent.trim() },
-        },
-        {
-          onSuccess: () => {
-            setEditingNote(null);
-            setNoteContent("");
-          },
-        },
-      );
-    }
-  };
-
-  const handleDeleteNote = (note: NotesRecord) => {
-    deleteNoteMutation.mutate(note.id);
-  };
+  const deleteNoteMutation = useDeleteNote();
 
   const handleNavigate = () => {
     if (!previewItem) return;
@@ -602,62 +526,20 @@ export function AnnotationsPanel({ currentPageId, currentPageNumber, onNavigateT
         </TabsContent>
 
         <TabsContent value="notes" className="flex-1 min-h-0 mt-0 flex flex-col">
-          {/* Note editor */}
-          {(isCreatingNote || editingNote) && (
-            <div className="p-3 border-b space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">
-                  {isCreatingNote ? "New Note" : "Edit Note"}
-                  {currentPageNumber && <span className="text-muted-foreground ml-1">(Page {currentPageNumber})</span>}
-                </span>
-              </div>
-              <Textarea
-                placeholder="Write your note..."
-                value={noteContent}
-                onChange={(e) => setNoteContent(e.target.value)}
-                className="min-h-25 resize-none"
-                autoFocus
-              />
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" size="sm" onClick={handleCancelNoteEdit}>
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSaveNote}
-                  disabled={!noteContent.trim() || createNoteMutation.isPending || updateNoteMutation.isPending}
-                >
-                  {createNoteMutation.isPending || updateNoteMutation.isPending ? "Saving..." : "Save"}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Add note button */}
-          {!isCreatingNote && !editingNote && (
-            <div className="p-2 border-b">
-              <Button variant="outline" size="sm" className="w-full gap-2" onClick={handleStartCreateNote}>
-                <Plus className="h-4 w-4" />
-                Add Note {currentPageNumber && `(Page ${currentPageNumber})`}
-              </Button>
-            </div>
-          )}
-
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-1">
-              {notes.length === 0 && !isCreatingNote ? (
+              {notes.length === 0 ? (
                 <div className="text-center py-8 text-sm text-muted-foreground">
                   <Pencil className="h-8 w-8 mx-auto mb-2 opacity-40" />
                   <p>No notes yet</p>
-                  <p className="text-xs mt-1">Click "Add Note" to start taking notes</p>
+                  <p className="text-xs mt-1">Click the note icon on paragraphs to add notes</p>
                 </div>
               ) : (
                 notes.map((note) => (
                   <NoteItem
                     key={note.id}
                     note={note}
-                    onEdit={() => handleStartEditNote(note)}
-                    onDelete={() => handleDeleteNote(note)}
+                    onDelete={() => deleteNoteMutation.mutate(note.id)}
                     onClick={() => handleNoteClick(note)}
                   />
                 ))
