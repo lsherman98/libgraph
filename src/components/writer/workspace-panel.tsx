@@ -106,10 +106,10 @@ export function WorkspacePanel({
     viewMode === "linked" ? linkedHighlightItems : materials?.highlights || [],
     ["text", "note"] as (keyof HighlightsResponse)[],
   );
-  const filteredBookmarks = filterBySearch(viewMode === "linked" ? linkedBookmarkItems : materials?.bookmarks || [], [
-    "label",
-    "preview_text",
-  ] as (keyof BookmarksResponse)[]);
+  const filteredBookmarks = filterBySearch(
+    (viewMode === "linked" ? linkedBookmarkItems : materials?.bookmarks || []) as any[],
+    ["label", "preview_text"] as any[],
+  );
   const filteredNotes = filterBySearch(viewMode === "linked" ? linkedNoteItems : materials?.notes || [], [
     "content",
   ] as (keyof NotesResponse)[]);
@@ -477,8 +477,8 @@ function HighlightItem({
       <div className={cn("rounded-md border bg-card border-l-4", colorClasses[highlight.color || "yellow"])}>
         <div className="p-3">
           <p className="text-sm leading-relaxed whitespace-pre-wrap">{highlight.text}</p>
-          {highlight.note && (
-            <p className="text-xs text-muted-foreground mt-2 pt-2 border-t italic">{highlight.note}</p>
+          {highlight.comment && (
+            <p className="text-xs text-muted-foreground mt-2 pt-2 border-t italic">{highlight.comment}</p>
           )}
         </div>
         <div className="px-3 pb-3 flex gap-2 border-t pt-2">
@@ -509,7 +509,9 @@ function HighlightItem({
     >
       <div className="flex-1 min-w-0">
         <p className="text-sm line-clamp-3">{highlight.text}</p>
-        {highlight.note && <p className="text-xs text-muted-foreground mt-1 italic line-clamp-1">{highlight.note}</p>}
+        {highlight.comment && (
+          <p className="text-xs text-muted-foreground mt-1 italic line-clamp-1">{highlight.comment}</p>
+        )}
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
         <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onInsert} title="Insert as quote">
@@ -529,14 +531,7 @@ function HighlightItem({
   );
 }
 
-function BookmarkItem({
-  bookmark,
-  isLinked,
-  viewMode,
-  onLink,
-  onUnlink,
-  onInsert,
-}: BaseItemProps & { bookmark: BookmarksResponse }) {
+function BookmarkItem({ bookmark, isLinked, viewMode, onLink, onUnlink, onInsert }: BaseItemProps & { bookmark: any }) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {

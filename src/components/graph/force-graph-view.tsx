@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
 import type { EdgesResponse } from "@/lib/pocketbase-types";
 import type { EnrichedNodesResponse } from "@/lib/types";
 import { useTheme } from "next-themes";
-import { Loader2 } from "lucide-react";
 import { NodesTypeOptions, EdgesTypeOptions } from "@/lib/pocketbase-types";
 
 interface ForceGraphViewProps {
@@ -21,7 +20,7 @@ const typeColors: Record<NodesTypeOptions, string> = {
   [NodesTypeOptions.topic]: "#f97316",
   [NodesTypeOptions.highlight]: "#eab308",
   [NodesTypeOptions.bookmark]: "#ef4444",
-  [NodesTypeOptions.page]: "#6b7280",
+  [NodesTypeOptions.note]: "#64748b",
 };
 
 interface GraphNode extends d3.SimulationNodeDatum {

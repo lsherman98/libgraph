@@ -61,11 +61,11 @@ const typeConfig: Record<
     bgColor: "bg-red-100 dark:bg-red-900/30",
     stroke: "#ef4444",
   },
-  [NodesTypeOptions.page]: {
+  [NodesTypeOptions.note]: {
     icon: FileIcon,
-    color: "text-gray-600 dark:text-gray-400",
-    bgColor: "bg-gray-100 dark:bg-gray-900/30",
-    stroke: "#6b7280",
+    color: "text-slate-600 dark:text-slate-400",
+    bgColor: "bg-slate-100 dark:bg-slate-900/30",
+    stroke: "#475569",
   },
 };
 
@@ -74,11 +74,9 @@ const edgeTypeColors: Record<EdgesTypeOptions, string> = {
   [EdgesTypeOptions.authored_by]: "#9333ea",
   [EdgesTypeOptions.tagged_with]: "#22c55e",
   [EdgesTypeOptions.belongs_to]: "#f97316",
-  [EdgesTypeOptions.cites]: "#3b82f6",
-  [EdgesTypeOptions.related_to]: "#ec4899",
   [EdgesTypeOptions.highlight_of]: "#eab308",
   [EdgesTypeOptions.bookmark_of]: "#ef4444",
-  [EdgesTypeOptions.contains]: "#6b7280",
+  [EdgesTypeOptions.note_of]: "#475569",
 };
 
 interface LayoutNode {
@@ -113,14 +111,13 @@ function getNodeLabel(node: EnrichedNodesResponse): string {
     const data = node.record_data;
     if ("title" in data && data.title) return data.title;
     if ("name" in data && data.name) return data.name;
-    if ("label" in data && data.label) return data.label;
     if ("text" in data && data.text) {
       const text = data.text;
       return text.length > 30 ? text.slice(0, 30) + "..." : text;
     }
     if ("page" in data && data.page) return `Page ${data.page}`;
   }
-  return node.record || "Untitled";
+  return node.record_id || "Untitled";
 }
 
 const NODE_WIDTH = 160;
@@ -172,7 +169,7 @@ export function DagreGraphView({ nodes, edges, selectedNodeId, onSelectNode }: D
       return {
         id: node.id,
         type: node.type as NodesTypeOptions,
-        record: node.record,
+        record: node.record_id,
         label: getNodeLabel(node),
         x: dagreNode?.x || 0,
         y: dagreNode?.y || 0,

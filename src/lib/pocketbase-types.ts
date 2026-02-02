@@ -119,20 +119,14 @@ export type AuthorsRecord = {
 	user?: RecordIdString
 }
 
-export enum BookmarksTypeOptions {
-	"bookmark" = "bookmark",
-	"favorite" = "favorite",
-}
 export type BookmarksRecord = {
 	block_id?: string
+	comment?: string
 	created: IsoAutoDateString
 	id: string
-	label?: string
 	page?: RecordIdString
 	page_number?: number
-	preview_text?: string
 	tags?: RecordIdString[]
-	type?: BookmarksTypeOptions
 	updated: IsoAutoDateString
 	upload?: RecordIdString
 	user?: RecordIdString
@@ -142,7 +136,6 @@ export enum EdgesTypeOptions {
 	"authored_by" = "authored_by",
 	"tagged_with" = "tagged_with",
 	"belongs_to" = "belongs_to",
-	"cites" = "cites",
 	"highlight_of" = "highlight_of",
 	"bookmark_of" = "bookmark_of",
 	"note_of" = "note_of",

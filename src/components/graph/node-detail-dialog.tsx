@@ -72,11 +72,11 @@ const typeConfig: Record<NodesTypeOptions, { icon: React.ElementType; color: str
       bgColor: "bg-red-100 dark:bg-red-900/30",
       label: "Bookmark",
     },
-    [NodesTypeOptions.page]: {
-      icon: FileIcon,
-      color: "text-gray-600 dark:text-gray-400",
-      bgColor: "bg-gray-100 dark:bg-gray-900/30",
-      label: "Page",
+    [NodesTypeOptions.note]: {
+      icon: MessageSquare,
+      color: "text-indigo-600 dark:text-indigo-400",
+      bgColor: "bg-indigo-100 dark:bg-indigo-900/30",
+      label: "Note",
     },
   };
 
@@ -131,7 +131,7 @@ function UploadDetail({ data }: { data: UploadsResponse }) {
       <Separator />
 
       <Button variant="default" className="w-full" asChild>
-        <Link to="/reader" search={{ uploadId: data.id }}>
+        <Link to="/workspace" search={{ id: data.id, type: "upload" }}>
           <ExternalLink className="h-4 w-4 mr-2" />
           Open in Reader
         </Link>
@@ -152,13 +152,13 @@ function HighlightDetail({ data }: { data: HighlightsResponse }) {
         </CardContent>
       </Card>
 
-      {data.note && (
+      {data.comment && (
         <div>
           <div className="flex items-center gap-2 mb-2">
             <MessageSquare className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium">Note</span>
           </div>
-          <p className="text-sm text-muted-foreground">{data.note}</p>
+          <p className="text-sm text-muted-foreground">{data.comment}</p>
         </div>
       )}
 
@@ -179,7 +179,7 @@ function HighlightDetail({ data }: { data: HighlightsResponse }) {
 
       {data.upload && (
         <Button variant="default" className="w-full" asChild>
-          <Link to="/reader" search={{ uploadId: data.upload }}>
+          <Link to="/workspace" search={{ id: data.upload, type: "upload" }}>
             <ExternalLink className="h-4 w-4 mr-2" />
             View in Context
           </Link>
@@ -194,16 +194,13 @@ function BookmarkDetail({ data }: { data: BookmarksResponse }) {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-semibold">{data.label || "Untitled Bookmark"}</h3>
-        <Badge variant="secondary" className="mt-1">
-          {data.type}
-        </Badge>
+        <h3 className="text-lg font-semibold">{data.comment || "Untitled Bookmark"}</h3>
       </div>
 
-      {data.preview_text && (
+      {data.comment && (
         <Card className="bg-muted/50">
           <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">{data.preview_text}</p>
+            <p className="text-sm text-muted-foreground">{data.comment}</p>
           </CardContent>
         </Card>
       )}
@@ -225,7 +222,7 @@ function BookmarkDetail({ data }: { data: BookmarksResponse }) {
 
       {data.upload && (
         <Button variant="default" className="w-full" asChild>
-          <Link to="/reader" search={{ uploadId: data.upload }}>
+          <Link to="/workspace" search={{ id: data.upload, type: "upload" }}>
             <ExternalLink className="h-4 w-4 mr-2" />
             Go to Bookmark
           </Link>
@@ -323,7 +320,7 @@ function PageDetail({ data }: { data: PagesResponse }) {
 
       {data.upload && (
         <Button variant="default" className="w-full" asChild>
-          <Link to="/reader" search={{ uploadId: data.upload }}>
+          <Link to="/workspace" search={{ id: data.upload, type: "upload" }}>
             <ExternalLink className="h-4 w-4 mr-2" />
             Open Page
           </Link>
@@ -348,8 +345,6 @@ function renderRecordDetail(type: NodesTypeOptions, recordData: NodeRecordData) 
       return <TagDetail data={recordData as TagsResponse} />;
     case NodesTypeOptions.topic:
       return <TopicDetail data={recordData as TopicsResponse} />;
-    case NodesTypeOptions.page:
-      return <PageDetail data={recordData as PagesResponse} />;
     default:
       return <p className="text-muted-foreground">No details available</p>;
   }
@@ -385,10 +380,10 @@ export function NodeDetailDialog({ node, open, onOpenChange }: NodeDetailDialogP
                     <span className="text-muted-foreground">Node ID: </span>
                     <code className="text-xs bg-muted px-1 py-0.5 rounded">{node.id}</code>
                   </div>
-                  {node.record && (
+                  {node.record_id && (
                     <div>
                       <span className="text-muted-foreground">Record ID: </span>
-                      <code className="text-xs bg-muted px-1 py-0.5 rounded">{node.record}</code>
+                      <code className="text-xs bg-muted px-1 py-0.5 rounded">{node.record_id}</code>
                     </div>
                   )}
                 </div>

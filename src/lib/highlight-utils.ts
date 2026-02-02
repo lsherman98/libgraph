@@ -23,7 +23,7 @@ export function toHighlightRanges(highlights: HighlightsResponse[]): HighlightRa
         startOffset: h.start_offset,
         endOffset: h.end_offset,
         color: h.color,
-        note: h.note || undefined,
+        note: h.comment || undefined,
         tags: h.tags || [],
         text: h.text,
     }));

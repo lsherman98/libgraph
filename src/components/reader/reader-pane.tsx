@@ -999,7 +999,7 @@ export function ReaderPane({
   const bookmarks = bookmarksData.map((b) => ({
     id: b.id,
     block_id: b.block_id || "",
-    label: b.label || "",
+    comment: b.comment || "",
     tags: b.tags || [],
   }));
 
@@ -1029,7 +1029,7 @@ export function ReaderPane({
         page: pageId,
         color: data.color,
         text: data.text,
-        note: data.note,
+        comment: data.note,
         tags: data.tags,
         start_offset: data.start_offset,
         end_offset: data.end_offset,
@@ -1061,9 +1061,8 @@ export function ReaderPane({
         page: currentPageId,
         page_number: pageSettings.currentPage,
         block_id: data.block_id,
-        label: data.comment, // Map comment to label field in DB
+        comment: data.comment,
         tags: data.tags,
-        preview_text: data.preview_text,
       });
     },
     [uploadId, currentPageId, pageSettings.currentPage, createBookmarkMutation],
@@ -1075,7 +1074,7 @@ export function ReaderPane({
       updateBookmarkMutation.mutate({
         id,
         data: {
-          label: data.comment,
+          comment: data.comment,
           tags: data.tags,
         },
       });

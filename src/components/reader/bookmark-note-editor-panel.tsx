@@ -4,7 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, Trash2, Bookmark, StickyNote } from "lucide-react";
 import { useTags } from "@/lib/api/queries";
-import { useCreateTag } from "@/lib/api/mutations";
+import { useCreateTag, useUpdateBookmark, useDeleteBookmark, useUpdateNote, useDeleteNote } from "@/lib/api/mutations";
 import { CreatableCombobox } from "@/components/creatable-combobox";
 import { useReaderStore } from "@/lib/stores/reader-store";
 
@@ -14,8 +14,10 @@ export function BookmarkEditorPanel() {
   const setPendingBookmark = useReaderStore((state) => state.setPendingBookmark);
   const setEditingBookmark = useReaderStore((state) => state.setEditingBookmark);
   const createBookmarkFn = useReaderStore((state) => state.createBookmarkFn);
-  const updateBookmarkFn = useReaderStore((state) => state.updateBookmarkFn);
-  const deleteBookmarkFn = useReaderStore((state) => state.deleteBookmarkFn);
+
+  // Use mutations directly for updates/deletes to avoid dependency on reader-pane being mounted
+  const updateBookmarkMutation = useUpdateBookmark();
+  const deleteBookmarkMutation = useDeleteBookmark();
 
   const isEditing = !!editingBookmark;
   const bookmark = editingBookmark || pendingBookmark;
@@ -43,10 +45,14 @@ export function BookmarkEditorPanel() {
   };
 
   const handleSave = () => {
-    if (isEditing && editingBookmark && updateBookmarkFn) {
-      updateBookmarkFn(editingBookmark.id, {
-        comment: comment || undefined,
-        tags: selectedTags.length > 0 ? selectedTags : undefined,
+    if (isEditing && editingBookmark) {
+      // Use mutation directly for editing
+      updateBookmarkMutation.mutate({
+        id: editingBookmark.id,
+        data: {
+          comment: comment || undefined,
+          tags: selectedTags.length > 0 ? selectedTags : undefined,
+        },
       });
     } else if (pendingBookmark && createBookmarkFn) {
       createBookmarkFn({
@@ -60,8 +66,8 @@ export function BookmarkEditorPanel() {
   };
 
   const handleDelete = () => {
-    if (isEditing && editingBookmark && deleteBookmarkFn) {
-      deleteBookmarkFn(editingBookmark.id);
+    if (isEditing && editingBookmark) {
+      deleteBookmarkMutation.mutate(editingBookmark.id);
     }
     handleClose();
   };
@@ -168,8 +174,10 @@ export function NoteEditorPanel() {
   const setPendingNote = useReaderStore((state) => state.setPendingNote);
   const setEditingNote = useReaderStore((state) => state.setEditingNote);
   const createNoteFn = useReaderStore((state) => state.createNoteFn);
-  const updateNoteFn = useReaderStore((state) => state.updateNoteFn);
-  const deleteNoteFn = useReaderStore((state) => state.deleteNoteFn);
+
+  // Use mutations directly for updates/deletes to avoid dependency on reader-pane being mounted
+  const updateNoteMutation = useUpdateNote();
+  const deleteNoteMutation = useDeleteNote();
 
   const isEditing = !!editingNote;
   const note = editingNote || pendingNote;
@@ -199,10 +207,13 @@ export function NoteEditorPanel() {
   const handleSave = () => {
     if (!content.trim()) return;
 
-    if (isEditing && editingNote && updateNoteFn) {
-      updateNoteFn(editingNote.id, {
-        content: content.trim(),
-        tags: selectedTags.length > 0 ? selectedTags : undefined,
+    if (isEditing && editingNote) {
+      updateNoteMutation.mutate({
+        id: editingNote.id,
+        data: {
+          content: content.trim(),
+          tags: selectedTags.length > 0 ? selectedTags : undefined,
+        },
       });
     } else if (pendingNote && createNoteFn) {
       createNoteFn({
@@ -215,8 +226,8 @@ export function NoteEditorPanel() {
   };
 
   const handleDelete = () => {
-    if (isEditing && editingNote && deleteNoteFn) {
-      deleteNoteFn(editingNote.id);
+    if (isEditing && editingNote) {
+      deleteNoteMutation.mutate(editingNote.id);
     }
     handleClose();
   };

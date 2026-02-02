@@ -43,7 +43,7 @@ export default function Layout({ children }: PropsWithChildren) {
         side="right"
         style={
           {
-            "--sidebar-width": "calc(var(--spacing) * 90)",
+            "--sidebar-width": "calc(var(--spacing) * 110)",
           } as React.CSSProperties
         }
         currentPageId={currentPageId ?? undefined}
