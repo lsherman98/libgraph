@@ -5,8 +5,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -378,7 +376,6 @@ export function AnnotationsPanel({
   const currentPageNumber = storePageNumber ?? propPageNumber ?? null;
   const onNavigateToPage = storeNavigateToPage ?? propNavigateToPage ?? null;
 
-  const [showCurrentPageOnly, setShowCurrentPageOnly] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewType, setPreviewType] = useState<"highlight" | "bookmark" | "note">("highlight");
   const [previewItem, setPreviewItem] = useState<HighlightsRecord | BookmarksRecord | NotesRecord | null>(null);
@@ -398,21 +395,60 @@ export function AnnotationsPanel({
     return map;
   }, [pagesData]);
 
-  // Filter by current page if toggle is enabled
-  const highlights = useMemo(() => {
-    if (!showCurrentPageOnly || !currentPageId) return allHighlights;
-    return allHighlights.filter((h) => h.page === currentPageId);
-  }, [allHighlights, showCurrentPageOnly, currentPageId]);
+  // Group highlights by page
+  const groupedHighlights = useMemo(() => {
+    const grouped = new Map<number, HighlightsRecord[]>();
 
-  const bookmarks = useMemo(() => {
-    if (!showCurrentPageOnly || !currentPageNumber) return allBookmarks;
-    return allBookmarks.filter((b) => b.page_number === currentPageNumber);
-  }, [allBookmarks, showCurrentPageOnly, currentPageNumber]);
+    allHighlights.forEach((highlight) => {
+      const pageNum = highlight.page ? pageIdToNumber.get(highlight.page) : undefined;
+      const displayPageNum = pageNum ?? 0; // 0 for unknown/no page
 
-  const notes = useMemo(() => {
-    if (!showCurrentPageOnly || !currentPageNumber) return allNotes;
-    return allNotes.filter((n) => n.page_number === currentPageNumber);
-  }, [allNotes, showCurrentPageOnly, currentPageNumber]);
+      if (!grouped.has(displayPageNum)) {
+        grouped.set(displayPageNum, []);
+      }
+      grouped.get(displayPageNum)!.push(highlight);
+    });
+
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([pageNumber, items]) => ({ pageNumber, items }));
+  }, [allHighlights, pageIdToNumber]);
+
+  // Group bookmarks by page
+  const groupedBookmarks = useMemo(() => {
+    const grouped = new Map<number, BookmarksRecord[]>();
+
+    allBookmarks.forEach((bookmark) => {
+      const displayPageNum = bookmark.page_number ?? 0;
+
+      if (!grouped.has(displayPageNum)) {
+        grouped.set(displayPageNum, []);
+      }
+      grouped.get(displayPageNum)!.push(bookmark);
+    });
+
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([pageNumber, items]) => ({ pageNumber, items }));
+  }, [allBookmarks]);
+
+  // Group notes by page number
+  const groupedNotes = useMemo(() => {
+    const grouped = new Map<number, NotesRecord[]>();
+
+    allNotes.forEach((note) => {
+      const displayPageNum = note.page_number ?? 0;
+
+      if (!grouped.has(displayPageNum)) {
+        grouped.set(displayPageNum, []);
+      }
+      grouped.get(displayPageNum)!.push(note);
+    });
+
+    return Array.from(grouped.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([pageNumber, items]) => ({ pageNumber, items }));
+  }, [allNotes]);
 
   const handleHighlightClick = (highlight: HighlightsRecord) => {
     const pageNum = highlight.page ? pageIdToNumber.get(highlight.page) : undefined;
@@ -508,47 +544,32 @@ export function AnnotationsPanel({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Filter toggle */}
-      <div className="px-4 py-3 border-b">
-        <div className="flex items-center justify-between">
-          <Label htmlFor="current-page-toggle" className="text-sm font-medium">
-            Current page only
-          </Label>
-          <Switch
-            id="current-page-toggle"
-            checked={showCurrentPageOnly}
-            onCheckedChange={setShowCurrentPageOnly}
-            disabled={!currentPageId}
-          />
-        </div>
-      </div>
-
       <Tabs defaultValue="highlights" className="flex-1 flex flex-col min-h-0">
         <TabsList className="mx-auto mt-3">
           <TabsTrigger value="highlights" className="flex-1 gap-1.5">
             <Highlighter className="h-3.5 w-3.5" />
             Highlights
-            {highlights.length > 0 && (
+            {allHighlights.length > 0 && (
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                {highlights.length}
+                {allHighlights.length}
               </Badge>
             )}
           </TabsTrigger>
           <TabsTrigger value="bookmarks" className="flex-1 gap-1.5">
             <BookMarked className="h-3.5 w-3.5" />
             Bookmarks
-            {bookmarks.length > 0 && (
+            {allBookmarks.length > 0 && (
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                {bookmarks.length}
+                {allBookmarks.length}
               </Badge>
             )}
           </TabsTrigger>
           <TabsTrigger value="notes" className="flex-1 gap-1.5">
             <Pencil className="h-3.5 w-3.5" />
             Notes
-            {notes.length > 0 && (
+            {allNotes.length > 0 && (
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                {notes.length}
+                {allNotes.length}
               </Badge>
             )}
           </TabsTrigger>
@@ -556,22 +577,29 @@ export function AnnotationsPanel({
 
         <TabsContent value="highlights" className="flex-1 min-h-0 mt-0">
           <ScrollArea className="h-full">
-            <div className="p-2 space-y-1">
-              {highlights.length === 0 ? (
+            <div className="p-2 space-y-4">
+              {groupedHighlights.length === 0 ? (
                 <div className="text-center py-8 text-sm text-muted-foreground">
                   <Highlighter className="h-8 w-8 mx-auto mb-2 opacity-40" />
                   <p>No highlights yet</p>
                   <p className="text-xs mt-1">Select text in the reader to create a highlight</p>
                 </div>
               ) : (
-                highlights.map((highlight) => (
-                  <HighlightItem
-                    key={highlight.id}
-                    highlight={highlight}
-                    pageNumber={highlight.page ? pageIdToNumber.get(highlight.page) : undefined}
-                    onClick={() => handleHighlightClick(highlight)}
-                    onEdit={() => handleHighlightEdit(highlight)}
-                  />
+                groupedHighlights.map(({ pageNumber, items }) => (
+                  <div key={pageNumber} className="space-y-1">
+                    <div className="text-xs font-semibold text-muted-foreground sticky top-0 bg-background/95 backdrop-blur py-1 z-10 px-1">
+                      {pageNumber === 0 ? "Unknown Page" : `Page ${pageNumber}`}
+                    </div>
+                    {items.map((highlight) => (
+                      <HighlightItem
+                        key={highlight.id}
+                        highlight={highlight}
+                        pageNumber={highlight.page ? pageIdToNumber.get(highlight.page) : undefined}
+                        onClick={() => handleHighlightClick(highlight)}
+                        onEdit={() => handleHighlightEdit(highlight)}
+                      />
+                    ))}
+                  </div>
                 ))
               )}
             </div>
@@ -580,21 +608,28 @@ export function AnnotationsPanel({
 
         <TabsContent value="bookmarks" className="flex-1 min-h-0 mt-0">
           <ScrollArea className="h-full">
-            <div className="p-2 space-y-1">
-              {bookmarks.length === 0 ? (
+            <div className="p-2 space-y-4">
+              {groupedBookmarks.length === 0 ? (
                 <div className="text-center py-8 text-sm text-muted-foreground">
                   <BookMarked className="h-8 w-8 mx-auto mb-2 opacity-40" />
                   <p>No bookmarks yet</p>
                   <p className="text-xs mt-1">Use the bookmark button on paragraphs to save them</p>
                 </div>
               ) : (
-                bookmarks.map((bookmark) => (
-                  <BookmarkItem
-                    key={bookmark.id}
-                    bookmark={bookmark}
-                    onClick={() => handleBookmarkClick(bookmark)}
-                    onEdit={() => handleBookmarkEdit(bookmark)}
-                  />
+                groupedBookmarks.map(({ pageNumber, items }) => (
+                  <div key={pageNumber} className="space-y-1">
+                    <div className="text-xs font-semibold text-muted-foreground sticky top-0 bg-background/95 backdrop-blur py-1 z-10 px-1">
+                      {pageNumber === 0 ? "Unknown Page" : `Page ${pageNumber}`}
+                    </div>
+                    {items.map((bookmark) => (
+                      <BookmarkItem
+                        key={bookmark.id}
+                        bookmark={bookmark}
+                        onClick={() => handleBookmarkClick(bookmark)}
+                        onEdit={() => handleBookmarkEdit(bookmark)}
+                      />
+                    ))}
+                  </div>
                 ))
               )}
             </div>
@@ -603,22 +638,29 @@ export function AnnotationsPanel({
 
         <TabsContent value="notes" className="flex-1 min-h-0 mt-0 flex flex-col">
           <ScrollArea className="flex-1">
-            <div className="p-2 space-y-1">
-              {notes.length === 0 ? (
+            <div className="p-2 space-y-4">
+              {groupedNotes.length === 0 ? (
                 <div className="text-center py-8 text-sm text-muted-foreground">
                   <Pencil className="h-8 w-8 mx-auto mb-2 opacity-40" />
                   <p>No notes yet</p>
                   <p className="text-xs mt-1">Click the note icon on paragraphs to add notes</p>
                 </div>
               ) : (
-                notes.map((note) => (
-                  <NoteItem
-                    key={note.id}
-                    note={note}
-                    onDelete={() => deleteNoteMutation.mutate(note.id)}
-                    onClick={() => handleNoteClick(note)}
-                    onEdit={() => handleNoteEdit(note)}
-                  />
+                groupedNotes.map(({ pageNumber, items }) => (
+                  <div key={pageNumber} className="space-y-1">
+                    <div className="text-xs font-semibold text-muted-foreground sticky top-0 bg-background/95 backdrop-blur py-1 z-10 px-1">
+                      {pageNumber === 0 ? "Unknown Page" : `Page ${pageNumber}`}
+                    </div>
+                    {items.map((note) => (
+                      <NoteItem
+                        key={note.id}
+                        note={note}
+                        onDelete={() => deleteNoteMutation.mutate(note.id)}
+                        onClick={() => handleNoteClick(note)}
+                        onEdit={() => handleNoteEdit(note)}
+                      />
+                    ))}
+                  </div>
                 ))
               )}
             </div>
