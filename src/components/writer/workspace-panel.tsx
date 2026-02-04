@@ -1,33 +1,42 @@
 import { useState, useMemo } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Search,
   FileText,
   Highlighter,
   Bookmark,
   StickyNote,
-  Plus,
-  ChevronRight,
   X,
-  Library,
-  LinkIcon,
   ExternalLink,
-  Copy,
-  Check,
+  ChevronDown,
+  BookMarked,
+  Eye,
 } from "lucide-react";
-import { useWorkspaceMaterials } from "@/lib/api/queries";
-import type { UploadsResponse, HighlightsResponse, BookmarksResponse, NotesResponse } from "@/lib/pocketbase-types";
+import { useWorkspaceMaterials, usePageMarkdown } from "@/lib/api/queries";
+import type {
+  UploadsResponse,
+  HighlightsResponse,
+  NotesResponse,
+  HighlightsRecord,
+  BookmarksRecord,
+  NotesRecord,
+} from "@/lib/pocketbase-types";
+import { HighlightsColorOptions } from "@/lib/pocketbase-types";
 import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useNavigate } from "@tanstack/react-router";
 import { useWorkspaceTabsStore } from "@/lib/stores/workspace-tabs-store";
-
-type ViewMode = "linked" | "browse";
 
 interface WorkspacePanelProps {
   projectId: string;
@@ -35,40 +44,57 @@ interface WorkspacePanelProps {
   linkedHighlights?: string[];
   linkedBookmarks?: string[];
   linkedNotes?: string[];
-  onLinkUpload?: (uploadId: string) => void;
   onUnlinkUpload?: (uploadId: string) => void;
-  onLinkHighlight?: (highlightId: string) => void;
   onUnlinkHighlight?: (highlightId: string) => void;
-  onLinkBookmark?: (bookmarkId: string) => void;
   onUnlinkBookmark?: (bookmarkId: string) => void;
-  onLinkNote?: (noteId: string) => void;
   onUnlinkNote?: (noteId: string) => void;
-  onInsertContent?: (content: string) => void;
   className?: string;
 }
+
+// Color classes for highlight badges
+const highlightColorClasses: Record<HighlightsColorOptions, string> = {
+  [HighlightsColorOptions.yellow]: "bg-yellow-200 text-yellow-900 dark:bg-yellow-900/50 dark:text-yellow-200",
+  [HighlightsColorOptions.green]: "bg-green-200 text-green-900 dark:bg-green-900/50 dark:text-green-200",
+  [HighlightsColorOptions.blue]: "bg-blue-200 text-blue-900 dark:bg-blue-900/50 dark:text-blue-200",
+  [HighlightsColorOptions.pink]: "bg-pink-200 text-pink-900 dark:bg-pink-900/50 dark:text-pink-200",
+  [HighlightsColorOptions.purple]: "bg-purple-200 text-purple-900 dark:bg-purple-900/50 dark:text-purple-200",
+};
 
 export function WorkspacePanel({
   linkedUploads = [],
   linkedHighlights = [],
   linkedBookmarks = [],
   linkedNotes = [],
-  onLinkUpload,
   onUnlinkUpload,
-  onLinkHighlight,
   onUnlinkHighlight,
-  onLinkBookmark,
   onUnlinkBookmark,
-  onLinkNote,
   onUnlinkNote,
-  onInsertContent,
   className,
 }: WorkspacePanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState("uploads");
-  const [viewMode, setViewMode] = useState<ViewMode>("linked");
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(
+    new Set(["uploads", "highlights", "bookmarks", "notes"]),
+  );
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewType, setPreviewType] = useState<"highlight" | "bookmark" | "note">("highlight");
+  const [previewItem, setPreviewItem] = useState<HighlightsRecord | BookmarksRecord | NotesRecord | null>(null);
+  const [previewPageNumber, setPreviewPageNumber] = useState<number | undefined>();
+
   const { data: materials, isLoading } = useWorkspaceMaterials();
   const navigate = useNavigate();
   const addReaderTab = useWorkspaceTabsStore((state) => state.addReaderTab);
+
+  const toggleSection = (section: string) => {
+    setExpandedSections((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(section)) {
+        newSet.delete(section);
+      } else {
+        newSet.add(section);
+      }
+      return newSet;
+    });
+  };
 
   const filterBySearch = <T extends { id: string }>(items: T[], searchFields: (keyof T)[]): T[] => {
     if (!searchQuery) return items;
@@ -98,72 +124,93 @@ export function WorkspacePanel({
     return materials?.notes?.filter((n) => linkedNotes.includes(n.id)) || [];
   }, [materials?.notes, linkedNotes]);
 
-  // Filter based on view mode and search
-  const filteredUploads = filterBySearch(viewMode === "linked" ? linkedUploadItems : materials?.uploads || [], [
-    "title",
-  ] as (keyof UploadsResponse)[]);
-  const filteredHighlights = filterBySearch(
-    viewMode === "linked" ? linkedHighlightItems : materials?.highlights || [],
-    ["text", "note"] as (keyof HighlightsResponse)[],
-  );
-  const filteredBookmarks = filterBySearch(
-    (viewMode === "linked" ? linkedBookmarkItems : materials?.bookmarks || []) as any[],
-    ["label", "preview_text"] as any[],
-  );
-  const filteredNotes = filterBySearch(viewMode === "linked" ? linkedNoteItems : materials?.notes || [], [
-    "content",
-  ] as (keyof NotesResponse)[]);
+  // Filter based on search
+  const filteredUploads = filterBySearch(linkedUploadItems, ["title"] as (keyof UploadsResponse)[]);
+  const filteredHighlights = filterBySearch(linkedHighlightItems, ["text", "comment"] as (keyof HighlightsResponse)[]);
+  const filteredBookmarks = filterBySearch(linkedBookmarkItems as any[], ["comment", "preview_text"] as any[]);
+  const filteredNotes = filterBySearch(linkedNoteItems, ["content"] as (keyof NotesResponse)[]);
 
   const linkedCount = linkedUploads.length + linkedHighlights.length + linkedBookmarks.length + linkedNotes.length;
-
-  const handleInsert = (content: string) => {
-    if (onInsertContent) {
-      onInsertContent(content);
-    } else {
-      // Fallback to global insert function
-      const insertFn = (window as any).__writerInsertContent;
-      if (insertFn) {
-        insertFn(content);
-      }
-    }
-  };
 
   const handleOpenDocument = (uploadId: string, title: string) => {
     addReaderTab(uploadId, title);
     navigate({ to: "/workspace", search: { id: uploadId, type: "upload" } });
   };
 
+  const handlePreviewHighlight = (highlight: HighlightsResponse) => {
+    setPreviewType("highlight");
+    setPreviewItem(highlight as HighlightsRecord);
+    setPreviewPageNumber(undefined); // We don't have page number easily accessible
+    setPreviewOpen(true);
+  };
+
+  const handlePreviewBookmark = (bookmark: any) => {
+    setPreviewType("bookmark");
+    setPreviewItem(bookmark as BookmarksRecord);
+    setPreviewPageNumber(bookmark.page_number);
+    setPreviewOpen(true);
+  };
+
+  const handlePreviewNote = (note: NotesResponse) => {
+    setPreviewType("note");
+    setPreviewItem(note as NotesRecord);
+    setPreviewPageNumber(note.page_number);
+    setPreviewOpen(true);
+  };
+
+  const handleNavigateFromPreview = () => {
+    if (!previewItem) return;
+    const upload = materials?.uploads?.find((u) => u.id === (previewItem as any).upload);
+    if (upload) {
+      handleOpenDocument(upload.id, upload.title || "Document");
+    }
+    setPreviewOpen(false);
+  };
+
+  if (isLoading) {
+    return (
+      <div className={cn("flex flex-col h-full border-l bg-background", className)}>
+        <div className="p-3 border-b">
+          <h3 className="font-semibold text-sm">Research Sources</h3>
+        </div>
+        <div className="flex items-center justify-center flex-1">
+          <div className="text-sm text-muted-foreground">Loading...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (linkedCount === 0) {
+    return (
+      <div className={cn("flex flex-col h-full border-l bg-background", className)}>
+        <div className="p-3 border-b">
+          <h3 className="font-semibold text-sm">Research Sources</h3>
+        </div>
+        <div className="flex flex-col items-center justify-center flex-1 p-6 text-center">
+          <FileText className="h-12 w-12 text-muted-foreground/30 mb-3" />
+          <p className="text-sm text-muted-foreground mb-2">No sources linked yet</p>
+          <p className="text-xs text-muted-foreground">
+            Open a document and use "Add to Project" on highlights, bookmarks, or notes to link them here.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cn("flex flex-col h-full border-l bg-background", className)}>
       <div className="p-3 border-b space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-sm">Workspace</h3>
+          <h3 className="font-semibold text-sm">Research Sources</h3>
           <Badge variant="secondary" className="text-xs">
-            {linkedCount} linked
+            {linkedCount} items
           </Badge>
         </div>
-
-        {/* View mode toggle */}
-        <ToggleGroup
-          type="single"
-          value={viewMode}
-          onValueChange={(v) => v && setViewMode(v as ViewMode)}
-          className="w-full justify-start"
-        >
-          <ToggleGroupItem value="linked" aria-label="View linked items" className="flex-1 text-xs">
-            <LinkIcon className="h-3 w-3 mr-1" />
-            Linked
-          </ToggleGroupItem>
-          <ToggleGroupItem value="browse" aria-label="Browse all items" className="flex-1 text-xs">
-            <Library className="h-3 w-3 mr-1" />
-            Browse
-          </ToggleGroupItem>
-        </ToggleGroup>
 
         <div className="relative">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder={viewMode === "linked" ? "Search linked items..." : "Search all materials..."}
+            placeholder="Search sources..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-8 h-9"
@@ -171,292 +218,316 @@ export function WorkspacePanel({
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="grid w-full grid-cols-4 px-2">
-          <TabsTrigger value="uploads" className="text-xs relative">
-            <FileText className="h-3 w-3 mr-1" />
-            <span className="hidden sm:inline">Sources</span>
-            {viewMode === "linked" && linkedUploads.length > 0 && (
-              <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
-                {linkedUploads.length}
-              </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="highlights" className="text-xs relative">
-            <Highlighter className="h-3 w-3 mr-1" />
-            <span className="hidden sm:inline">Highlights</span>
-            {viewMode === "linked" && linkedHighlights.length > 0 && (
-              <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
-                {linkedHighlights.length}
-              </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="bookmarks" className="text-xs relative">
-            <Bookmark className="h-3 w-3 mr-1" />
-            <span className="hidden sm:inline">Bookmarks</span>
-            {viewMode === "linked" && linkedBookmarks.length > 0 && (
-              <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
-                {linkedBookmarks.length}
-              </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="notes" className="text-xs relative">
-            <StickyNote className="h-3 w-3 mr-1" />
-            <span className="hidden sm:inline">Notes</span>
-            {viewMode === "linked" && linkedNotes.length > 0 && (
-              <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
-                {linkedNotes.length}
-              </span>
-            )}
-          </TabsTrigger>
-        </TabsList>
-
-        <div className="flex-1 overflow-hidden">
-          <TabsContent value="uploads" className="h-full m-0">
-            <ScrollArea className="h-full">
-              <div className="p-2 space-y-2">
-                {isLoading ? (
-                  <p className="text-sm text-muted-foreground p-2">Loading...</p>
-                ) : filteredUploads.length === 0 ? (
-                  <EmptyState viewMode={viewMode} itemType="sources" onSwitchToBrowse={() => setViewMode("browse")} />
-                ) : (
-                  filteredUploads.map((upload) => (
+      <ScrollArea className="flex-1">
+        <div className="p-2 space-y-2">
+          {/* Documents Section */}
+          {linkedUploads.length > 0 && (
+            <Collapsible open={expandedSections.has("uploads")} onOpenChange={() => toggleSection("uploads")}>
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-muted/50 text-left">
+                  <ChevronDown
+                    className={cn("h-4 w-4 transition-transform", !expandedSections.has("uploads") && "-rotate-90")}
+                  />
+                  <FileText className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">Documents</span>
+                  <Badge variant="outline" className="ml-auto text-xs">
+                    {filteredUploads.length}
+                  </Badge>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="pl-6 space-y-1 mt-1">
+                  {filteredUploads.map((upload) => (
                     <UploadItem
                       key={upload.id}
                       upload={upload}
-                      isLinked={linkedUploads.includes(upload.id)}
-                      viewMode={viewMode}
-                      onLink={() => onLinkUpload?.(upload.id)}
                       onUnlink={() => onUnlinkUpload?.(upload.id)}
-                      onInsert={() => handleInsert(`[${upload.title}](/reader?uploadId=${upload.id})`)}
                       onOpen={() => handleOpenDocument(upload.id, upload.title || "Document")}
                     />
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </TabsContent>
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
 
-          <TabsContent value="highlights" className="h-full m-0">
-            <ScrollArea className="h-full">
-              <div className="p-2 space-y-2">
-                {isLoading ? (
-                  <p className="text-sm text-muted-foreground p-2">Loading...</p>
-                ) : filteredHighlights.length === 0 ? (
-                  <EmptyState
-                    viewMode={viewMode}
-                    itemType="highlights"
-                    onSwitchToBrowse={() => setViewMode("browse")}
+          {/* Highlights Section */}
+          {linkedHighlights.length > 0 && (
+            <Collapsible open={expandedSections.has("highlights")} onOpenChange={() => toggleSection("highlights")}>
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-muted/50 text-left">
+                  <ChevronDown
+                    className={cn("h-4 w-4 transition-transform", !expandedSections.has("highlights") && "-rotate-90")}
                   />
-                ) : (
-                  filteredHighlights.map((highlight) => (
+                  <Highlighter className="h-4 w-4 text-yellow-500" />
+                  <span className="text-sm font-medium">Highlights</span>
+                  <Badge variant="outline" className="ml-auto text-xs">
+                    {filteredHighlights.length}
+                  </Badge>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="pl-6 space-y-1 mt-1">
+                  {filteredHighlights.map((highlight) => (
                     <HighlightItem
                       key={highlight.id}
                       highlight={highlight}
-                      isLinked={linkedHighlights.includes(highlight.id)}
-                      viewMode={viewMode}
-                      onLink={() => onLinkHighlight?.(highlight.id)}
                       onUnlink={() => onUnlinkHighlight?.(highlight.id)}
-                      onInsert={() => handleInsert(`> ${highlight.text}`)}
+                      onPreview={() => handlePreviewHighlight(highlight)}
                     />
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </TabsContent>
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
 
-          <TabsContent value="bookmarks" className="h-full m-0">
-            <ScrollArea className="h-full">
-              <div className="p-2 space-y-2">
-                {isLoading ? (
-                  <p className="text-sm text-muted-foreground p-2">Loading...</p>
-                ) : filteredBookmarks.length === 0 ? (
-                  <EmptyState viewMode={viewMode} itemType="bookmarks" onSwitchToBrowse={() => setViewMode("browse")} />
-                ) : (
-                  filteredBookmarks.map((bookmark) => (
+          {/* Bookmarks Section */}
+          {linkedBookmarks.length > 0 && (
+            <Collapsible open={expandedSections.has("bookmarks")} onOpenChange={() => toggleSection("bookmarks")}>
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-muted/50 text-left">
+                  <ChevronDown
+                    className={cn("h-4 w-4 transition-transform", !expandedSections.has("bookmarks") && "-rotate-90")}
+                  />
+                  <Bookmark className="h-4 w-4 text-amber-500" />
+                  <span className="text-sm font-medium">Bookmarks</span>
+                  <Badge variant="outline" className="ml-auto text-xs">
+                    {filteredBookmarks.length}
+                  </Badge>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="pl-6 space-y-1 mt-1">
+                  {filteredBookmarks.map((bookmark) => (
                     <BookmarkItem
                       key={bookmark.id}
                       bookmark={bookmark}
-                      isLinked={linkedBookmarks.includes(bookmark.id)}
-                      viewMode={viewMode}
-                      onLink={() => onLinkBookmark?.(bookmark.id)}
                       onUnlink={() => onUnlinkBookmark?.(bookmark.id)}
-                      onInsert={() =>
-                        handleInsert(
-                          bookmark.label
-                            ? `**${bookmark.label}**: ${bookmark.preview_text || ""}`
-                            : bookmark.preview_text || "",
-                        )
-                      }
+                      onPreview={() => handlePreviewBookmark(bookmark)}
                     />
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </TabsContent>
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
 
-          <TabsContent value="notes" className="h-full m-0">
-            <ScrollArea className="h-full">
-              <div className="p-2 space-y-2">
-                {isLoading ? (
-                  <p className="text-sm text-muted-foreground p-2">Loading...</p>
-                ) : filteredNotes.length === 0 ? (
-                  <EmptyState viewMode={viewMode} itemType="notes" onSwitchToBrowse={() => setViewMode("browse")} />
-                ) : (
-                  filteredNotes.map((note) => (
+          {/* Notes Section */}
+          {linkedNotes.length > 0 && (
+            <Collapsible open={expandedSections.has("notes")} onOpenChange={() => toggleSection("notes")}>
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-muted/50 text-left">
+                  <ChevronDown
+                    className={cn("h-4 w-4 transition-transform", !expandedSections.has("notes") && "-rotate-90")}
+                  />
+                  <StickyNote className="h-4 w-4 text-blue-500" />
+                  <span className="text-sm font-medium">Notes</span>
+                  <Badge variant="outline" className="ml-auto text-xs">
+                    {filteredNotes.length}
+                  </Badge>
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="pl-6 space-y-1 mt-1">
+                  {filteredNotes.map((note) => (
                     <NoteItem
                       key={note.id}
                       note={note}
-                      isLinked={linkedNotes.includes(note.id)}
-                      viewMode={viewMode}
-                      onLink={() => onLinkNote?.(note.id)}
                       onUnlink={() => onUnlinkNote?.(note.id)}
-                      onInsert={() => handleInsert(note.content || "")}
+                      onPreview={() => handlePreviewNote(note)}
                     />
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </TabsContent>
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
         </div>
-      </Tabs>
+      </ScrollArea>
+
+      <PreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        type={previewType}
+        item={previewItem}
+        pageNumber={previewPageNumber}
+        onNavigate={handleNavigateFromPreview}
+      />
     </div>
   );
 }
 
-// Empty state component
-function EmptyState({
-  viewMode,
-  itemType,
-  onSwitchToBrowse,
-}: {
-  viewMode: ViewMode;
-  itemType: string;
-  onSwitchToBrowse: () => void;
-}) {
-  if (viewMode === "linked") {
-    return (
-      <div className="flex flex-col items-center justify-center p-6 text-center">
-        <LinkIcon className="h-8 w-8 text-muted-foreground/50 mb-2" />
-        <p className="text-sm text-muted-foreground mb-3">No {itemType} linked yet</p>
-        <Button variant="outline" size="sm" onClick={onSwitchToBrowse}>
-          <Library className="h-3 w-3 mr-1" />
-          Browse to add
-        </Button>
-      </div>
-    );
-  }
-  return <p className="text-sm text-muted-foreground p-2">No {itemType} found</p>;
+// Preview Dialog for viewing items in context
+interface PreviewDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  type: "highlight" | "bookmark" | "note";
+  item: HighlightsRecord | BookmarksRecord | NotesRecord | null;
+  pageNumber?: number;
+  onNavigate: () => void;
+}
+
+function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate }: PreviewDialogProps) {
+  const pageId = item?.page ?? null;
+  const { data: markdown, isLoading } = usePageMarkdown(pageId);
+
+  if (!item) return null;
+
+  const isHighlight = type === "highlight";
+  const isNote = type === "note";
+  const highlight = isHighlight ? (item as HighlightsRecord) : null;
+  const bookmark = type === "bookmark" ? (item as BookmarksRecord) : null;
+  const note = isNote ? (item as NotesRecord) : null;
+
+  // Render the full page content with the highlight marked
+  const renderPageContent = () => {
+    if (!markdown) return null;
+
+    if (highlight && highlight.start_offset !== undefined && highlight.end_offset !== undefined) {
+      const before = markdown.slice(0, highlight.start_offset);
+      const highlighted = markdown.slice(highlight.start_offset, highlight.end_offset);
+      const after = markdown.slice(highlight.end_offset);
+
+      return (
+        <>
+          <span>{before}</span>
+          <mark
+            className={cn("px-0.5 rounded", highlightColorClasses[highlight.color || HighlightsColorOptions.yellow])}
+          >
+            {highlighted}
+          </mark>
+          <span>{after}</span>
+        </>
+      );
+    }
+
+    return <span>{markdown}</span>;
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+        <DialogHeader className="shrink-0">
+          <DialogTitle className="flex items-center gap-2">
+            {isHighlight ? (
+              <>
+                <Highlighter className="h-5 w-5" />
+                Highlight Preview
+              </>
+            ) : isNote ? (
+              <>
+                <StickyNote className="h-5 w-5 text-blue-500" />
+                Note Preview
+              </>
+            ) : (
+              <>
+                <BookMarked className="h-5 w-5 text-amber-500" />
+                {bookmark?.comment || "Bookmark Preview"}
+              </>
+            )}
+          </DialogTitle>
+          <DialogDescription>
+            Page {pageNumber ?? "?"} • Click "Go to page" to navigate to this location
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Highlighted text or bookmark info - fixed at top */}
+        {isHighlight && highlight && (
+          <div className="shrink-0 mb-2">
+            <div
+              className={cn("p-3 rounded-lg", highlightColorClasses[highlight.color || HighlightsColorOptions.yellow])}
+            >
+              <p className="text-sm font-medium">"{highlight.text}"</p>
+            </div>
+            {highlight.comment && (
+              <div className="flex items-start gap-2 mt-3 p-3 bg-muted/50 rounded-lg">
+                <StickyNote className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">{highlight.comment}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Note content - fixed at top */}
+        {isNote && note && (
+          <div className="shrink-0 mb-2">
+            <div className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+              <p className="text-sm text-foreground whitespace-pre-wrap">{note.content}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Full page content - scrollable */}
+        <div className="flex-1 min-h-0 border rounded-lg bg-card flex flex-col overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-2 border-b text-xs text-muted-foreground shrink-0">
+            <FileText className="h-3.5 w-3.5" />
+            Page {pageNumber ?? "?"} content
+          </div>
+          <div className="flex-1 min-h-0 overflow-auto p-4">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+            ) : markdown ? (
+              <div className="text-sm text-foreground/80 font-serif leading-relaxed whitespace-pre-wrap">
+                {renderPageContent()}
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground italic">Could not load page content</div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="shrink-0">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+          <Button onClick={onNavigate} className="gap-2">
+            <ExternalLink className="h-4 w-4" />
+            Go to page
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 // Individual item components
-interface BaseItemProps {
-  isLinked: boolean;
-  viewMode: ViewMode;
-  onLink: () => void;
+interface UploadItemProps {
+  upload: UploadsResponse;
   onUnlink: () => void;
-  onInsert: () => void;
+  onOpen: () => void;
 }
 
-function UploadItem({
-  upload,
-  isLinked,
-  viewMode,
-  onLink,
-  onUnlink,
-  onInsert,
-  onOpen,
-}: BaseItemProps & { upload: UploadsResponse; onOpen: () => void }) {
-  const [expanded, setExpanded] = useState(false);
-
-  // In linked mode, show more detail for viewing
-  if (viewMode === "linked" && isLinked) {
-    return (
-      <Collapsible open={expanded} onOpenChange={setExpanded}>
-        <div className="rounded-md border bg-card">
-          <CollapsibleTrigger asChild>
-            <div className="flex items-start gap-2 p-3 cursor-pointer hover:bg-muted/50 transition-colors">
-              <FileText className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">{upload.title}</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <Badge variant="outline" className="text-[10px] px-1 py-0">
-                    {upload.type}
-                  </Badge>
-                  {upload.num_pages && (
-                    <span className="text-[10px] text-muted-foreground">{upload.num_pages} pages</span>
-                  )}
-                </div>
-              </div>
-              <ChevronRight className={cn("h-4 w-4 transition-transform", expanded && "rotate-90")} />
-            </div>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="px-3 pb-3 pt-0 border-t flex gap-2">
-              <Button variant="outline" size="sm" className="flex-1" onClick={onOpen}>
-                <ExternalLink className="h-3 w-3 mr-1" />
-                Open
-              </Button>
-              <Button variant="outline" size="sm" className="flex-1" onClick={onInsert}>
-                <ChevronRight className="h-3 w-3 mr-1" />
-                Insert Link
-              </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onUnlink}>
-                <X className="h-3 w-3" />
-              </Button>
-            </div>
-          </CollapsibleContent>
-        </div>
-      </Collapsible>
-    );
-  }
-
-  // Browse mode or not linked
+function UploadItem({ upload, onUnlink, onOpen }: UploadItemProps) {
   return (
-    <div
-      className={cn(
-        "group flex items-start gap-2 p-2 rounded-md hover:bg-muted/50 transition-colors",
-        isLinked && "bg-primary/5 border border-primary/20",
-      )}
-    >
-      <FileText className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{upload.title}</p>
-        <div className="flex items-center gap-1 mt-0.5">
-          <Badge variant="outline" className="text-[10px] px-1 py-0">
-            {upload.type}
-          </Badge>
-          {upload.num_pages && <span className="text-[10px] text-muted-foreground">{upload.num_pages} pages</span>}
+    <div className="group rounded-md border bg-card p-2">
+      <div className="flex items-center gap-2">
+        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{upload.title}</p>
+          <div className="flex items-center gap-1">
+            <Badge variant="outline" className="text-[10px] px-1 py-0">
+              {upload.type}
+            </Badge>
+            {upload.num_pages && <span className="text-[10px] text-muted-foreground">{upload.num_pages} pages</span>}
+          </div>
         </div>
-      </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onInsert} title="Insert link">
-          <ChevronRight className="h-3 w-3" />
+        <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={onOpen} title="Open document">
+          <ExternalLink className="h-3 w-3" />
         </Button>
-        {isLinked ? (
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onUnlink} title="Remove from workspace">
-            <X className="h-3 w-3" />
-          </Button>
-        ) : (
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onLink} title="Add to workspace">
-            <Plus className="h-3 w-3" />
-          </Button>
-        )}
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onUnlink} title="Remove from project">
+          <X className="h-3 w-3" />
+        </Button>
       </div>
     </div>
   );
 }
 
-function HighlightItem({
-  highlight,
-  isLinked,
-  viewMode,
-  onLink,
-  onUnlink,
-  onInsert,
-}: BaseItemProps & { highlight: HighlightsResponse }) {
-  const [copied, setCopied] = useState(false);
+interface HighlightItemProps {
+  highlight: HighlightsResponse;
+  onUnlink: () => void;
+  onPreview: () => void;
+}
 
+function HighlightItem({ highlight, onUnlink, onPreview }: HighlightItemProps) {
   const colorClasses: Record<string, string> = {
     yellow: "border-l-yellow-400",
     green: "border-l-green-400",
@@ -465,218 +536,80 @@ function HighlightItem({
     purple: "border-l-purple-400",
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(highlight.text || "");
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  // In linked mode, show full text for viewing
-  if (viewMode === "linked" && isLinked) {
-    return (
-      <div className={cn("rounded-md border bg-card border-l-4", colorClasses[highlight.color || "yellow"])}>
-        <div className="p-3">
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">{highlight.text}</p>
+  return (
+    <div className={cn("rounded-md border bg-card border-l-4 p-2", colorClasses[highlight.color || "yellow"])}>
+      <div className="flex items-start gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm leading-relaxed line-clamp-3">{highlight.text}</p>
           {highlight.comment && (
-            <p className="text-xs text-muted-foreground mt-2 pt-2 border-t italic">{highlight.comment}</p>
+            <p className="text-xs text-muted-foreground mt-1 pt-1 border-t italic line-clamp-2">{highlight.comment}</p>
           )}
         </div>
-        <div className="px-3 pb-3 flex gap-2 border-t pt-2">
-          <Button variant="outline" size="sm" className="flex-1" onClick={handleCopy}>
-            {copied ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
-            {copied ? "Copied" : "Copy"}
-          </Button>
-          <Button variant="outline" size="sm" className="flex-1" onClick={onInsert}>
-            <ChevronRight className="h-3 w-3 mr-1" />
-            Insert Quote
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onUnlink}>
-            <X className="h-3 w-3" />
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Browse mode
-  return (
-    <div
-      className={cn(
-        "group flex items-start gap-2 p-2 rounded-md hover:bg-muted/50 transition-colors border-l-2",
-        colorClasses[highlight.color || "yellow"],
-        isLinked && "bg-primary/5 border-r border-y border-primary/20",
-      )}
-    >
-      <div className="flex-1 min-w-0">
-        <p className="text-sm line-clamp-3">{highlight.text}</p>
-        {highlight.comment && (
-          <p className="text-xs text-muted-foreground mt-1 italic line-clamp-1">{highlight.comment}</p>
-        )}
-      </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onInsert} title="Insert as quote">
-          <ChevronRight className="h-3 w-3" />
+        <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={onPreview} title="View context">
+          <Eye className="h-3 w-3" />
         </Button>
-        {isLinked ? (
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onUnlink} title="Remove from workspace">
-            <X className="h-3 w-3" />
-          </Button>
-        ) : (
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onLink} title="Add to workspace">
-            <Plus className="h-3 w-3" />
-          </Button>
-        )}
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onUnlink} title="Remove from project">
+          <X className="h-3 w-3" />
+        </Button>
       </div>
     </div>
   );
 }
 
-function BookmarkItem({ bookmark, isLinked, viewMode, onLink, onUnlink, onInsert }: BaseItemProps & { bookmark: any }) {
-  const [copied, setCopied] = useState(false);
+interface BookmarkItemProps {
+  bookmark: any;
+  onUnlink: () => void;
+  onPreview: () => void;
+}
 
-  const handleCopy = () => {
-    const text = bookmark.label ? `${bookmark.label}: ${bookmark.preview_text || ""}` : bookmark.preview_text || "";
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  // In linked mode, show full content
-  if (viewMode === "linked" && isLinked) {
-    return (
-      <div className="rounded-md border bg-card">
-        <div className="p-3">
-          <div className="flex items-start gap-2">
-            <Bookmark className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-            <div className="flex-1 min-w-0">
-              {bookmark.label && <p className="text-sm font-medium mb-1">{bookmark.label}</p>}
-              <p className="text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
-                {bookmark.preview_text || "No preview available"}
-              </p>
-              {bookmark.page_number && (
-                <span className="text-[10px] text-muted-foreground mt-1 block">Page {bookmark.page_number}</span>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="px-3 pb-3 flex gap-2 border-t pt-2">
-          <Button variant="outline" size="sm" className="flex-1" onClick={handleCopy}>
-            {copied ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
-            {copied ? "Copied" : "Copy"}
-          </Button>
-          <Button variant="outline" size="sm" className="flex-1" onClick={onInsert}>
-            <ChevronRight className="h-3 w-3 mr-1" />
-            Insert
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onUnlink}>
-            <X className="h-3 w-3" />
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Browse mode
+function BookmarkItem({ bookmark, onUnlink, onPreview }: BookmarkItemProps) {
   return (
-    <div
-      className={cn(
-        "group flex items-start gap-2 p-2 rounded-md hover:bg-muted/50 transition-colors",
-        isLinked && "bg-primary/5 border border-primary/20",
-      )}
-    >
-      <Bookmark className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-      <div className="flex-1 min-w-0">
-        {bookmark.label && <p className="text-sm font-medium truncate">{bookmark.label}</p>}
-        <p className={cn("text-sm line-clamp-2", bookmark.label && "text-muted-foreground")}>
-          {bookmark.preview_text || "No preview"}
-        </p>
-        {bookmark.page_number && <span className="text-[10px] text-muted-foreground">Page {bookmark.page_number}</span>}
-      </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onInsert} title="Insert text">
-          <ChevronRight className="h-3 w-3" />
-        </Button>
-        {isLinked ? (
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onUnlink} title="Remove from workspace">
-            <X className="h-3 w-3" />
-          </Button>
-        ) : (
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onLink} title="Add to workspace">
-            <Plus className="h-3 w-3" />
-          </Button>
+    <div className="rounded-md border bg-card p-2">
+      <div className="flex items-start gap-2">
+        <Bookmark className="h-4 w-4 mt-0.5 text-amber-500 shrink-0" />
+        <div className="flex-1 min-w-0">
+          {bookmark.comment && <p className="text-sm font-medium line-clamp-1">{bookmark.comment}</p>}
+          <p className={cn("text-sm line-clamp-2", bookmark.comment && "text-muted-foreground")}>
+            {bookmark.preview_text || "No preview"}
+          </p>
+        </div>
+        {bookmark.page_number && (
+          <span className="text-[10px] text-muted-foreground shrink-0 self-center">p.{bookmark.page_number}</span>
         )}
+        <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={onPreview} title="View context">
+          <Eye className="h-3 w-3" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onUnlink} title="Remove from project">
+          <X className="h-3 w-3" />
+        </Button>
       </div>
     </div>
   );
 }
 
-function NoteItem({ note, isLinked, viewMode, onLink, onUnlink, onInsert }: BaseItemProps & { note: NotesResponse }) {
-  const [copied, setCopied] = useState(false);
+interface NoteItemProps {
+  note: NotesResponse;
+  onUnlink: () => void;
+  onPreview: () => void;
+}
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(note.content || "");
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  // In linked mode, show full content
-  if (viewMode === "linked" && isLinked) {
-    return (
-      <div className="rounded-md border bg-card">
-        <div className="p-3">
-          <div className="flex items-start gap-2">
-            <StickyNote className="h-4 w-4 mt-0.5 text-primary shrink-0" />
-            <div className="flex-1 min-w-0">
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{note.content || "Empty note"}</p>
-              {note.page_number && (
-                <span className="text-[10px] text-muted-foreground mt-1 block">Page {note.page_number}</span>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="px-3 pb-3 flex gap-2 border-t pt-2">
-          <Button variant="outline" size="sm" className="flex-1" onClick={handleCopy}>
-            {copied ? <Check className="h-3 w-3 mr-1" /> : <Copy className="h-3 w-3 mr-1" />}
-            {copied ? "Copied" : "Copy"}
-          </Button>
-          <Button variant="outline" size="sm" className="flex-1" onClick={onInsert}>
-            <ChevronRight className="h-3 w-3 mr-1" />
-            Insert
-          </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onUnlink}>
-            <X className="h-3 w-3" />
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Browse mode
+function NoteItem({ note, onUnlink, onPreview }: NoteItemProps) {
   return (
-    <div
-      className={cn(
-        "group flex items-start gap-2 p-2 rounded-md hover:bg-muted/50 transition-colors",
-        isLinked && "bg-primary/5 border border-primary/20",
-      )}
-    >
-      <StickyNote className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm line-clamp-3">{note.content || "Empty note"}</p>
-        {note.page_number && <span className="text-[10px] text-muted-foreground">Page {note.page_number}</span>}
-      </div>
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onInsert} title="Insert text">
-          <ChevronRight className="h-3 w-3" />
-        </Button>
-        {isLinked ? (
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onUnlink} title="Remove from workspace">
-            <X className="h-3 w-3" />
-          </Button>
-        ) : (
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onLink} title="Add to workspace">
-            <Plus className="h-3 w-3" />
-          </Button>
+    <div className="rounded-md border bg-card p-2">
+      <div className="flex items-start gap-2">
+        <StickyNote className="h-4 w-4 mt-0.5 text-blue-500 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm line-clamp-3">{note.content || "Empty note"}</p>
+        </div>
+        {note.page_number && (
+          <span className="text-[10px] text-muted-foreground shrink-0 self-center">p.{note.page_number}</span>
         )}
+        <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={onPreview} title="View context">
+          <Eye className="h-3 w-3" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onUnlink} title="Remove from project">
+          <X className="h-3 w-3" />
+        </Button>
       </div>
     </div>
   );

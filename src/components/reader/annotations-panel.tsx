@@ -32,6 +32,7 @@ import {
   type NotesRecord,
 } from "@/lib/pocketbase-types";
 import { useReaderStore } from "@/lib/stores/reader-store";
+import { AddToProjectButton } from "./add-to-project-button";
 
 interface AnnotationsPanelProps {
   // Props are now optional - we prefer reading from the store
@@ -95,6 +96,9 @@ function HighlightItem({ highlight, pageNumber, onClick, onEdit }: HighlightItem
         </button>
         <div className="flex items-center gap-1 shrink-0">
           <span className="text-[10px] text-muted-foreground">p.{pageNumber ?? "?"}</span>
+          <div className="opacity-0 group-hover/item:opacity-100 transition-opacity">
+            <AddToProjectButton itemId={highlight.id} itemType="highlight" />
+          </div>
           <Button
             variant="ghost"
             size="icon"
@@ -144,6 +148,9 @@ function BookmarkItem({ bookmark, onClick, onEdit }: BookmarkItemProps & { onEdi
         </button>
         <div className="flex items-center gap-1 shrink-0">
           <span className="text-[10px] text-muted-foreground">p.{bookmark.page_number ?? "?"}</span>
+          <div className="opacity-0 group-hover/item:opacity-100 transition-opacity">
+            <AddToProjectButton itemId={bookmark.id} itemType="bookmark" />
+          </div>
           <Button
             variant="ghost"
             size="icon"
@@ -194,6 +201,7 @@ function NoteItem({ note, onDelete, onClick, onEdit }: NoteItemProps & { onEdit:
         <div className="flex items-center gap-1 shrink-0">
           <span className="text-[10px] text-muted-foreground">p.{note.page_number ?? "?"}</span>
           <div className="flex gap-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
+            <AddToProjectButton itemId={note.id} itemType="note" />
             <Button
               variant="ghost"
               size="icon"

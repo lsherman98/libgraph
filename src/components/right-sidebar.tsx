@@ -43,27 +43,11 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
             linkedHighlights={project?.highlights || []}
             linkedBookmarks={project?.bookmarks || []}
             linkedNotes={project?.notes || []}
-            onLinkUpload={(id) =>
-              updateProject.mutate({
-                id: writerTab.projectId,
-                data: {
-                  uploads: [...(project?.uploads || []), id],
-                },
-              })
-            }
             onUnlinkUpload={(id) =>
               updateProject.mutate({
                 id: writerTab.projectId,
                 data: {
                   uploads: (project?.uploads || []).filter((u: string) => u !== id),
-                },
-              })
-            }
-            onLinkHighlight={(id) =>
-              updateProject.mutate({
-                id: writerTab.projectId,
-                data: {
-                  highlights: [...(project?.highlights || []), id],
                 },
               })
             }
@@ -75,27 +59,11 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
                 },
               })
             }
-            onLinkBookmark={(id) =>
-              updateProject.mutate({
-                id: writerTab.projectId,
-                data: {
-                  bookmarks: [...(project?.bookmarks || []), id],
-                },
-              })
-            }
             onUnlinkBookmark={(id) =>
               updateProject.mutate({
                 id: writerTab.projectId,
                 data: {
                   bookmarks: (project?.bookmarks || []).filter((b: string) => b !== id),
-                },
-              })
-            }
-            onLinkNote={(id) =>
-              updateProject.mutate({
-                id: writerTab.projectId,
-                data: {
-                  notes: [...(project?.notes || []), id],
                 },
               })
             }

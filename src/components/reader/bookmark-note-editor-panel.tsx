@@ -7,6 +7,7 @@ import { useTags } from "@/lib/api/queries";
 import { useCreateTag, useUpdateBookmark, useDeleteBookmark, useUpdateNote, useDeleteNote } from "@/lib/api/mutations";
 import { CreatableCombobox } from "@/components/creatable-combobox";
 import { useReaderStore } from "@/lib/stores/reader-store";
+import { AddToProjectButton } from "./add-to-project-button";
 
 export function BookmarkEditorPanel() {
   const pendingBookmark = useReaderStore((state) => state.pendingBookmark);
@@ -142,19 +143,24 @@ export function BookmarkEditorPanel() {
 
       {/* Footer actions */}
       <div className="flex items-center justify-between gap-2 p-4 border-t">
-        {isEditing ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-            onClick={handleDelete}
-          >
-            <Trash2 className="h-4 w-4 mr-1" />
-            Delete
-          </Button>
-        ) : (
-          <div />
-        )}
+        <div className="flex items-center gap-2">
+          {isEditing ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={handleDelete}
+            >
+              <Trash2 className="h-4 w-4 mr-1" />
+              Delete
+            </Button>
+          ) : (
+            <div />
+          )}
+          {isEditing && editingBookmark && (
+            <AddToProjectButton itemId={editingBookmark.id} itemType="bookmark" variant="default" />
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleClose}>
             Cancel
@@ -305,19 +311,22 @@ export function NoteEditorPanel() {
 
       {/* Footer actions */}
       <div className="flex items-center justify-between gap-2 p-4 border-t">
-        {isEditing ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-            onClick={handleDelete}
-          >
-            <Trash2 className="h-4 w-4 mr-1" />
-            Delete
-          </Button>
-        ) : (
-          <div />
-        )}
+        <div className="flex items-center gap-2">
+          {isEditing ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={handleDelete}
+            >
+              <Trash2 className="h-4 w-4 mr-1" />
+              Delete
+            </Button>
+          ) : (
+            <div />
+          )}
+          {isEditing && editingNote && <AddToProjectButton itemId={editingNote.id} itemType="note" variant="default" />}
+        </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleClose}>
             Cancel

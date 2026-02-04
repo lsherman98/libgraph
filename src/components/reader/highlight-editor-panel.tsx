@@ -9,6 +9,7 @@ import { useTags } from "@/lib/api/queries";
 import { useCreateTag } from "@/lib/api/mutations";
 import { CreatableCombobox } from "@/components/creatable-combobox";
 import { useReaderStore } from "@/lib/stores/reader-store";
+import { AddToProjectButton } from "./add-to-project-button";
 
 const HIGHLIGHT_COLORS: { value: HighlightsColorOptions; bg: string; border: string; ring: string; label: string }[] = [
   {
@@ -202,19 +203,24 @@ export function HighlightEditorPanel() {
 
       {/* Footer actions */}
       <div className="flex items-center justify-between gap-2 p-4 border-t">
-        {isEditing ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-            onClick={handleDelete}
-          >
-            <Trash2 className="h-4 w-4 mr-1" />
-            Delete
-          </Button>
-        ) : (
-          <div />
-        )}
+        <div className="flex items-center gap-2">
+          {isEditing ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+              onClick={handleDelete}
+            >
+              <Trash2 className="h-4 w-4 mr-1" />
+              Delete
+            </Button>
+          ) : (
+            <div />
+          )}
+          {isEditing && editingHighlight && (
+            <AddToProjectButton itemId={editingHighlight.id} itemType="highlight" variant="default" />
+          )}
+        </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleClose}>
             Cancel
