@@ -7,6 +7,7 @@ import { useWorkspaceTabsStore } from "@/lib/stores/workspace-tabs-store";
 import { useWritingProject, useWritingProjects } from "@/lib/api/queries";
 import { useUpdateWritingProject } from "@/lib/api/mutations";
 import { SplitWorkspaceView, WorkspaceTabBar } from "@/components/workspace";
+import { NewTabDialog } from "@/components/workspace/new-tab-dialog";
 
 type WorkspaceSearch = {
   id?: string;
@@ -31,6 +32,9 @@ function RouteComponent() {
 
   const { data: projects } = useWritingProjects();
   const updateProject = useUpdateWritingProject();
+
+  const [newTabOpen, setNewTabOpen] = useState(false);
+  const [initialDialogTab, setInitialDialogTab] = useState<"documents" | "projects">("documents");
 
   // Get active tab and determine its type
   const activeTab = activeTabId ? getTab(activeTabId) : null;
@@ -124,20 +128,30 @@ function RouteComponent() {
           <h2 className="text-2xl font-semibold mb-3">Welcome to Your Workspace</h2>
           <p className="text-muted-foreground mb-8">Open a document to read or start a new writing project.</p>
           <div className="flex gap-3 justify-center">
-            <Button size="lg" onClick={() => navigate({ to: "/documents" })}>
+            <Button
+              size="lg"
+              onClick={() => {
+                setInitialDialogTab("documents");
+                setNewTabOpen(true);
+              }}
+            >
               <BookMarked className="mr-2 h-4 w-4" />
               Browse Documents
             </Button>
             <Button
               size="lg"
               variant="outline"
-              onClick={() => navigate({ to: "/documents", search: { tab: "projects" } })}
+              onClick={() => {
+                setInitialDialogTab("projects");
+                setNewTabOpen(true);
+              }}
             >
               <PenLine className="mr-2 h-4 w-4" />
               Writing Projects
             </Button>
           </div>
         </div>
+        <NewTabDialog open={newTabOpen} onOpenChange={setNewTabOpen} initialTab={initialDialogTab} />
       </div>
     );
   }

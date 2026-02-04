@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { X, Plus, FileText, PenLine, Columns2, Square, Save, BookMarked } from "lucide-react";
+import { X, Plus, PenLine, Columns2, Square, Save, BookMarked, FileText } from "lucide-react";
 import {
   useWorkspaceTabsStore,
   type WorkspaceTab,
@@ -8,17 +8,13 @@ import {
 } from "@/lib/stores/workspace-tabs-store";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { NewTabDialog } from "./new-tab-dialog";
 
 interface WorkspaceTabBarProps {
   onSave?: () => void;
@@ -28,6 +24,8 @@ interface WorkspaceTabBarProps {
 export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
   const navigate = useNavigate();
   const [splitPromptOpen, setSplitPromptOpen] = useState(false);
+  const [newTabOpen, setNewTabOpen] = useState(false);
+  const [initialDialogTab, setInitialDialogTab] = useState<"documents" | "projects">("documents");
   const { tabs, activeTabId, splitMode, splitTabId, setActiveTab, removeTab, setSplitMode, closeSplit, getTab } =
     useWorkspaceTabsStore();
 
@@ -94,37 +92,33 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
       </div>
 
       {/* Tabs area */}
-      <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto no-scrollbar">
-        {tabs.map((tab) => (
-          <TabItem
-            key={tab.id}
-            tab={tab}
-            isActive={tab.id === activeTabId}
-            isSplit={tab.id === splitTabId}
-            onClick={() => handleTabClick(tab)}
-            onClose={(e) => handleTabClose(e, tab)}
-          />
-        ))}
+      <Tabs value={activeTabId || undefined} className="flex-1 min-w-0 overflow-x-auto no-scrollbar">
+        <TabsList className="h-full bg-transparent p-0 gap-1">
+          {tabs.map((tab) => (
+            <TabItem
+              key={tab.id}
+              tab={tab}
+              isActive={tab.id === activeTabId}
+              isSplit={tab.id === splitTabId}
+              onClick={() => handleTabClick(tab)}
+              onClose={(e) => handleTabClose(e, tab)}
+            />
+          ))}
 
-        {/* Add new tab dropdown */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 ml-1">
-              <Plus className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem onClick={() => navigate({ to: "/documents" })}>
-              <FileText className="mr-2 h-4 w-4" />
-              Open Document
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate({ to: "/documents", search: { tab: "projects" } })}>
-              <PenLine className="mr-2 h-4 w-4" />
-              Writing Projects
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+          {/* Add new tab button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 ml-1"
+            onClick={() => {
+              setInitialDialogTab("documents");
+              setNewTabOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </TabsList>
+      </Tabs>
 
       {/* Right controls */}
       <div className="flex items-center gap-2 px-4">
@@ -175,7 +169,8 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
             <Button
               onClick={() => {
                 setSplitPromptOpen(false);
-                navigate({ to: "/documents" });
+                setInitialDialogTab("documents");
+                setNewTabOpen(true);
               }}
             >
               <BookMarked className="mr-2 h-4 w-4" />
@@ -185,7 +180,8 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
               variant="outline"
               onClick={() => {
                 setSplitPromptOpen(false);
-                navigate({ to: "/documents", search: { tab: "projects" } });
+                setInitialDialogTab("projects");
+                setNewTabOpen(true);
               }}
             >
               <PenLine className="mr-2 h-4 w-4" />
@@ -194,6 +190,8 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      <NewTabDialog open={newTabOpen} onOpenChange={setNewTabOpen} initialTab={initialDialogTab} />
     </header>
   );
 }
@@ -211,25 +209,21 @@ function TabItem({ tab, isActive, isSplit, onClick, onClose }: TabItemProps) {
   const isDirty = isWriter ? (tab as WriterTab).isDirty : false;
 
   return (
-    <div
-      className={cn(
-        "group flex items-center gap-2 px-3 py-1.5 cursor-pointer transition-all shrink-0 max-w-50 border-b-2 -mb-px",
-        isActive ? "border-primary bg-muted/50" : "border-transparent hover:bg-muted/30",
-        isSplit && !isActive && "bg-primary/5 border-primary/30",
-      )}
+    <TabsTrigger
+      value={tab.id}
       onClick={onClick}
+      className={cn(
+        "group relative gap-1.5 pr-8 max-w-50 data-[state=active]:shadow-sm",
+        isSplit && !isActive && "bg-primary/10 border-primary/30",
+      )}
     >
       {/* Tab type icon */}
-      {isWriter ? (
-        <PenLine className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      ) : (
-        <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-      )}
+      {isWriter ? <PenLine className="h-3.5 w-3.5 shrink-0" /> : <FileText className="h-3.5 w-3.5 shrink-0" />}
 
       {/* Dirty indicator */}
       {isDirty && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
 
-      <span className="text-sm truncate" title={tab.title}>
+      <span className="truncate" title={tab.title}>
         {tab.title || "Untitled"}
       </span>
 
@@ -240,16 +234,17 @@ function TabItem({ tab, isActive, isSplit, onClick, onClose }: TabItemProps) {
         </span>
       )}
 
+      {/* Close button */}
       <button
         className={cn(
-          "h-5 w-5 rounded flex items-center justify-center shrink-0",
+          "absolute right-1.5 h-5 w-5 rounded-sm flex items-center justify-center shrink-0",
           "opacity-0 group-hover:opacity-100 transition-opacity",
-          "hover:bg-muted-foreground/20",
+          "hover:bg-muted",
         )}
         onClick={onClose}
       >
         <X className="h-3 w-3" />
       </button>
-    </div>
+    </TabsTrigger>
   );
 }
