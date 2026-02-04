@@ -1,4 +1,11 @@
-import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem } from "@/components/ui/sidebar";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
+  useSidebar,
+} from "@/components/ui/sidebar";
 import { AnnotationsPanel } from "@/components/reader/annotations-panel";
 import { HighlightEditorPanel } from "@/components/reader/highlight-editor-panel";
 import { BookmarkEditorPanel, NoteEditorPanel } from "@/components/reader/bookmark-note-editor-panel";
@@ -8,6 +15,8 @@ import { useWorkspaceTabsStore, type WriterTab } from "@/lib/stores/workspace-ta
 import { useWritingProject } from "@/lib/api/queries";
 import { useUpdateWritingProject } from "@/lib/api/mutations";
 import { useReaderStore } from "@/lib/stores/reader-store";
+import { useLocation } from "@tanstack/react-router";
+import { useEffect } from "react";
 
 interface RightSidebarProps extends React.ComponentProps<typeof Sidebar> {
   currentPageId?: string;
@@ -20,9 +29,30 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
   const activeTab = activeTabId ? getTab(activeTabId) : null;
   const isWriterTab = activeTab?.type === "writer";
   const writerTab = isWriterTab ? (activeTab as WriterTab) : null;
+  const location = useLocation();
+  const { setOpenRight } = useSidebar();
 
   const { data: project } = useWritingProject(writerTab?.projectId ?? null);
   const updateProject = useUpdateWritingProject();
+
+  // Only show sidebar content when on the workspace route
+  const isWorkspaceRoute = location.pathname.startsWith("/workspace");
+
+  // Auto-close the right sidebar when leaving the workspace page
+  useEffect(() => {
+    if (!isWorkspaceRoute) {
+      setOpenRight(false);
+    }
+  }, [isWorkspaceRoute, setOpenRight]);
+
+  // Show empty sidebar when not on workspace route
+  if (!isWorkspaceRoute) {
+    return (
+      <Sidebar collapsible="offcanvas" {...props}>
+        <SidebarContent className="p-0" />
+      </Sidebar>
+    );
+  }
 
   // Show workspace panel for writer tabs, annotations panel for reader tabs
   if (isWriterTab && writerTab) {
@@ -43,7 +73,7 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
             linkedHighlights={project?.highlights || []}
             linkedBookmarks={project?.bookmarks || []}
             linkedNotes={project?.notes || []}
-            onUnlinkUpload={(id) =>
+            onUnlinkUpload={(id: string) =>
               updateProject.mutate({
                 id: writerTab.projectId,
                 data: {
@@ -51,7 +81,7 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
                 },
               })
             }
-            onUnlinkHighlight={(id) =>
+            onUnlinkHighlight={(id: string) =>
               updateProject.mutate({
                 id: writerTab.projectId,
                 data: {
@@ -59,7 +89,7 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
                 },
               })
             }
-            onUnlinkBookmark={(id) =>
+            onUnlinkBookmark={(id: string) =>
               updateProject.mutate({
                 id: writerTab.projectId,
                 data: {
@@ -67,7 +97,7 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
                 },
               })
             }
-            onUnlinkNote={(id) =>
+            onUnlinkNote={(id: string) =>
               updateProject.mutate({
                 id: writerTab.projectId,
                 data: {
