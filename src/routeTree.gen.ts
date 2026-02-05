@@ -12,6 +12,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as AppChatRouteImport } from './routes/_app/chat'
 import { Route as AppWorkspaceIndexRouteImport } from './routes/_app/workspace/index'
 import { Route as AppUploadIndexRouteImport } from './routes/_app/upload/index'
 import { Route as AppGraphIndexRouteImport } from './routes/_app/graph/index'
@@ -27,6 +28,11 @@ const SigninLazyRoute = SigninLazyRouteImport.update({
 const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AppChatRoute = AppChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => AppRoute,
 } as any)
 const AppWorkspaceIndexRoute = AppWorkspaceIndexRouteImport.update({
   id: '/workspace/',
@@ -52,6 +58,7 @@ const AppDocumentsIndexRoute = AppDocumentsIndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
+  '/chat': typeof AppChatRoute
   '/documents/': typeof AppDocumentsIndexRoute
   '/graph/': typeof AppGraphIndexRoute
   '/upload/': typeof AppUploadIndexRoute
@@ -60,6 +67,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
+  '/chat': typeof AppChatRoute
   '/documents': typeof AppDocumentsIndexRoute
   '/graph': typeof AppGraphIndexRoute
   '/upload': typeof AppUploadIndexRoute
@@ -69,6 +77,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
+  '/_app/chat': typeof AppChatRoute
   '/_app/documents/': typeof AppDocumentsIndexRoute
   '/_app/graph/': typeof AppGraphIndexRoute
   '/_app/upload/': typeof AppUploadIndexRoute
@@ -79,16 +88,25 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/signin'
+    | '/chat'
     | '/documents/'
     | '/graph/'
     | '/upload/'
     | '/workspace/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/signin' | '/documents' | '/graph' | '/upload' | '/workspace'
+  to:
+    | '/'
+    | '/signin'
+    | '/chat'
+    | '/documents'
+    | '/graph'
+    | '/upload'
+    | '/workspace'
   id:
     | '__root__'
     | '/_app'
     | '/signin'
+    | '/_app/chat'
     | '/_app/documents/'
     | '/_app/graph/'
     | '/_app/upload/'
@@ -115,6 +133,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_app/chat': {
+      id: '/_app/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof AppChatRouteImport
+      parentRoute: typeof AppRoute
     }
     '/_app/workspace/': {
       id: '/_app/workspace/'
@@ -148,6 +173,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppChatRoute: typeof AppChatRoute
   AppDocumentsIndexRoute: typeof AppDocumentsIndexRoute
   AppGraphIndexRoute: typeof AppGraphIndexRoute
   AppUploadIndexRoute: typeof AppUploadIndexRoute
@@ -155,6 +181,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppChatRoute: AppChatRoute,
   AppDocumentsIndexRoute: AppDocumentsIndexRoute,
   AppGraphIndexRoute: AppGraphIndexRoute,
   AppUploadIndexRoute: AppUploadIndexRoute,

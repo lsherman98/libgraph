@@ -340,3 +340,54 @@ export const getWorkspaceMaterials = async () => {
     return { uploads, highlights, bookmarks, notes };
 }
 
+// Chat API
+export interface ChatMessage {
+    role: 'user' | 'assistant';
+    content: string;
+}
+
+export interface ChatFilters {
+    tags?: string[];
+    authors?: string[];
+    types?: string[];
+    topics?: string[];
+    uploads?: string[];
+}
+
+export interface ChatSource {
+    upload_id?: string;
+    title?: string;
+    score?: number;
+}
+
+export interface ChatResponseData {
+    message: string;
+    sources?: ChatSource[];
+}
+
+export const sendChatMessage = async (
+    message: string,
+    filters?: ChatFilters,
+    history?: ChatMessage[]
+): Promise<ChatResponseData> => {
+    const baseUrl = pb.baseURL.endsWith('/') ? pb.baseURL.slice(0, -1) : pb.baseURL;
+    const response = await fetch(`${baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': pb.authStore.token,
+        },
+        body: JSON.stringify({
+            message,
+            filters,
+            history,
+        }),
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.message || 'Chat request failed');
+    }
+
+    return response.json();
+}

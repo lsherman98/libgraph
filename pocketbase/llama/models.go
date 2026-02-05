@@ -94,3 +94,69 @@ type PipelineFileResponse struct {
 }
 
 type AddFilesToPipelineResponse []PipelineFileResponse
+
+// Chat API Types
+type ChatRequestBody struct {
+	ClassName string    `json:"class_name"`
+	Data      ChatData  `json:"data"`
+	Messages  []Message `json:"messages"`
+}
+
+type ChatData struct {
+	ClassName           string              `json:"class_name"`
+	LLMParameters       LLMParameters       `json:"llm_parameters"`
+	RetrievalParameters RetrievalParameters `json:"retrieval_parameters"`
+}
+
+type LLMParameters struct {
+	ClassName                  string  `json:"class_name"`
+	ModelName                  string  `json:"model_name"`
+	SystemPrompt               string  `json:"system_prompt,omitempty"`
+	Temperature                float64 `json:"temperature"`
+	UseChainOfThoughtReasoning bool    `json:"use_chain_of_thought_reasoning,omitempty"`
+	UseCitation                bool    `json:"use_citation"`
+}
+
+type RetrievalParameters struct {
+	ClassName               string         `json:"class_name"`
+	Alpha                   float64        `json:"alpha,omitempty"`
+	DenseSimilarityCutoff   float64        `json:"dense_similarity_cutoff,omitempty"`
+	DenseSimilarityTopK     int            `json:"dense_similarity_top_k,omitempty"`
+	EnableReranking         bool           `json:"enable_reranking"`
+	FilesTopK               int            `json:"files_top_k,omitempty"`
+	RerankTopN              int            `json:"rerank_top_n,omitempty"`
+	RetrievalMode           string         `json:"retrieval_mode"`
+	RetrievePageFigureNodes bool           `json:"retrieve_page_figure_nodes,omitempty"`
+	SearchFilters           *SearchFilters `json:"search_filters,omitempty"`
+	SparseSimilarityTopK    int            `json:"sparse_similarity_top_k,omitempty"`
+}
+
+type SearchFilters struct {
+	Condition string         `json:"condition"`
+	Filters   []SearchFilter `json:"filters"`
+}
+
+type SearchFilter struct {
+	Key      string      `json:"key"`
+	Operator string      `json:"operator"`
+	Value    interface{} `json:"value"`
+}
+
+type Message struct {
+	ClassName string `json:"class_name"`
+	Content   string `json:"content"`
+	Role      string `json:"role"`
+	ID        string `json:"id,omitempty"`
+}
+
+type ChatResponse struct {
+	Response string     `json:"response"`
+	Nodes    []NodeInfo `json:"nodes,omitempty"`
+}
+
+type NodeInfo struct {
+	ID       string                 `json:"id,omitempty"`
+	Text     string                 `json:"text,omitempty"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	Score    float64                `json:"score,omitempty"`
+}

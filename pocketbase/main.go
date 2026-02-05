@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/joho/godotenv"
+	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/chat"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/graph"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/uploads"
 
@@ -41,6 +42,10 @@ func main() {
 
 	if err := graph.Init(app); err != nil {
 		log.Fatal("Failed to initialize Graph hooks: ", err)
+	}
+
+	if err := chat.Init(app); err != nil {
+		log.Fatal("Failed to initialize Chat hooks: ", err)
 	}
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {

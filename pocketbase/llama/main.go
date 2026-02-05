@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"regexp"
+	"strings"
 
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -181,6 +183,112 @@ func (c *LlamaClient) AddFilesToPipeline(fileId string, metadata map[string]inte
 	}
 
 	return &response, nil
+}
+
+func (c *LlamaClient) Chat(req *ChatRequestBody) (*ChatResponse, error) {
+	if c.PipelineID == "" {
+		return nil, errors.New("pipeline ID is not configured")
+	}
+
+	endpoint := fmt.Sprintf("/api/v1/pipelines/%s/chat", c.PipelineID)
+	
+	// Make the request directly to capture raw response
+	fullURL, err := c.BaseURL.Parse(path.Join(c.BaseURL.Path, endpoint))
+	if err != nil {
+		return nil, err
+	}
+
+	bodyBytes, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq, err := http.NewRequest(http.MethodPost, fullURL.String(), bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq.Header.Add("Accept", "application/json")
+	httpReq.Header.Add("Authorization", "Bearer "+c.APIKey)
+	httpReq.Header.Add("Content-Type", "application/json")
+
+	resp, err := c.Client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("LlamaIndex: API request failed with status: %s, body: %s", resp.Status, string(respBody))
+	}
+
+	// Parse the streaming response format
+	// Format: 0:"text" for content, 8:[...] for sources
+	response := &ChatResponse{}
+	
+	bodyStr := string(respBody)
+	lines := strings.Split(bodyStr, "\n")
+	
+	var textParts []string
+	textRegex := regexp.MustCompile(`^0:"(.*)"$`)
+	sourcesRegex := regexp.MustCompile(`^8:(.+)$`)
+	
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		
+		// Check for text content (0:"...")
+		if matches := textRegex.FindStringSubmatch(line); len(matches) > 1 {
+			// Unescape the JSON string
+			var unescaped string
+			if err := json.Unmarshal([]byte(`"`+matches[1]+`"`), &unescaped); err == nil {
+				textParts = append(textParts, unescaped)
+			} else {
+				textParts = append(textParts, matches[1])
+			}
+		}
+		
+		// Check for sources data (8:[...])
+		if matches := sourcesRegex.FindStringSubmatch(line); len(matches) > 1 {
+			var sourcesData []struct {
+				Type string `json:"type"`
+				Data struct {
+					Nodes []struct {
+						ID       string                 `json:"id"`
+						Text     string                 `json:"text"`
+						Score    float64                `json:"score"`
+						Metadata map[string]interface{} `json:"metadata"`
+					} `json:"nodes"`
+				} `json:"data"`
+			}
+			
+			if err := json.Unmarshal([]byte(matches[1]), &sourcesData); err == nil {
+				for _, source := range sourcesData {
+					if source.Type == "sources" {
+						for _, n := range source.Data.Nodes {
+							response.Nodes = append(response.Nodes, NodeInfo{
+								ID:       n.ID,
+								Text:     n.Text,
+								Score:    n.Score,
+								Metadata: n.Metadata,
+							})
+						}
+					}
+				}
+			}
+		}
+	}
+	
+	response.Response = strings.Join(textParts, "")
+	
+	return response, nil
 }
 
 func (c *LlamaClient) Do(ctx context.Context, method, endpointPath string, queryParams url.Values, reqBody, resBody any) error {
