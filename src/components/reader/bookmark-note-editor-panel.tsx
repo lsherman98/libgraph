@@ -122,7 +122,7 @@ export function BookmarkEditorPanel() {
               placeholder="Add a comment about this bookmark..."
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              className="min-h-[120px] text-sm resize-none"
+              className="min-h-30 text-sm resize-none"
             />
           </div>
 
@@ -289,7 +289,7 @@ export function NoteEditorPanel() {
               placeholder="Write your note..."
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              className="min-h-[150px] text-sm resize-none"
+              className="min-h-37.5 text-sm resize-none"
               autoFocus
             />
           </div>

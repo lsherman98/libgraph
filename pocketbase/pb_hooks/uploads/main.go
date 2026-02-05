@@ -55,6 +55,13 @@ func Init(app *pocketbase.PocketBase) error {
 				status = jobRes.Job.Status
 			}
 
+			if status != "SUCCESS" && status != "COMPLETED" { // LlamaIndex returns "SUCCESS" in v2 parse sometimes, but enum says COMPLETED. Checking both or just reliance on enum.
+				e.App.Logger().Error("LlamaIndex Parse failed", "status", status)
+				upload.Set("status", "FAILED")
+				app.Save(upload)
+				return
+			}
+
 			pages := jobRes.Markdown.Pages
 
 			pagesCollection, err := app.FindCollectionByNameOrId(collections.Pages)
@@ -82,6 +89,28 @@ func Init(app *pocketbase.PocketBase) error {
 			upload.Set("num_pages", len(pages))
 			if err := app.Save(upload); err != nil {
 				e.App.Logger().Error("Failed to update upload status to SUCCESS:", "error", err)
+			}
+
+			// LlamaIndex Pipeline Integration
+			uploadRes, err := llamaClient.UploadFileFromURL(upload)
+			if err != nil {
+				e.App.Logger().Error("Failed to upload file to Llama Cloud:", "error", err)
+				return
+			}
+
+			metadata := map[string]interface{}{
+				"upload_id": upload.Id,
+				"title":     title,
+				"user_id":   upload.GetString("user"),
+				"topic_id":  upload.GetString("topic"),
+				"type":      upload.GetString("type"),
+				"author_id": upload.GetString("author"),
+			}
+
+			_, err = llamaClient.AddFilesToPipeline(uploadRes.ID, metadata)
+			if err != nil {
+				e.App.Logger().Error("Failed to add file to pipeline:", "error", err)
+				return
 			}
 		})
 

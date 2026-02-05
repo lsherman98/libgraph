@@ -67,3 +67,30 @@ type WebhookConfiguration struct {
 	WebhookEvents       []string          `json:"webhook_events,omitempty"`
 	WebhookOutputFormat string            `json:"webhook_output_format,omitempty"`
 }
+
+type UploadFileFromURLRequest struct {
+	Url             string `json:"url"`
+	Name            string `json:"name,omitempty"`
+	FollowRedirects bool   `json:"follow_redirects"`
+	VerifySsl       bool   `json:"verify_ssl"`
+}
+
+type UploadFileFromURLResponse struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	ProjectId string `json:"project_id"`
+	CreatedAt string `json:"created_at"`
+}
+
+type PipelineFile struct {
+	FileID         string                 `json:"file_id"`
+	CustomMetadata map[string]interface{} `json:"custom_metadata,omitempty"`
+}
+
+type PipelineFileResponse struct {
+	FileID     string `json:"file_id"`
+	PipelineID string `json:"pipeline_id"`
+	Status     string `json:"status"`
+}
+
+type AddFilesToPipelineResponse []PipelineFileResponse

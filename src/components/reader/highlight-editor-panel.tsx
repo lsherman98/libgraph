@@ -182,7 +182,7 @@ export function HighlightEditorPanel() {
               placeholder="Add a note about this highlight..."
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              className="min-h-[120px] text-sm resize-none"
+              className="min-h-30 text-sm resize-none"
             />
           </div>
 

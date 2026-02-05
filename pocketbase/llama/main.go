@@ -44,7 +44,7 @@ func buildS3Url(collectionId, recordId, filename string) string {
 }
 
 const (
-	parseBaseURL = "https://api.cloud.llamaindex.ai/api/v2/parse"
+	cloudBaseURL = "https://api.cloud.llamaindex.ai"
 )
 
 type LlamaClient struct {
@@ -52,12 +52,13 @@ type LlamaClient struct {
 	BaseURL        *url.URL
 	ProjectID      string
 	OrganizationID string
+	PipelineID     string
 	APIKey         string
 	App            *pocketbase.PocketBase
 }
 
 func New(app *pocketbase.PocketBase) (*LlamaClient, error) {
-	baseURL, err := url.Parse(parseBaseURL)
+	baseURL, err := url.Parse(cloudBaseURL)
 	if err != nil {
 		return nil, err
 	}
@@ -77,12 +78,18 @@ func New(app *pocketbase.PocketBase) (*LlamaClient, error) {
 		app.Logger().Warn("LLAMA_INDEX_ORGANIZATION_ID environment variable is not set; proceeding without it")
 	}
 
+	pipelineID := os.Getenv("LLAMA_INDEX_PIPELINE_ID")
+	if pipelineID == "" {
+		app.Logger().Warn("LLAMA_INDEX_PIPELINE_ID environment variable is not set; indexing will fail")
+	}
+
 	return &LlamaClient{
 		Client:         http.DefaultClient,
 		BaseURL:        baseURL,
 		APIKey:         apiKey,
 		ProjectID:      projectID,
 		OrganizationID: organizationId,
+		PipelineID:     pipelineID,
 		App:            app,
 	}, nil
 }
@@ -113,7 +120,7 @@ func (c *LlamaClient) Parse(upload *core.Record) (*ParseResponse, error) {
 		SourceURL: url,
 	}
 
-	if err := c.Do(context.Background(), http.MethodPost, "", params, body, &response); err != nil {
+	if err := c.Do(context.Background(), http.MethodPost, "/api/v2/parse", params, body, &response); err != nil {
 		return nil, err
 	}
 
@@ -127,7 +134,49 @@ func (c *LlamaClient) GetParseJob(jobId string) (*ParseJobResponse, error) {
 	params.Add("expand", "markdown")
 
 	var response ParseJobResponse
-	if err := c.Do(context.Background(), http.MethodGet, path.Join("/", jobId), params, nil, &response); err != nil {
+	if err := c.Do(context.Background(), http.MethodGet, path.Join("/api/v2/parse", jobId), params, nil, &response); err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
+func (c *LlamaClient) UploadFileFromURL(upload *core.Record) (*UploadFileFromURLResponse, error) {
+	params := url.Values{}
+	params.Add("project_id", c.ProjectID)
+
+	url := buildS3Url(upload.Collection().Id, upload.Id, upload.GetString("file"))
+
+	body := &UploadFileFromURLRequest{
+		Url:             url,
+		Name:            upload.GetString("file"),
+		FollowRedirects: true,
+		VerifySsl:       true,
+	}
+
+	var response UploadFileFromURLResponse
+	if err := c.Do(context.Background(), http.MethodPut, "/api/v1/files/upload_from_url", params, body, &response); err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
+func (c *LlamaClient) AddFilesToPipeline(fileId string, metadata map[string]interface{}) (*AddFilesToPipelineResponse, error) {
+	if c.PipelineID == "" {
+		return nil, errors.New("pipeline ID is not configured")
+	}
+
+	pipelineFile := PipelineFile{
+		FileID:         fileId,
+		CustomMetadata: metadata,
+	}
+
+	body := []PipelineFile{pipelineFile}
+
+	var response AddFilesToPipelineResponse
+	endpoint := fmt.Sprintf("/api/v1/pipelines/%s/files", c.PipelineID)
+	if err := c.Do(context.Background(), http.MethodPut, endpoint, nil, body, &response); err != nil {
 		return nil, err
 	}
 
