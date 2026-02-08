@@ -9,13 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { CreatableCombobox } from "@/components/creatable-combobox";
 
-import { useUpload, useCreateAuthor, useCreateTag, useCreateTopic } from "@/lib/api/mutations";
-import { useAuthors, useTags, useTopics } from "@/lib/api/queries";
+import { useUpload, useCreatePerson, useCreatePublication, useCreateTag, useCreateTopic } from "@/lib/api/mutations";
+import { usePeople, usePublications, useTags, useTopics } from "@/lib/api/queries";
 import { getUserRecord } from "@/lib/utils";
 import {
   UploadsStatusOptions,
   UploadsTypeOptions,
-  type AuthorsResponse,
+  type PeopleResponse,
+  type PublicationsResponse,
   type TagsResponse,
   type TopicsResponse,
 } from "@/lib/pocketbase-types";
@@ -29,7 +30,8 @@ interface FileMetadata {
   file: File;
   name: string;
   type: UploadsTypeOptions;
-  author: string;
+  subjects: string[];
+  publication: string;
   tags: string[];
   topics: string[];
   status: "PENDING" | "UPLOADING" | "SUCCESS" | "ERROR";
@@ -38,12 +40,14 @@ interface FileMetadata {
 function RouteComponent() {
   const [files, setFiles] = useState<FileMetadata[]>([]);
 
-  const authorsQuery = useAuthors();
+  const peopleQuery = usePeople();
+  const publicationsQuery = usePublications();
   const tagsQuery = useTags();
   const topicsQuery = useTopics();
 
   const uploadMutation = useUpload();
-  const createAuthorMutation = useCreateAuthor();
+  const createPersonMutation = useCreatePerson();
+  const createPublicationMutation = useCreatePublication();
   const createTagMutation = useCreateTag();
   const createTopicMutation = useCreateTopic();
 
@@ -53,7 +57,8 @@ function RouteComponent() {
       file,
       name: file.name.replace(/\.[^/.]+$/, ""),
       type: UploadsTypeOptions.book,
-      author: "",
+      subjects: [],
+      publication: "",
       tags: [],
       topics: [],
       status: "PENDING" as const,
@@ -83,7 +88,8 @@ function RouteComponent() {
           file: fileData.file,
           title: fileData.name,
           type: fileData.type,
-          author: fileData.author || undefined,
+          subjects: fileData.subjects.length > 0 ? fileData.subjects : undefined,
+          publication: fileData.publication || undefined,
           tags: fileData.tags.length > 0 ? fileData.tags : undefined,
           topic: fileData.topics.length > 0 ? fileData.topics : undefined,
           user: getUserRecord().id,
@@ -97,9 +103,13 @@ function RouteComponent() {
     }
   };
 
-  const authorOptions = (authorsQuery.data || []).map((a: AuthorsResponse) => ({
-    label: a.name || "Unknown",
-    value: a.id,
+  const subjectOptions = (peopleQuery.data || []).map((p: PeopleResponse) => ({
+    label: p.name || "Unknown",
+    value: p.id,
+  }));
+  const publicationOptions = (publicationsQuery.data || []).map((p: PublicationsResponse) => ({
+    label: p.name || "Unknown",
+    value: p.id,
   }));
   const tagOptions = (tagsQuery.data || []).map((t: TagsResponse) => ({ label: t.title || t.id, value: t.id }));
   const topicOptions = (topicsQuery.data || []).map((t: TopicsResponse) => ({
@@ -171,17 +181,36 @@ function RouteComponent() {
                       </SelectContent>
                     </Select>
                     <CreatableCombobox
-                      options={authorOptions}
-                      value={file.author}
+                      options={subjectOptions}
+                      value={file.subjects}
                       className="h-8 text-sm w-40 shrink-0"
-                      onSelect={(val) => updateFile(file.id, { author: val })}
+                      isMulti
+                      onSelect={(val) => {
+                        const newSubjects = file.subjects.includes(val)
+                          ? file.subjects.filter((s) => s !== val)
+                          : [...file.subjects, val];
+                        updateFile(file.id, { subjects: newSubjects });
+                      }}
                       onCreate={(name) => {
-                        createAuthorMutation.mutateAsync({ name, user: getUserRecord().id }).then((record) => {
-                          updateFile(file.id, { author: record.id });
+                        createPersonMutation.mutateAsync({ name, user: getUserRecord().id }).then((record) => {
+                          updateFile(file.id, { subjects: [...file.subjects, record.id] });
                         });
                       }}
-                      placeholder="Select Author"
-                      emptyText="No authors found."
+                      placeholder="Subjects"
+                      emptyText="No people found."
+                    />
+                    <CreatableCombobox
+                      options={publicationOptions}
+                      value={file.publication}
+                      className="h-8 text-sm w-40 shrink-0"
+                      onSelect={(val) => updateFile(file.id, { publication: val })}
+                      onCreate={(name) => {
+                        createPublicationMutation.mutateAsync({ name }).then((record) => {
+                          updateFile(file.id, { publication: record.id });
+                        });
+                      }}
+                      placeholder="Publication"
+                      emptyText="No publications found."
                     />
                     <CreatableCombobox
                       options={tagOptions}

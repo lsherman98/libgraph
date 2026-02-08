@@ -1,17 +1,28 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { useAuthors, useTags, useTopics, useUploads } from "@/lib/api/queries";
+import { usePeople, usePublications, useTags, useTopics, useUploads } from "@/lib/api/queries";
 import { sendChatMessage, type ChatMessage, type ChatFilters, type ChatSource } from "@/lib/api/api";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardTitle, CardDescription } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { MessageSquare, Send, Loader2, User, Bot, Filter, X, ChevronDown, FileText, BookOpen } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Loader2,
+  User,
+  Bot,
+  X,
+  FileText,
+  Sparkles,
+  ArrowUp,
+  Library,
+  SlidersHorizontal,
+  RotateCcw,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UploadsTypeOptions } from "@/lib/pocketbase-types";
 
@@ -29,11 +40,12 @@ function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [filters, setFilters] = useState<ChatFilters>({});
-  const [isFiltersOpen, setIsFiltersOpen] = useState(false);
+  const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { data: authors } = useAuthors();
+  const { data: people } = usePeople();
+  const { data: publications } = usePublications();
   const { data: tags } = useTags();
   const { data: topics } = useTopics();
   const { data: uploads } = useUploads();
@@ -45,6 +57,19 @@ function ChatPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Auto-resize textarea
+  const adjustTextareaHeight = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+    }
+  }, []);
+
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [input, adjustTextareaHeight]);
 
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
@@ -101,6 +126,15 @@ function ChatPage() {
     chatMutation.mutate(input.trim());
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      if (input.trim() && !chatMutation.isPending) {
+        chatMutation.mutate(input.trim());
+      }
+    }
+  };
+
   const handleFilterChange = (key: keyof ChatFilters, value: string) => {
     if (value === "all") {
       setFilters((prev) => {
@@ -121,195 +155,306 @@ function ChatPage() {
   };
 
   const hasActiveFilters = Object.values(filters).some((arr) => arr && arr.length > 0);
-
   const activeFilterCount = Object.values(filters).reduce((count, arr) => count + (arr?.length || 0), 0);
 
-  return (
-    <div className="flex flex-col h-full w-full max-w-4xl mx-auto p-4">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <MessageSquare className="h-6 w-6" />
-          <h1 className="text-2xl font-bold">Chat with your Library</h1>
-        </div>
-      </div>
+  const startNewChat = () => {
+    setMessages([]);
+    setInput("");
+  };
 
-      {/* Filters */}
-      <Collapsible open={isFiltersOpen} onOpenChange={setIsFiltersOpen}>
-        <div className="flex items-center gap-2 mb-4">
-          <CollapsibleTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2">
-              <Filter className="h-4 w-4" />
-              Filters
+  return (
+    <div className="flex h-full w-full">
+      {/* Left Filter Panel */}
+      {isFiltersPanelOpen && (
+        <div className="w-64 shrink-0 border-r border-border bg-muted/30 flex flex-col">
+          <div className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-semibold">Filters</span>
               {activeFilterCount > 0 && (
-                <Badge variant="secondary" className="ml-1">
+                <Badge variant="secondary" className="h-5 px-1.5 text-xs">
                   {activeFilterCount}
                 </Badge>
               )}
-              <ChevronDown className={cn("h-4 w-4 transition-transform", isFiltersOpen && "rotate-180")} />
-            </Button>
-          </CollapsibleTrigger>
-          {hasActiveFilters && (
-            <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1 text-muted-foreground">
+            </div>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsFiltersPanelOpen(false)}>
               <X className="h-4 w-4" />
-              Clear all
             </Button>
+          </div>
+          <Separator />
+          <ScrollArea className="flex-1">
+            <div className="p-4 space-y-5">
+              {/* Subject Filter */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Subject</label>
+                <Select
+                  value={filters.subjects?.[0] || "all"}
+                  onValueChange={(value) => handleFilterChange("subjects", value)}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="All subjects" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All subjects</SelectItem>
+                    {people?.map((person) => (
+                      <SelectItem key={person.id} value={person.id}>
+                        {person.name || "Unnamed"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Publication Filter */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Publication
+                </label>
+                <Select
+                  value={filters.publications?.[0] || "all"}
+                  onValueChange={(value) => handleFilterChange("publications", value)}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="All publications" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All publications</SelectItem>
+                    {publications?.map((pub) => (
+                      <SelectItem key={pub.id} value={pub.id}>
+                        {pub.name || "Unnamed"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Topic Filter */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Topic</label>
+                <Select
+                  value={filters.topics?.[0] || "all"}
+                  onValueChange={(value) => handleFilterChange("topics", value)}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="All topics" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All topics</SelectItem>
+                    {topics?.map((topic) => (
+                      <SelectItem key={topic.id} value={topic.id}>
+                        {topic.title || "Unnamed"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Tag Filter */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Tag</label>
+                <Select value={filters.tags?.[0] || "all"} onValueChange={(value) => handleFilterChange("tags", value)}>
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="All tags" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All tags</SelectItem>
+                    {tags?.map((tag) => (
+                      <SelectItem key={tag.id} value={tag.id}>
+                        {tag.title || "Unnamed"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Type Filter */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</label>
+                <Select
+                  value={filters.types?.[0] || "all"}
+                  onValueChange={(value) => handleFilterChange("types", value)}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="All types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All types</SelectItem>
+                    {Object.values(UploadsTypeOptions).map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type.charAt(0).toUpperCase() + type.slice(1)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Document Filter */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Document</label>
+                <Select
+                  value={filters.uploads?.[0] || "all"}
+                  onValueChange={(value) => handleFilterChange("uploads", value)}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="All documents" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All documents</SelectItem>
+                    {uploads?.map((upload) => (
+                      <SelectItem key={upload.id} value={upload.id}>
+                        {upload.title || "Untitled"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </ScrollArea>
+          {hasActiveFilters && (
+            <>
+              <Separator />
+              <div className="p-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearFilters}
+                  className="w-full gap-2 text-muted-foreground hover:text-foreground"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  Clear all filters
+                </Button>
+              </div>
+            </>
           )}
         </div>
-        <CollapsibleContent className="mb-4">
-          <Card>
-            <CardContent className="pt-4">
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                {/* Author Filter */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Author</label>
-                  <Select
-                    value={filters.authors?.[0] || "all"}
-                    onValueChange={(value) => handleFilterChange("authors", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All authors" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All authors</SelectItem>
-                      {authors?.map((author) => (
-                        <SelectItem key={author.id} value={author.id}>
-                          {author.name || "Unnamed"}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+      )}
 
-                {/* Topic Filter */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Topic</label>
-                  <Select
-                    value={filters.topics?.[0] || "all"}
-                    onValueChange={(value) => handleFilterChange("topics", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All topics" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All topics</SelectItem>
-                      {topics?.map((topic) => (
-                        <SelectItem key={topic.id} value={topic.id}>
-                          {topic.title || "Unnamed"}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Chat Header Bar */}
+        <div className="h-12 shrink-0 border-b border-border flex items-center justify-between px-4">
+          <div className="flex items-center gap-2">
+            {!isFiltersPanelOpen && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsFiltersPanelOpen(true)}>
+                      <SlidersHorizontal className="h-4 w-4" />
+                      {activeFilterCount > 0 && (
+                        <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
+                          {activeFilterCount}
+                        </span>
+                      )}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Show filters</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            <div className="flex items-center gap-2">
+              <Library className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Chat with your Library</span>
+            </div>
+          </div>
+          {messages.length > 0 && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="sm" onClick={startNewChat} className="gap-1.5 text-muted-foreground">
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    New chat
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Start a new conversation</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
 
-                {/* Tag Filter */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Tag</label>
-                  <Select
-                    value={filters.tags?.[0] || "all"}
-                    onValueChange={(value) => handleFilterChange("tags", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All tags" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All tags</SelectItem>
-                      {tags?.map((tag) => (
-                        <SelectItem key={tag.id} value={tag.id}>
-                          {tag.title || "Unnamed"}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+        {/* Messages Area */}
+        <div className="flex-1 overflow-y-auto">
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full px-4">
+              <div className="max-w-lg w-full text-center space-y-6">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-primary/10 to-primary/5 border border-primary/10">
+                  <Sparkles className="h-8 w-8 text-primary/70" />
                 </div>
-
-                {/* Type Filter */}
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Type</label>
-                  <Select
-                    value={filters.types?.[0] || "all"}
-                    onValueChange={(value) => handleFilterChange("types", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All types" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All types</SelectItem>
-                      {Object.values(UploadsTypeOptions).map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type.charAt(0).toUpperCase() + type.slice(1)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <h2 className="text-2xl font-semibold tracking-tight">Chat with your Library</h2>
+                  <p className="text-muted-foreground text-sm leading-relaxed max-w-sm mx-auto">
+                    Ask questions about your documents and get answers with sources. Use filters to narrow your search.
+                  </p>
                 </div>
-
-                {/* Upload Filter */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Document</label>
-                  <Select
-                    value={filters.uploads?.[0] || "all"}
-                    onValueChange={(value) => handleFilterChange("uploads", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="All documents" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All documents</SelectItem>
-                      {uploads?.map((upload) => (
-                        <SelectItem key={upload.id} value={upload.id}>
-                          {upload.title || "Untitled"}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-md mx-auto">
+                  {[
+                    "What are the key themes across my documents?",
+                    "Summarize the main arguments",
+                    "What do my sources say about this topic?",
+                    "Find connections between concepts",
+                  ].map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      onClick={() => {
+                        setInput(suggestion);
+                        textareaRef.current?.focus();
+                      }}
+                      className="text-left text-sm px-4 py-3 rounded-xl border border-border bg-card hover:bg-accent/50 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </CollapsibleContent>
-      </Collapsible>
-
-      {/* Messages Area */}
-      <Card className="flex-1 min-h-0 mb-4">
-        <ScrollArea className="h-full">
-          <CardContent className="p-4">
-            {messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64 text-center">
-                <div className="rounded-full bg-muted p-4 mb-4">
-                  <BookOpen className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <CardTitle className="mb-2">Start a conversation</CardTitle>
-                <CardDescription className="max-w-sm">
-                  Ask questions about your documents. Use the filters above to narrow down which documents to search.
-                </CardDescription>
-              </div>
-            ) : (
-              <div className="space-y-4">
+            </div>
+          ) : (
+            <div className="max-w-3xl mx-auto py-6 px-4">
+              <div className="space-y-6">
                 {messages.map((message) => (
                   <MessageBubble key={message.id} message={message} />
                 ))}
                 <div ref={messagesEndRef} />
               </div>
-            )}
-          </CardContent>
-        </ScrollArea>
-      </Card>
+            </div>
+          )}
+        </div>
 
-      {/* Input Area */}
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <Input
-          ref={inputRef}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask a question about your documents..."
-          disabled={chatMutation.isPending}
-          className="flex-1"
-        />
-        <Button type="submit" disabled={!input.trim() || chatMutation.isPending}>
-          {chatMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-        </Button>
-      </form>
+        {/* Input Area */}
+        <div className="shrink-0 border-t border-border bg-background">
+          <div className="max-w-3xl mx-auto px-4 py-4">
+            <form onSubmit={handleSubmit} className="relative">
+              <div className="relative flex items-end rounded-2xl border border-border bg-muted/50 focus-within:border-ring focus-within:ring-1 focus-within:ring-ring transition-shadow">
+                <Textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask a question about your documents..."
+                  disabled={chatMutation.isPending}
+                  rows={1}
+                  className="min-h-11 max-h-50 resize-none border-0 bg-transparent px-4 py-3 pr-12 text-sm focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
+                />
+                <div className="absolute right-2 bottom-2">
+                  <Button
+                    type="submit"
+                    size="icon"
+                    disabled={!input.trim() || chatMutation.isPending}
+                    className="h-8 w-8 rounded-lg"
+                  >
+                    {chatMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ArrowUp className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </form>
+            <p className="text-[11px] text-muted-foreground/60 text-center mt-2">
+              Answers are generated from your library. Always verify with original sources.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -319,40 +464,42 @@ function MessageBubble({ message }: { message: Message }) {
 
   if (message.isLoading) {
     return (
-      <div className="flex items-start gap-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground shrink-0">
+      <div className="flex gap-4">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-primary to-primary/80 text-primary-foreground">
           <Bot className="h-4 w-4" />
         </div>
-        <div className="flex-1 space-y-2">
-          <Skeleton className="h-4 w-3/4" />
-          <Skeleton className="h-4 w-1/2" />
+        <div className="flex-1 space-y-3 pt-1">
+          <Skeleton className="h-4 w-3/4 rounded-lg" />
+          <Skeleton className="h-4 w-1/2 rounded-lg" />
+          <Skeleton className="h-4 w-2/3 rounded-lg" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className={cn("flex items-start gap-3", isUser && "flex-row-reverse")}>
+    <div className="flex gap-4">
       <div
         className={cn(
-          "flex h-8 w-8 items-center justify-center rounded-full shrink-0",
-          isUser ? "bg-secondary text-secondary-foreground" : "bg-primary text-primary-foreground",
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
+          isUser
+            ? "bg-secondary text-secondary-foreground"
+            : "bg-linear-to-br from-primary to-primary/80 text-primary-foreground",
         )}
       >
         {isUser ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
       </div>
-      <div className={cn("flex flex-col gap-2 max-w-[80%]", isUser && "items-end")}>
-        <div className={cn("rounded-lg px-4 py-2", isUser ? "bg-secondary" : "bg-muted")}>
-          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-        </div>
+      <div className="flex-1 min-w-0 space-y-3 pt-1">
+        <div className="text-sm font-medium text-muted-foreground">{isUser ? "You" : "Assistant"}</div>
+        <div className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</div>
         {message.sources && message.sources.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 pt-1">
             {message.sources.map((source, idx) => (
               <Link
                 key={idx}
                 to="/workspace"
                 search={{ id: source.upload_id, type: "upload" }}
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
               >
                 <FileText className="h-3 w-3" />
                 {source.title || "Document"}

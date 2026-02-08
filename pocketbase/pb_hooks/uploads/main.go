@@ -99,12 +99,12 @@ func Init(app *pocketbase.PocketBase) error {
 			}
 
 			metadata := map[string]interface{}{
-				"upload_id": upload.Id,
-				"title":     title,
-				"user_id":   upload.GetString("user"),
-				"topic_id":  upload.GetString("topic"),
-				"type":      upload.GetString("type"),
-				"author_id": upload.GetString("author"),
+				"upload_id":      upload.Id,
+				"title":          title,
+				"user_id":        upload.GetString("user"),
+				"topic_id":       upload.GetString("topic"),
+				"type":           upload.GetString("type"),
+				"publication_id": upload.GetString("publication"),
 			}
 
 			_, err = llamaClient.AddFilesToPipeline(uploadRes.ID, metadata)

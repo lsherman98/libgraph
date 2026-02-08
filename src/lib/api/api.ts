@@ -15,12 +15,20 @@ export const upload = async (upload: Create<Collections.Uploads>) => {
     return await pb.collection(Collections.Uploads).create(upload)
 }
 
-export const getAuthors = async () => {
-    return await pb.collection(Collections.Authors).getFullList({ sort: 'name' })
+export const getPeople = async () => {
+    return await pb.collection(Collections.People).getFullList({ sort: 'name' })
 }
 
-export const createAuthor = async (data: Create<Collections.Authors>) => {
-    return await pb.collection(Collections.Authors).create(data)
+export const createPerson = async (data: Create<Collections.People>) => {
+    return await pb.collection(Collections.People).create(data)
+}
+
+export const getPublications = async () => {
+    return await pb.collection(Collections.Publications).getFullList({ sort: 'name' })
+}
+
+export const createPublication = async (data: Create<Collections.Publications>) => {
+    return await pb.collection(Collections.Publications).create(data)
 }
 
 export const getTags = async () => {
@@ -42,7 +50,7 @@ export const createTopic = async (data: Create<Collections.Topics>) => {
 export const getUploads = async () => {
     return await pb.collection(Collections.Uploads).getFullList({
         sort: '-created',
-        expand: 'author,topic,tags'
+        expand: 'subjects,publication,topic,tags'
     })
 }
 
@@ -318,7 +326,7 @@ export const getWorkspaceMaterials = async () => {
         pb.collection(Collections.Uploads).getFullList({
             filter: `user = "${userId}"`,
             sort: '-created',
-            expand: 'author,tags'
+            expand: 'subjects,publication,tags'
         }),
         pb.collection(Collections.Highlights).getFullList({
             filter: `user = "${userId}"`,
@@ -348,7 +356,8 @@ export interface ChatMessage {
 
 export interface ChatFilters {
     tags?: string[];
-    authors?: string[];
+    subjects?: string[];
+    publications?: string[];
     types?: string[];
     topics?: string[];
     uploads?: string[];

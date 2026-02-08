@@ -18,11 +18,12 @@ type ChatRequest struct {
 }
 
 type MetadataFilters struct {
-	Tags    []string `json:"tags,omitempty"`
-	Authors []string `json:"authors,omitempty"`
-	Types   []string `json:"types,omitempty"`
-	Topics  []string `json:"topics,omitempty"`
-	Uploads []string `json:"uploads,omitempty"`
+	Tags         []string `json:"tags,omitempty"`
+	Subjects     []string `json:"subjects,omitempty"`
+	Publications []string `json:"publications,omitempty"`
+	Types        []string `json:"types,omitempty"`
+	Topics       []string `json:"topics,omitempty"`
+	Uploads      []string `json:"uploads,omitempty"`
 }
 
 type ChatMessage struct {
@@ -162,12 +163,21 @@ func buildSearchFilters(filters *MetadataFilters) *llama.SearchFilters {
 		})
 	}
 
-	// Add author filters
-	for _, author := range filters.Authors {
+	// Add subject filters
+	for _, subject := range filters.Subjects {
 		filterList = append(filterList, llama.SearchFilter{
-			Key:      "author_id",
+			Key:      "subject_id",
 			Operator: "==",
-			Value:    author,
+			Value:    subject,
+		})
+	}
+
+	// Add publication filters
+	for _, pub := range filters.Publications {
+		filterList = append(filterList, llama.SearchFilter{
+			Key:      "publication_id",
+			Operator: "==",
+			Value:    pub,
 		})
 	}
 

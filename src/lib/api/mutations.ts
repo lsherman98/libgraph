@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { upload, createAuthor, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createNode, updateNode, deleteNode, createEdge, updateEdge, deleteEdge, createWritingProject, updateWritingProject, deleteWritingProject } from "./api";
+import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createNode, updateNode, deleteNode, createEdge, updateEdge, deleteEdge, createWritingProject, updateWritingProject, deleteWritingProject } from "./api";
 import { handleError } from "../utils";
 import { Collections, type Create } from "../pocketbase-types";
 
@@ -15,14 +15,26 @@ export function useUpload() {
     })
 }
 
-export function useCreateAuthor() {
+export function useCreatePerson() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (record: Create<Collections.Authors>) => createAuthor(record),
+        mutationFn: (record: Create<Collections.People>) => createPerson(record),
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["authors"] });
+            queryClient.invalidateQueries({ queryKey: ["people"] });
+        },
+    })
+}
+
+export function useCreatePublication() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (record: Create<Collections.Publications>) => createPublication(record),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["publications"] });
         },
     })
 }

@@ -191,7 +191,7 @@ func (c *LlamaClient) Chat(req *ChatRequestBody) (*ChatResponse, error) {
 	}
 
 	endpoint := fmt.Sprintf("/api/v1/pipelines/%s/chat", c.PipelineID)
-	
+
 	// Make the request directly to capture raw response
 	fullURL, err := c.BaseURL.Parse(path.Join(c.BaseURL.Path, endpoint))
 	if err != nil {
@@ -230,20 +230,20 @@ func (c *LlamaClient) Chat(req *ChatRequestBody) (*ChatResponse, error) {
 	// Parse the streaming response format
 	// Format: 0:"text" for content, 8:[...] for sources
 	response := &ChatResponse{}
-	
+
 	bodyStr := string(respBody)
 	lines := strings.Split(bodyStr, "\n")
-	
+
 	var textParts []string
 	textRegex := regexp.MustCompile(`^0:"(.*)"$`)
 	sourcesRegex := regexp.MustCompile(`^8:(.+)$`)
-	
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		
+
 		// Check for text content (0:"...")
 		if matches := textRegex.FindStringSubmatch(line); len(matches) > 1 {
 			// Unescape the JSON string
@@ -254,7 +254,7 @@ func (c *LlamaClient) Chat(req *ChatRequestBody) (*ChatResponse, error) {
 				textParts = append(textParts, matches[1])
 			}
 		}
-		
+
 		// Check for sources data (8:[...])
 		if matches := sourcesRegex.FindStringSubmatch(line); len(matches) > 1 {
 			var sourcesData []struct {
@@ -268,7 +268,7 @@ func (c *LlamaClient) Chat(req *ChatRequestBody) (*ChatResponse, error) {
 					} `json:"nodes"`
 				} `json:"data"`
 			}
-			
+
 			if err := json.Unmarshal([]byte(matches[1]), &sourcesData); err == nil {
 				for _, source := range sourcesData {
 					if source.Type == "sources" {
@@ -285,9 +285,9 @@ func (c *LlamaClient) Chat(req *ChatRequestBody) (*ChatResponse, error) {
 			}
 		}
 	}
-	
+
 	response.Response = strings.Join(textParts, "")
-	
+
 	return response, nil
 }
 

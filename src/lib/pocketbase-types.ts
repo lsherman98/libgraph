@@ -11,13 +11,14 @@ export enum Collections {
 	Mfas = "_mfas",
 	Otps = "_otps",
 	Superusers = "_superusers",
-	Authors = "authors",
 	Bookmarks = "bookmarks",
 	Edges = "edges",
 	Highlights = "highlights",
 	Nodes = "nodes",
 	Notes = "notes",
 	Pages = "pages",
+	People = "people",
+	Publications = "publications",
 	Tags = "tags",
 	Topics = "topics",
 	Uploads = "uploads",
@@ -34,8 +35,8 @@ export type HTMLString = string
 
 type ExpandType<T> = unknown extends T
 	? T extends unknown
-		? { expand?: unknown }
-		: { expand: T }
+	? { expand?: unknown }
+	: { expand: T }
 	: { expand: T }
 
 // System fields
@@ -103,22 +104,6 @@ export type SuperusersRecord = {
 	verified?: boolean
 }
 
-export enum AuthorsTypeOptions {
-	"youtube_channel" = "youtube_channel",
-	"author" = "author",
-	"publication" = "publication",
-	"podcast" = "podcast",
-}
-export type AuthorsRecord = {
-	created: IsoAutoDateString
-	id: string
-	name?: string
-	source?: string
-	type?: AuthorsTypeOptions
-	updated: IsoAutoDateString
-	user?: RecordIdString
-}
-
 export type BookmarksRecord = {
 	block_id?: string
 	comment?: string
@@ -139,6 +124,8 @@ export enum EdgesTypeOptions {
 	"highlight_of" = "highlight_of",
 	"bookmark_of" = "bookmark_of",
 	"note_of" = "note_of",
+	"published_by" = "published_by",
+	"about_person" = "about_person",
 }
 export type EdgesRecord = {
 	created: IsoAutoDateString
@@ -174,6 +161,7 @@ export type HighlightsRecord = {
 
 export enum NodesTypeOptions {
 	"author" = "author",
+	"publication" = "publication",
 	"tag" = "tag",
 	"topic" = "topic",
 	"upload" = "upload",
@@ -212,6 +200,37 @@ export type PagesRecord = {
 	upload?: RecordIdString
 }
 
+export enum PeopleTypeOptions {
+	"youtube_channel" = "youtube_channel",
+	"author" = "author",
+	"publication" = "publication",
+	"podcast" = "podcast",
+}
+export type PeopleRecord = {
+	created: IsoAutoDateString
+	id: string
+	name?: string
+	source?: string
+	type?: PeopleTypeOptions
+	updated: IsoAutoDateString
+	user?: RecordIdString
+}
+
+export enum PublicationsTypeOptions {
+	"podcast" = "podcast",
+	"youtube_channel" = "youtube_channel",
+	"blog" = "blog",
+	"other" = "other",
+}
+export type PublicationsRecord = {
+	created: IsoAutoDateString
+	id: string
+	name?: string
+	type?: PublicationsTypeOptions
+	updated: IsoAutoDateString
+	url?: string
+}
+
 export type TagsRecord = {
 	created: IsoAutoDateString
 	id: string
@@ -244,12 +263,13 @@ export enum UploadsStatusOptions {
 	"SUCCESS" = "SUCCESS",
 }
 export type UploadsRecord = {
-	author?: RecordIdString
 	created: IsoAutoDateString
 	file?: FileNameString
 	id: string
 	num_pages?: number
+	publication?: RecordIdString
 	status?: UploadsStatusOptions
+	subjects?: RecordIdString[]
 	tags?: RecordIdString[]
 	title?: string
 	topic?: RecordIdString[]
@@ -298,13 +318,14 @@ export type ExternalauthsResponse<Texpand = unknown> = Required<ExternalauthsRec
 export type MfasResponse<Texpand = unknown> = Required<MfasRecord> & BaseSystemFields<Texpand>
 export type OtpsResponse<Texpand = unknown> = Required<OtpsRecord> & BaseSystemFields<Texpand>
 export type SuperusersResponse<Texpand = unknown> = Required<SuperusersRecord> & AuthSystemFields<Texpand>
-export type AuthorsResponse<Texpand = unknown> = Required<AuthorsRecord> & BaseSystemFields<Texpand>
 export type BookmarksResponse<Texpand = unknown> = Required<BookmarksRecord> & BaseSystemFields<Texpand>
 export type EdgesResponse<Texpand = unknown> = Required<EdgesRecord> & BaseSystemFields<Texpand>
 export type HighlightsResponse<Texpand = unknown> = Required<HighlightsRecord> & BaseSystemFields<Texpand>
 export type NodesResponse<Texpand = unknown> = Required<NodesRecord> & BaseSystemFields<Texpand>
 export type NotesResponse<Texpand = unknown> = Required<NotesRecord> & BaseSystemFields<Texpand>
 export type PagesResponse<Texpand = unknown> = Required<PagesRecord> & BaseSystemFields<Texpand>
+export type PeopleResponse<Texpand = unknown> = Required<PeopleRecord> & BaseSystemFields<Texpand>
+export type PublicationsResponse<Texpand = unknown> = Required<PublicationsRecord> & BaseSystemFields<Texpand>
 export type TagsResponse<Texpand = unknown> = Required<TagsRecord> & BaseSystemFields<Texpand>
 export type TopicsResponse<Texpand = unknown> = Required<TopicsRecord> & BaseSystemFields<Texpand>
 export type UploadsResponse<Texpand = unknown> = Required<UploadsRecord> & BaseSystemFields<Texpand>
@@ -319,13 +340,14 @@ export type CollectionRecords = {
 	_mfas: MfasRecord
 	_otps: OtpsRecord
 	_superusers: SuperusersRecord
-	authors: AuthorsRecord
 	bookmarks: BookmarksRecord
 	edges: EdgesRecord
 	highlights: HighlightsRecord
 	nodes: NodesRecord
 	notes: NotesRecord
 	pages: PagesRecord
+	people: PeopleRecord
+	publications: PublicationsRecord
 	tags: TagsRecord
 	topics: TopicsRecord
 	uploads: UploadsRecord
@@ -339,13 +361,14 @@ export type CollectionResponses = {
 	_mfas: MfasResponse
 	_otps: OtpsResponse
 	_superusers: SuperusersResponse
-	authors: AuthorsResponse
 	bookmarks: BookmarksResponse
 	edges: EdgesResponse
 	highlights: HighlightsResponse
 	nodes: NodesResponse
 	notes: NotesResponse
 	pages: PagesResponse
+	people: PeopleResponse
+	publications: PublicationsResponse
 	tags: TagsResponse
 	topics: TopicsResponse
 	uploads: UploadsResponse
@@ -357,13 +380,13 @@ export type CollectionResponses = {
 
 type ProcessCreateAndUpdateFields<T> = Omit<{
 	// Omit AutoDate fields
-	[K in keyof T as Extract<T[K], IsoAutoDateString> extends never ? K : never]: 
-		// Convert FileNameString to File
-		T[K] extends infer U ? 
-			U extends (FileNameString | FileNameString[]) ? 
-				U extends any[] ? File[] : File 
-			: U
-		: never
+	[K in keyof T as Extract<T[K], IsoAutoDateString> extends never ? K : never]:
+	// Convert FileNameString to File
+	T[K] extends infer U ?
+	U extends (FileNameString | FileNameString[]) ?
+	U extends any[] ? File[] : File
+	: U
+	: never
 }, 'id'>
 
 // Create type for Auth collections
@@ -401,14 +424,14 @@ export type UpdateBase<T> = Partial<
 // Get the correct create type for any collection
 export type Create<T extends keyof CollectionResponses> =
 	CollectionResponses[T] extends AuthSystemFields
-		? CreateAuth<CollectionRecords[T]>
-		: CreateBase<CollectionRecords[T]>
+	? CreateAuth<CollectionRecords[T]>
+	: CreateBase<CollectionRecords[T]>
 
 // Get the correct update type for any collection
 export type Update<T extends keyof CollectionResponses> =
 	CollectionResponses[T] extends AuthSystemFields
-		? UpdateAuth<CollectionRecords[T]>
-		: UpdateBase<CollectionRecords[T]>
+	? UpdateAuth<CollectionRecords[T]>
+	: UpdateBase<CollectionRecords[T]>
 
 // Type for usage with type asserted PocketBase instance
 // https://github.com/pocketbase/js-sdk#specify-typescript-definitions

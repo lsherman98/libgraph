@@ -3,7 +3,8 @@ import type {
     UploadsResponse,
     HighlightsResponse,
     BookmarksResponse,
-    AuthorsResponse,
+    PeopleResponse,
+    PublicationsResponse,
     TagsResponse,
     TopicsResponse,
     PagesResponse,
@@ -15,7 +16,8 @@ export type NodeRecordData =
     | UploadsResponse
     | HighlightsResponse
     | BookmarksResponse
-    | AuthorsResponse
+    | PeopleResponse
+    | PublicationsResponse
     | TagsResponse
     | TopicsResponse
     | PagesResponse;
@@ -33,7 +35,9 @@ export type NodeRecordDataByType<T extends NodesTypeOptions> = T extends "upload
     : T extends "bookmark"
     ? BookmarksResponse
     : T extends "author"
-    ? AuthorsResponse
+    ? PeopleResponse
+    : T extends "publication"
+    ? PublicationsResponse
     : T extends "tag"
     ? TagsResponse
     : T extends "topic"

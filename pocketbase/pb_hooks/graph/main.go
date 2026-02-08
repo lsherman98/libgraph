@@ -10,13 +10,14 @@ import (
 type NodeType string
 
 const (
-	NodeTypeUpload    NodeType = "upload"
-	NodeTypeHighlight NodeType = "highlight"
-	NodeTypeBookmark  NodeType = "bookmark"
-	NodeTypeAuthor    NodeType = "author"
-	NodeTypeTag       NodeType = "tag"
-	NodeTypeTopic     NodeType = "topic"
-	NodeTypeNote      NodeType = "note"
+	NodeTypeUpload      NodeType = "upload"
+	NodeTypeHighlight   NodeType = "highlight"
+	NodeTypeBookmark    NodeType = "bookmark"
+	NodeTypeAuthor      NodeType = "author"
+	NodeTypePublication NodeType = "publication"
+	NodeTypeTag         NodeType = "tag"
+	NodeTypeTopic       NodeType = "topic"
+	NodeTypeNote        NodeType = "note"
 )
 
 type EdgeType string
@@ -28,11 +29,14 @@ const (
 	EdgeTypeHighlightOf EdgeType = "highlight_of"
 	EdgeTypeBookmarkOf  EdgeType = "bookmark_of"
 	EdgeTypeNoteOf      EdgeType = "note_of"
+	EdgeTypePublishedBy EdgeType = "published_by"
+	EdgeTypeAboutPerson EdgeType = "about_person"
 )
 
 func Init(app *pocketbase.PocketBase) error {
 	registerUploadHooks(app)
-	registerAuthorHooks(app)
+	registerPeopleHooks(app)
+	registerPublicationHooks(app)
 	registerTagHooks(app)
 	registerTopicHooks(app)
 	registerHighlightHooks(app)
@@ -41,27 +45,6 @@ func Init(app *pocketbase.PocketBase) error {
 
 	return nil
 }
-
-// func getCollectionForNodeType(nodeType string) (string, error) {
-// 	switch NodeType(nodeType) {
-// 	case NodeTypeUpload:
-// 		return collections.Uploads, nil
-// 	case NodeTypeHighlight:
-// 		return collections.Highlights, nil
-// 	case NodeTypeBookmark:
-// 		return collections.Bookmarks, nil
-// 	case NodeTypeAuthor:
-// 		return collections.Authors, nil
-// 	case NodeTypeTag:
-// 		return collections.Tags, nil
-// 	case NodeTypeTopic:
-// 		return collections.Topics, nil
-// 	case NodeTypeNote:
-// 		return collections.Notes, nil
-// 	default:
-// 		return "", fmt.Errorf("unknown node type: %s", nodeType)
-// 	}
-// }
 
 func createNode(app *pocketbase.PocketBase, recordId string, nodeType NodeType, userId string) (string, error) {
 	nodesCollection, err := app.FindCollectionByNameOrId(collections.Nodes)
@@ -142,11 +125,21 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 			return e.Next()
 		}
 
-		authorId := upload.GetString("author")
-		if authorId != "" {
-			authorNode, _ := findNodeByRecord(app, authorId, userId, NodeTypeAuthor)
-			if authorNode != nil {
-				createEdge(app, authorNode.Id, nodeId, EdgeTypeAuthoredBy, userId)
+		// Create edges for subjects (people the upload is about)
+		subjects := upload.GetStringSlice("subjects")
+		for _, subjectId := range subjects {
+			subjectNode, _ := findNodeByRecord(app, subjectId, userId, NodeTypeAuthor)
+			if subjectNode != nil {
+				createEdge(app, subjectNode.Id, nodeId, EdgeTypeAboutPerson, userId)
+			}
+		}
+
+		// Create edge for publication (source of the upload)
+		publicationId := upload.GetString("publication")
+		if publicationId != "" {
+			pubNode, _ := findNodeByRecord(app, publicationId, userId, NodeTypePublication)
+			if pubNode != nil {
+				createEdge(app, pubNode.Id, nodeId, EdgeTypePublishedBy, userId)
 			}
 		}
 
@@ -177,22 +170,45 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 	})
 }
 
-func registerAuthorHooks(app *pocketbase.PocketBase) {
-	app.OnRecordAfterCreateSuccess(collections.Authors).BindFunc(func(e *core.RecordEvent) error {
-		author := e.Record
-		userId := author.GetString("user")
+func registerPeopleHooks(app *pocketbase.PocketBase) {
+	app.OnRecordAfterCreateSuccess(collections.People).BindFunc(func(e *core.RecordEvent) error {
+		person := e.Record
+		userId := person.GetString("user")
 
-		_, err := createNode(app, author.Id, NodeTypeAuthor, userId)
+		_, err := createNode(app, person.Id, NodeTypeAuthor, userId)
 		if err != nil {
-			e.App.Logger().Error("Failed to create node for author:", "error", err)
+			e.App.Logger().Error("Failed to create node for person:", "error", err)
 		}
 
 		return e.Next()
 	})
 
-	app.OnRecordAfterDeleteSuccess(collections.Authors).BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordAfterDeleteSuccess(collections.People).BindFunc(func(e *core.RecordEvent) error {
 		if err := deleteNodeAndEdges(app, e.Record.Id, e.Record.GetString("user"), NodeTypeAuthor); err != nil {
-			e.App.Logger().Error("Failed to delete node and edges for author:", "error", err)
+			e.App.Logger().Error("Failed to delete node and edges for person:", "error", err)
+		}
+		return e.Next()
+	})
+}
+
+func registerPublicationHooks(app *pocketbase.PocketBase) {
+	app.OnRecordAfterCreateSuccess(collections.Publications).BindFunc(func(e *core.RecordEvent) error {
+		pub := e.Record
+		// Publications don't have a user field, use empty string
+		// The node will be associated via edges to uploads which have users
+		userId := pub.GetString("user")
+
+		_, err := createNode(app, pub.Id, NodeTypePublication, userId)
+		if err != nil {
+			e.App.Logger().Error("Failed to create node for publication:", "error", err)
+		}
+
+		return e.Next()
+	})
+
+	app.OnRecordAfterDeleteSuccess(collections.Publications).BindFunc(func(e *core.RecordEvent) error {
+		if err := deleteNodeAndEdges(app, e.Record.Id, e.Record.GetString("user"), NodeTypePublication); err != nil {
+			e.App.Logger().Error("Failed to delete node and edges for publication:", "error", err)
 		}
 		return e.Next()
 	})

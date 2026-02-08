@@ -37,6 +37,12 @@ const typeConfig: Record<
     bgColor: "bg-purple-100 dark:bg-purple-900/30",
     stroke: "#9333ea",
   },
+  [NodesTypeOptions.publication]: {
+    icon: FileText,
+    color: "text-sky-600 dark:text-sky-400",
+    bgColor: "bg-sky-100 dark:bg-sky-900/30",
+    stroke: "#0ea5e9",
+  },
   [NodesTypeOptions.tag]: {
     icon: Tag,
     color: "text-green-600 dark:text-green-400",
@@ -77,6 +83,8 @@ const edgeTypeColors: Record<EdgesTypeOptions, string> = {
   [EdgesTypeOptions.highlight_of]: "#eab308",
   [EdgesTypeOptions.bookmark_of]: "#ef4444",
   [EdgesTypeOptions.note_of]: "#475569",
+  [EdgesTypeOptions.published_by]: "#0ea5e9",
+  [EdgesTypeOptions.about_person]: "#d946ef",
 };
 
 interface LayoutNode {

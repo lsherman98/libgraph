@@ -25,7 +25,8 @@ import {
   type UploadsResponse,
   type HighlightsResponse,
   type BookmarksResponse,
-  type AuthorsResponse,
+  type PeopleResponse,
+  type PublicationsResponse,
   type TagsResponse,
   type TopicsResponse,
   type PagesResponse,
@@ -46,7 +47,13 @@ const typeConfig: Record<NodesTypeOptions, { icon: React.ElementType; color: str
       icon: User,
       color: "text-purple-600 dark:text-purple-400",
       bgColor: "bg-purple-100 dark:bg-purple-900/30",
-      label: "Author",
+      label: "Person",
+    },
+    [NodesTypeOptions.publication]: {
+      icon: FileText,
+      color: "text-sky-600 dark:text-sky-400",
+      bgColor: "bg-sky-100 dark:bg-sky-900/30",
+      label: "Publication",
     },
     [NodesTypeOptions.tag]: {
       icon: Tag,
@@ -232,12 +239,12 @@ function BookmarkDetail({ data }: { data: BookmarksResponse }) {
   );
 }
 
-// Author detail component
-function AuthorDetail({ data }: { data: AuthorsResponse }) {
+// Person detail component
+function PersonDetail({ data }: { data: PeopleResponse }) {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-semibold">{data.name || "Unknown Author"}</h3>
+        <h3 className="text-lg font-semibold">{data.name || "Unknown Person"}</h3>
         <Badge variant="secondary" className="mt-1 capitalize">
           {data.type?.replace("_", " ")}
         </Badge>
@@ -253,6 +260,34 @@ function AuthorDetail({ data }: { data: AuthorsResponse }) {
             className="text-sm text-primary hover:underline"
           >
             {data.source}
+          </a>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Calendar className="h-4 w-4" />
+        <span>Added {formatDate(data.created)}</span>
+      </div>
+    </div>
+  );
+}
+
+// Publication detail component
+function PublicationDetail({ data }: { data: PublicationsResponse }) {
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-lg font-semibold">{data.name || "Unknown Publication"}</h3>
+        <Badge variant="secondary" className="mt-1 capitalize">
+          {data.type?.replace("_", " ")}
+        </Badge>
+      </div>
+
+      {data.url && (
+        <div>
+          <span className="text-sm text-muted-foreground">URL: </span>
+          <a href={data.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
+            {data.url}
           </a>
         </div>
       )}
@@ -340,7 +375,9 @@ function renderRecordDetail(type: NodesTypeOptions, recordData: NodeRecordData) 
     case NodesTypeOptions.bookmark:
       return <BookmarkDetail data={recordData as BookmarksResponse} />;
     case NodesTypeOptions.author:
-      return <AuthorDetail data={recordData as AuthorsResponse} />;
+      return <PersonDetail data={recordData as PeopleResponse} />;
+    case NodesTypeOptions.publication:
+      return <PublicationDetail data={recordData as PublicationsResponse} />;
     case NodesTypeOptions.tag:
       return <TagDetail data={recordData as TagsResponse} />;
     case NodesTypeOptions.topic:

@@ -1167,7 +1167,7 @@ export function ReaderPane({
     if (uploadId) {
       pb.collection(Collections.Uploads)
         .getOne(uploadId, {
-          expand: "author,topic,tags",
+          expand: "subjects,publication,topic,tags",
         })
         .then((data) => {
           setUpload(data);

@@ -1,10 +1,18 @@
 import { keepPreviousData, useQuery, useInfiniteQuery } from "@tanstack/react-query";
-import { getAuthors, getFirstPage, getPages, getPageUrl, getTags, getTopics, getUploads, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials } from "./api";
+import { getPeople, getPublications, getFirstPage, getPages, getPageUrl, getTags, getTopics, getUploads, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials } from "./api";
 
-export function useAuthors() {
+export function usePeople() {
     return useQuery({
-        queryKey: ["authors"],
-        queryFn: getAuthors,
+        queryKey: ["people"],
+        queryFn: getPeople,
+        placeholderData: keepPreviousData
+    });
+}
+
+export function usePublications() {
+    return useQuery({
+        queryKey: ["publications"],
+        queryFn: getPublications,
         placeholderData: keepPreviousData
     });
 }

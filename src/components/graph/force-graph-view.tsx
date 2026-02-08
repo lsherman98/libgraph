@@ -16,6 +16,7 @@ interface ForceGraphViewProps {
 const typeColors: Record<NodesTypeOptions, string> = {
   [NodesTypeOptions.upload]: "#3b82f6",
   [NodesTypeOptions.author]: "#9333ea",
+  [NodesTypeOptions.publication]: "#0ea5e9",
   [NodesTypeOptions.tag]: "#22c55e",
   [NodesTypeOptions.topic]: "#f97316",
   [NodesTypeOptions.highlight]: "#eab308",
