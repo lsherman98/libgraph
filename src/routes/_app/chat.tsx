@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { usePeople, usePublications, useTags, useTopics, useUploads } from "@/lib/api/queries";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { usePeople, usePublications, useTags, useTopics, useUploads, useMessages } from "@/lib/api/queries";
+import { useCreateChat, useCreateMessage } from "@/lib/api/mutations";
 import { sendChatMessage, type ChatMessage, type ChatFilters, type ChatSource } from "@/lib/api/api";
+import { ChatHistorySidebar } from "@/components/chat/chat-history-sidebar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -22,27 +24,32 @@ import {
   Library,
   SlidersHorizontal,
   RotateCcw,
+  PanelLeftClose,
+  PanelLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { UploadsTypeOptions } from "@/lib/pocketbase-types";
+import { UploadsTypeOptions, type MessagesResponse } from "@/lib/pocketbase-types";
 
 export const Route = createFileRoute("/_app/chat")({
   component: ChatPage,
 });
 
-interface Message extends ChatMessage {
+interface LocalMessage extends ChatMessage {
   id: string;
   sources?: ChatSource[];
   isLoading?: boolean;
 }
 
 function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [localMessages, setLocalMessages] = useState<LocalMessage[]>([]);
   const [input, setInput] = useState("");
   const [filters, setFilters] = useState<ChatFilters>({});
-  const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(true);
+  const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const queryClient = useQueryClient();
 
   const { data: people } = usePeople();
   const { data: publications } = usePublications();
@@ -50,13 +57,30 @@ function ChatPage() {
   const { data: topics } = useTopics();
   const { data: uploads } = useUploads();
 
+  const { data: dbMessages, isLoading: isLoadingMessages } = useMessages(activeChatId);
+  const createChatMutation = useCreateChat();
+  const createMessageMutation = useCreateMessage();
+
+  // Convert DB messages to local format when they load
+  useEffect(() => {
+    if (dbMessages && activeChatId) {
+      const converted: LocalMessage[] = dbMessages.map((m: MessagesResponse<ChatSource[]>) => ({
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        content: m.content || "",
+        sources: m.sources || undefined,
+      }));
+      setLocalMessages(converted);
+    }
+  }, [dbMessages, activeChatId]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [localMessages]);
 
   // Auto-resize textarea
   const adjustTextareaHeight = useCallback(() => {
@@ -73,32 +97,64 @@ function ChatPage() {
 
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
-      const history = messages.filter((m) => !m.isLoading).map((m) => ({ role: m.role, content: m.content }));
+      const history = localMessages
+        .filter((m) => !m.isLoading)
+        .map((m) => ({ role: m.role, content: m.content }));
       return sendChatMessage(message, filters, history);
     },
     onMutate: (message) => {
-      const userMessage: Message = {
+      const userMessage: LocalMessage = {
         id: crypto.randomUUID(),
         role: "user",
         content: message,
       };
-      const loadingMessage: Message = {
+      const loadingMessage: LocalMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
         content: "",
         isLoading: true,
       };
-      setMessages((prev) => [...prev, userMessage, loadingMessage]);
+      setLocalMessages((prev) => [...prev, userMessage, loadingMessage]);
       setInput("");
     },
-    onSuccess: (data) => {
-      setMessages((prev) => {
+    onSuccess: async (data, message) => {
+      // Determine or create the chat record
+      let chatId = activeChatId;
+      if (!chatId) {
+        // Create a new chat with the first message as the title
+        const title = message.length > 80 ? message.slice(0, 80) + "…" : message;
+        const chat = await createChatMutation.mutateAsync({ title });
+        chatId = chat.id;
+        setActiveChatId(chatId);
+      }
+
+      // Save user message to DB
+      await createMessageMutation.mutateAsync({
+        chat: chatId,
+        role: "user",
+        content: message,
+      });
+
+      // Save assistant message to DB
+      await createMessageMutation.mutateAsync({
+        chat: chatId,
+        role: "assistant",
+        content: data.message,
+        sources: data.sources || null,
+      });
+
+      // Invalidate messages so React Query refetches
+      queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
+      queryClient.invalidateQueries({ queryKey: ["chats"] });
+
+      // Update local state to remove loading message and show response
+      setLocalMessages((prev) => {
         const newMessages = prev.filter((m) => !m.isLoading);
         return [
           ...newMessages,
           {
             id: crypto.randomUUID(),
-            role: "assistant",
+            role: "assistant" as const,
             content: data.message,
             sources: data.sources,
           },
@@ -106,13 +162,13 @@ function ChatPage() {
       });
     },
     onError: (error) => {
-      setMessages((prev) => {
+      setLocalMessages((prev) => {
         const newMessages = prev.filter((m) => !m.isLoading);
         return [
           ...newMessages,
           {
             id: crypto.randomUUID(),
-            role: "assistant",
+            role: "assistant" as const,
             content: `Sorry, an error occurred: ${error.message}`,
           },
         ];
@@ -157,14 +213,30 @@ function ChatPage() {
   const hasActiveFilters = Object.values(filters).some((arr) => arr && arr.length > 0);
   const activeFilterCount = Object.values(filters).reduce((count, arr) => count + (arr?.length || 0), 0);
 
-  const startNewChat = () => {
-    setMessages([]);
+  const handleNewChat = () => {
+    setActiveChatId(null);
+    setLocalMessages([]);
+    setInput("");
+  };
+
+  const handleSelectChat = (chatId: string) => {
+    setActiveChatId(chatId);
+    setLocalMessages([]);
     setInput("");
   };
 
   return (
     <div className="flex h-full w-full">
-      {/* Left Filter Panel */}
+      {/* Chat History Sidebar */}
+      {isSidebarOpen && (
+        <ChatHistorySidebar
+          activeChatId={activeChatId}
+          onSelectChat={handleSelectChat}
+          onNewChat={handleNewChat}
+        />
+      )}
+
+      {/* Filter Panel */}
       {isFiltersPanelOpen && (
         <div className="w-64 shrink-0 border-r border-border bg-muted/30 flex flex-col">
           <div className="p-4 flex items-center justify-between">
@@ -334,11 +406,37 @@ function ChatPage() {
         {/* Chat Header Bar */}
         <div className="h-12 shrink-0 border-b border-border flex items-center justify-between px-4">
           <div className="flex items-center gap-2">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                  >
+                    {isSidebarOpen ? (
+                      <PanelLeftClose className="h-4 w-4" />
+                    ) : (
+                      <PanelLeft className="h-4 w-4" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {isSidebarOpen ? "Hide chat history" : "Show chat history"}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             {!isFiltersPanelOpen && (
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsFiltersPanelOpen(true)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 relative"
+                      onClick={() => setIsFiltersPanelOpen(true)}
+                    >
                       <SlidersHorizontal className="h-4 w-4" />
                       {activeFilterCount > 0 && (
                         <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
@@ -356,11 +454,11 @@ function ChatPage() {
               <span className="text-sm font-medium">Chat with your Library</span>
             </div>
           </div>
-          {messages.length > 0 && (
+          {localMessages.length > 0 && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="sm" onClick={startNewChat} className="gap-1.5 text-muted-foreground">
+                  <Button variant="ghost" size="sm" onClick={handleNewChat} className="gap-1.5 text-muted-foreground">
                     <RotateCcw className="h-3.5 w-3.5" />
                     New chat
                   </Button>
@@ -373,7 +471,21 @@ function ChatPage() {
 
         {/* Messages Area */}
         <div className="flex-1 overflow-y-auto">
-          {messages.length === 0 ? (
+          {isLoadingMessages && activeChatId ? (
+            <div className="max-w-3xl mx-auto py-6 px-4">
+              <div className="space-y-6">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="flex gap-4">
+                    <Skeleton className="h-8 w-8 rounded-full shrink-0" />
+                    <div className="flex-1 space-y-3 pt-1">
+                      <Skeleton className="h-4 w-3/4 rounded-lg" />
+                      <Skeleton className="h-4 w-1/2 rounded-lg" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : localMessages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full px-4">
               <div className="max-w-lg w-full text-center space-y-6">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-primary/10 to-primary/5 border border-primary/10">
@@ -409,7 +521,7 @@ function ChatPage() {
           ) : (
             <div className="max-w-3xl mx-auto py-6 px-4">
               <div className="space-y-6">
-                {messages.map((message) => (
+                {localMessages.map((message) => (
                   <MessageBubble key={message.id} message={message} />
                 ))}
                 <div ref={messagesEndRef} />
@@ -459,7 +571,7 @@ function ChatPage() {
   );
 }
 
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({ message }: { message: LocalMessage }) {
   const isUser = message.role === "user";
 
   if (message.isLoading) {

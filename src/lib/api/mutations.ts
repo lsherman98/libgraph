@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createNode, updateNode, deleteNode, createEdge, updateEdge, deleteEdge, createWritingProject, updateWritingProject, deleteWritingProject } from "./api";
+import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createNode, updateNode, deleteNode, createEdge, updateEdge, deleteEdge, createWritingProject, updateWritingProject, deleteWritingProject, createChat, updateChat, deleteChat, createMessage } from "./api";
 import { handleError } from "../utils";
 import { Collections, type Create } from "../pocketbase-types";
 
@@ -325,6 +325,58 @@ export function useDeleteWritingProject() {
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["writingProjects"] });
+        },
+    });
+}
+
+// Chat mutations
+export function useCreateChat() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (record: Create<Collections.Chats>) => createChat(record),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["chats"] });
+        },
+    });
+}
+
+export function useUpdateChat() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.Chats>> }) =>
+            updateChat(id, data),
+        onError: handleError,
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ["chats"] });
+            queryClient.invalidateQueries({ queryKey: ["chat", variables.id] });
+        },
+    });
+}
+
+export function useDeleteChat() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (id: string) => deleteChat(id),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["chats"] });
+        },
+    });
+}
+
+// Message mutations
+export function useCreateMessage() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (record: Create<Collections.Messages>) => createMessage(record),
+        onError: handleError,
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: ["messages", data.chat] });
         },
     });
 }

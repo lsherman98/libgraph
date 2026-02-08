@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useInfiniteQuery } from "@tanstack/react-query";
-import { getPeople, getPublications, getFirstPage, getPages, getPageUrl, getTags, getTopics, getUploads, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials } from "./api";
+import { getPeople, getPublications, getFirstPage, getPages, getPageUrl, getTags, getTopics, getUploads, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages } from "./api";
 
 export function usePeople() {
     return useQuery({
@@ -190,6 +190,33 @@ export function useWorkspaceMaterials() {
     return useQuery({
         queryKey: ["workspaceMaterials"],
         queryFn: getWorkspaceMaterials,
+        placeholderData: keepPreviousData
+    });
+}
+
+// Chat hooks
+export function useChats() {
+    return useQuery({
+        queryKey: ["chats"],
+        queryFn: getChats,
+        placeholderData: keepPreviousData
+    });
+}
+
+export function useChat(id: string | null) {
+    return useQuery({
+        queryKey: ["chat", id],
+        queryFn: () => id ? getChat(id) : null,
+        enabled: !!id,
+        placeholderData: keepPreviousData
+    });
+}
+
+export function useMessages(chatId: string | null) {
+    return useQuery({
+        queryKey: ["messages", chatId],
+        queryFn: () => chatId ? getMessages(chatId) : [],
+        enabled: !!chatId,
         placeholderData: keepPreviousData
     });
 }

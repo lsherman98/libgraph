@@ -12,8 +12,10 @@ export enum Collections {
 	Otps = "_otps",
 	Superusers = "_superusers",
 	Bookmarks = "bookmarks",
+	Chats = "chats",
 	Edges = "edges",
 	Highlights = "highlights",
+	Messages = "messages",
 	Nodes = "nodes",
 	Notes = "notes",
 	Pages = "pages",
@@ -35,8 +37,8 @@ export type HTMLString = string
 
 type ExpandType<T> = unknown extends T
 	? T extends unknown
-	? { expand?: unknown }
-	: { expand: T }
+		? { expand?: unknown }
+		: { expand: T }
 	: { expand: T }
 
 // System fields
@@ -117,6 +119,14 @@ export type BookmarksRecord = {
 	user?: RecordIdString
 }
 
+export type ChatsRecord = {
+	created: IsoAutoDateString
+	id: string
+	title?: string
+	updated: IsoAutoDateString
+	user?: RecordIdString
+}
+
 export enum EdgesTypeOptions {
 	"authored_by" = "authored_by",
 	"tagged_with" = "tagged_with",
@@ -159,9 +169,22 @@ export type HighlightsRecord = {
 	user?: RecordIdString
 }
 
+export enum MessagesRoleOptions {
+	"user" = "user",
+	"assistant" = "assistant",
+}
+export type MessagesRecord<Tsources = unknown> = {
+	chat: RecordIdString
+	content?: string
+	created: IsoAutoDateString
+	id: string
+	role?: MessagesRoleOptions
+	sources?: null | Tsources
+	updated: IsoAutoDateString
+}
+
 export enum NodesTypeOptions {
 	"author" = "author",
-	"publication" = "publication",
 	"tag" = "tag",
 	"topic" = "topic",
 	"upload" = "upload",
@@ -319,8 +342,10 @@ export type MfasResponse<Texpand = unknown> = Required<MfasRecord> & BaseSystemF
 export type OtpsResponse<Texpand = unknown> = Required<OtpsRecord> & BaseSystemFields<Texpand>
 export type SuperusersResponse<Texpand = unknown> = Required<SuperusersRecord> & AuthSystemFields<Texpand>
 export type BookmarksResponse<Texpand = unknown> = Required<BookmarksRecord> & BaseSystemFields<Texpand>
+export type ChatsResponse<Texpand = unknown> = Required<ChatsRecord> & BaseSystemFields<Texpand>
 export type EdgesResponse<Texpand = unknown> = Required<EdgesRecord> & BaseSystemFields<Texpand>
 export type HighlightsResponse<Texpand = unknown> = Required<HighlightsRecord> & BaseSystemFields<Texpand>
+export type MessagesResponse<Tsources = unknown, Texpand = unknown> = Required<MessagesRecord<Tsources>> & BaseSystemFields<Texpand>
 export type NodesResponse<Texpand = unknown> = Required<NodesRecord> & BaseSystemFields<Texpand>
 export type NotesResponse<Texpand = unknown> = Required<NotesRecord> & BaseSystemFields<Texpand>
 export type PagesResponse<Texpand = unknown> = Required<PagesRecord> & BaseSystemFields<Texpand>
@@ -341,8 +366,10 @@ export type CollectionRecords = {
 	_otps: OtpsRecord
 	_superusers: SuperusersRecord
 	bookmarks: BookmarksRecord
+	chats: ChatsRecord
 	edges: EdgesRecord
 	highlights: HighlightsRecord
+	messages: MessagesRecord
 	nodes: NodesRecord
 	notes: NotesRecord
 	pages: PagesRecord
@@ -362,8 +389,10 @@ export type CollectionResponses = {
 	_otps: OtpsResponse
 	_superusers: SuperusersResponse
 	bookmarks: BookmarksResponse
+	chats: ChatsResponse
 	edges: EdgesResponse
 	highlights: HighlightsResponse
+	messages: MessagesResponse
 	nodes: NodesResponse
 	notes: NotesResponse
 	pages: PagesResponse
@@ -380,13 +409,13 @@ export type CollectionResponses = {
 
 type ProcessCreateAndUpdateFields<T> = Omit<{
 	// Omit AutoDate fields
-	[K in keyof T as Extract<T[K], IsoAutoDateString> extends never ? K : never]:
-	// Convert FileNameString to File
-	T[K] extends infer U ?
-	U extends (FileNameString | FileNameString[]) ?
-	U extends any[] ? File[] : File
-	: U
-	: never
+	[K in keyof T as Extract<T[K], IsoAutoDateString> extends never ? K : never]: 
+		// Convert FileNameString to File
+		T[K] extends infer U ? 
+			U extends (FileNameString | FileNameString[]) ? 
+				U extends any[] ? File[] : File 
+			: U
+		: never
 }, 'id'>
 
 // Create type for Auth collections
@@ -424,14 +453,14 @@ export type UpdateBase<T> = Partial<
 // Get the correct create type for any collection
 export type Create<T extends keyof CollectionResponses> =
 	CollectionResponses[T] extends AuthSystemFields
-	? CreateAuth<CollectionRecords[T]>
-	: CreateBase<CollectionRecords[T]>
+		? CreateAuth<CollectionRecords[T]>
+		: CreateBase<CollectionRecords[T]>
 
 // Get the correct update type for any collection
 export type Update<T extends keyof CollectionResponses> =
 	CollectionResponses[T] extends AuthSystemFields
-	? UpdateAuth<CollectionRecords[T]>
-	: UpdateBase<CollectionRecords[T]>
+		? UpdateAuth<CollectionRecords[T]>
+		: UpdateBase<CollectionRecords[T]>
 
 // Type for usage with type asserted PocketBase instance
 // https://github.com/pocketbase/js-sdk#specify-typescript-definitions

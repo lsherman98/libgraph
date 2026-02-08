@@ -1,5 +1,5 @@
 import { pb } from "../pocketbase"
-import { Collections, type Create, type EdgesResponse } from "../pocketbase-types"
+import { Collections, type Create, type EdgesResponse, type ChatsResponse, type MessagesResponse } from "../pocketbase-types"
 import type { EnrichedNodesResponse } from "../types"
 
 export async function getPageUrl(id: string) {
@@ -346,6 +346,49 @@ export const getWorkspaceMaterials = async () => {
     ]);
 
     return { uploads, highlights, bookmarks, notes };
+}
+
+// Chats API
+export const getChats = async () => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) return [];
+    return await pb.collection(Collections.Chats).getFullList({
+        filter: `user = "${userId}"`,
+        sort: '-updated'
+    });
+}
+
+export const getChat = async (id: string) => {
+    return await pb.collection(Collections.Chats).getOne(id);
+}
+
+export const createChat = async (data: Create<Collections.Chats>) => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) throw new Error("User not authenticated");
+    return await pb.collection(Collections.Chats).create({
+        ...data,
+        user: userId
+    });
+}
+
+export const updateChat = async (id: string, data: Partial<Create<Collections.Chats>>) => {
+    return await pb.collection(Collections.Chats).update(id, data);
+}
+
+export const deleteChat = async (id: string) => {
+    return await pb.collection(Collections.Chats).delete(id);
+}
+
+// Messages API
+export const getMessages = async (chatId: string) => {
+    return await pb.collection(Collections.Messages).getFullList({
+        filter: `chat = "${chatId}"`,
+        sort: 'created'
+    });
+}
+
+export const createMessage = async (data: Create<Collections.Messages>) => {
+    return await pb.collection(Collections.Messages).create(data);
 }
 
 // Chat API
