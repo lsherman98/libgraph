@@ -111,10 +111,29 @@ interface DagreGraphViewProps {
   edges: EdgesResponse[];
   selectedNodeId: string | null;
   onSelectNode: (nodeId: string) => void;
+  hiddenNodeTypes: Set<NodesTypeOptions>;
+  hiddenEdgeTypes: Set<EdgesTypeOptions>;
 }
 
 // Helper to get display label from enriched node
 function getNodeLabel(node: EnrichedNodesResponse): string {
+  // Use persisted label first
+  if (node.label) return node.label;
+
+  // Fallback: extract from data JSON
+  const d = node.data as Record<string, unknown> | null | undefined;
+  if (d) {
+    if (typeof d.title === "string" && d.title) return d.title;
+    if (typeof d.name === "string" && d.name) return d.name;
+    if (typeof d.text === "string" && d.text) {
+      return d.text.length > 30 ? d.text.slice(0, 30) + "..." : d.text;
+    }
+    if (typeof d.content === "string" && d.content) {
+      return d.content.length > 30 ? d.content.slice(0, 30) + "..." : d.content;
+    }
+  }
+
+  // Legacy fallback
   if (node.record_data) {
     const data = node.record_data;
     if ("title" in data && data.title) return data.title;
@@ -129,22 +148,34 @@ function getNodeLabel(node: EnrichedNodesResponse): string {
 }
 
 const NODE_WIDTH = 160;
-const NODE_HEIGHT = 50;
+const NODE_HEIGHT = 66;
 
-export function DagreGraphView({ nodes, edges, selectedNodeId, onSelectNode }: DagreGraphViewProps) {
+export function DagreGraphView({
+  nodes,
+  edges,
+  selectedNodeId,
+  onSelectNode,
+  hiddenNodeTypes,
+  hiddenEdgeTypes,
+}: DagreGraphViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 
-  // Use all nodes (no filtering)
-  const filteredNodes = nodes;
+  // Filter nodes by hidden types
+  const filteredNodes = useMemo(
+    () => nodes.filter((n) => !hiddenNodeTypes.has(n.type as NodesTypeOptions)),
+    [nodes, hiddenNodeTypes],
+  );
 
-  // Use all edges between visible nodes
+  // Filter edges by hidden types and ensure both endpoints are visible
   const filteredEdges = useMemo(() => {
     const nodeIds = new Set(filteredNodes.map((n) => n.id));
-    return edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target));
-  }, [edges, filteredNodes]);
+    return edges.filter(
+      (e) => nodeIds.has(e.source) && nodeIds.has(e.target) && !hiddenEdgeTypes.has(e.type as EdgesTypeOptions),
+    );
+  }, [edges, filteredNodes, hiddenEdgeTypes]);
 
   // Create dagre layout
   const { layoutNodes, layoutEdges, graphWidth, graphHeight } = useMemo(() => {
@@ -404,14 +435,14 @@ export function DagreGraphView({ nodes, edges, selectedNodeId, onSelectNode }: D
                   </foreignObject>
 
                   {/* Node label */}
-                  <foreignObject x={36} y={6} width={node.width - 44} height={20}>
+                  <foreignObject x={36} y={8} width={node.width - 44} height={20}>
                     <div className="text-xs font-medium truncate leading-5" title={node.label}>
                       {node.label}
                     </div>
                   </foreignObject>
 
                   {/* Type badge */}
-                  <foreignObject x={36} y={26} width={node.width - 44} height={18}>
+                  <foreignObject x={36} y={32} width={node.width - 44} height={26} style={{ overflow: "visible" }}>
                     <Badge
                       variant="outline"
                       className="text-[9px] px-1 py-0 h-4"

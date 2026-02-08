@@ -1,6 +1,9 @@
 package graph
 
 import (
+	"encoding/json"
+	"fmt"
+
 	"github.com/lsherman98/libgraph/pocketbase/collections"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
@@ -46,7 +49,7 @@ func Init(app *pocketbase.PocketBase) error {
 	return nil
 }
 
-func createNode(app *pocketbase.PocketBase, recordId string, nodeType NodeType, userId string) (string, error) {
+func createNode(app *pocketbase.PocketBase, recordId string, nodeType NodeType, userId string, label string, data map[string]interface{}) (string, error) {
 	nodesCollection, err := app.FindCollectionByNameOrId(collections.Nodes)
 	if err != nil {
 		return "", err
@@ -56,11 +59,161 @@ func createNode(app *pocketbase.PocketBase, recordId string, nodeType NodeType, 
 	node.Set("record_id", recordId)
 	node.Set("type", string(nodeType))
 	node.Set("user", userId)
+	node.Set("label", label)
+
+	if data != nil {
+		jsonData, err := json.Marshal(data)
+		if err == nil {
+			node.Set("data", string(jsonData))
+		}
+	}
+
 	if err := app.Save(node); err != nil {
 		return "", err
 	}
 
 	return node.Id, nil
+}
+
+func updateNodeData(app *pocketbase.PocketBase, recordId string, userId string, nodeType NodeType, label string, data map[string]interface{}) error {
+	node, err := findNodeByRecord(app, recordId, userId, nodeType)
+	if err != nil || node == nil {
+		return err
+	}
+
+	node.Set("label", label)
+
+	if data != nil {
+		jsonData, err := json.Marshal(data)
+		if err == nil {
+			node.Set("data", string(jsonData))
+		}
+	}
+
+	return app.Save(node)
+}
+
+// Helper functions to extract label and data from records
+
+func getUploadLabelAndData(record *core.Record) (string, map[string]interface{}) {
+	title := record.GetString("title")
+	if title == "" {
+		title = "Untitled Upload"
+	}
+	data := map[string]interface{}{
+		"title":     title,
+		"type":      record.GetString("type"),
+		"status":    record.GetString("status"),
+		"num_pages": record.GetInt("num_pages"),
+	}
+	return title, data
+}
+
+func getPersonLabelAndData(record *core.Record) (string, map[string]interface{}) {
+	name := record.GetString("name")
+	if name == "" {
+		name = "Unknown Person"
+	}
+	data := map[string]interface{}{
+		"name":   name,
+		"type":   record.GetString("type"),
+		"source": record.GetString("source"),
+	}
+	return name, data
+}
+
+func getPublicationLabelAndData(record *core.Record) (string, map[string]interface{}) {
+	name := record.GetString("name")
+	if name == "" {
+		name = "Unknown Publication"
+	}
+	data := map[string]interface{}{
+		"name": name,
+		"type": record.GetString("type"),
+		"url":  record.GetString("url"),
+	}
+	return name, data
+}
+
+func getTagLabelAndData(record *core.Record) (string, map[string]interface{}) {
+	title := record.GetString("title")
+	if title == "" {
+		title = "Untitled Tag"
+	}
+	data := map[string]interface{}{
+		"title": title,
+	}
+	return title, data
+}
+
+func getTopicLabelAndData(record *core.Record) (string, map[string]interface{}) {
+	title := record.GetString("title")
+	if title == "" {
+		title = "Untitled Topic"
+	}
+	data := map[string]interface{}{
+		"title": title,
+	}
+	return title, data
+}
+
+func getHighlightLabelAndData(record *core.Record) (string, map[string]interface{}) {
+	text := record.GetString("text")
+	label := text
+	if len(label) > 40 {
+		label = label[:40] + "..."
+	}
+	if label == "" {
+		label = "Highlight"
+	}
+	data := map[string]interface{}{
+		"text":    text,
+		"color":   record.GetString("color"),
+		"comment": record.GetString("comment"),
+	}
+	return label, data
+}
+
+func getBookmarkLabelAndData(record *core.Record) (string, map[string]interface{}) {
+	comment := record.GetString("comment")
+	pageNum := record.GetInt("page_number")
+	label := comment
+	if label == "" {
+		if pageNum > 0 {
+			label = fmt.Sprintf("Bookmark p.%d", pageNum)
+		} else {
+			label = "Bookmark"
+		}
+	}
+	if len(label) > 40 {
+		label = label[:40] + "..."
+	}
+	data := map[string]interface{}{
+		"comment":     comment,
+		"page_number": pageNum,
+	}
+	return label, data
+}
+
+func getNoteLabelAndData(record *core.Record) (string, map[string]interface{}) {
+	content := record.GetString("content")
+	pageNum := record.GetInt("page_number")
+	label := content
+	if len(label) > 40 {
+		label = label[:40] + "..."
+	}
+	if label == "" {
+		if pageNum > 0 {
+			label = fmt.Sprintf("Note p.%d", pageNum)
+		} else {
+			label = "Note"
+		}
+	}
+	data := map[string]interface{}{
+		"content":     content,
+		"page_number": pageNum,
+	}
+	return label, data
 }
 
 func createEdge(app *pocketbase.PocketBase, sourceNodeId string, targetNodeId string, edgeType EdgeType, userId string) error {
@@ -119,7 +272,8 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 		upload := e.Record
 		userId := upload.GetString("user")
 
-		nodeId, err := createNode(app, upload.Id, NodeTypeUpload, userId)
+		label, data := getUploadLabelAndData(upload)
+		nodeId, err := createNode(app, upload.Id, NodeTypeUpload, userId, label, data)
 		if err != nil {
 			e.App.Logger().Error("Failed to create node for upload:", "error", err)
 			return e.Next()
@@ -168,6 +322,16 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 		}
 		return e.Next()
 	})
+
+	app.OnRecordAfterUpdateSuccess(collections.Uploads).BindFunc(func(e *core.RecordEvent) error {
+		upload := e.Record
+		userId := upload.GetString("user")
+		label, data := getUploadLabelAndData(upload)
+		if err := updateNodeData(app, upload.Id, userId, NodeTypeUpload, label, data); err != nil {
+			e.App.Logger().Error("Failed to update node data for upload:", "error", err)
+		}
+		return e.Next()
+	})
 }
 
 func registerPeopleHooks(app *pocketbase.PocketBase) {
@@ -175,7 +339,8 @@ func registerPeopleHooks(app *pocketbase.PocketBase) {
 		person := e.Record
 		userId := person.GetString("user")
 
-		_, err := createNode(app, person.Id, NodeTypeAuthor, userId)
+		label, data := getPersonLabelAndData(person)
+		_, err := createNode(app, person.Id, NodeTypeAuthor, userId, label, data)
 		if err != nil {
 			e.App.Logger().Error("Failed to create node for person:", "error", err)
 		}
@@ -189,6 +354,16 @@ func registerPeopleHooks(app *pocketbase.PocketBase) {
 		}
 		return e.Next()
 	})
+
+	app.OnRecordAfterUpdateSuccess(collections.People).BindFunc(func(e *core.RecordEvent) error {
+		person := e.Record
+		userId := person.GetString("user")
+		label, data := getPersonLabelAndData(person)
+		if err := updateNodeData(app, person.Id, userId, NodeTypeAuthor, label, data); err != nil {
+			e.App.Logger().Error("Failed to update node data for person:", "error", err)
+		}
+		return e.Next()
+	})
 }
 
 func registerPublicationHooks(app *pocketbase.PocketBase) {
@@ -198,7 +373,8 @@ func registerPublicationHooks(app *pocketbase.PocketBase) {
 		// The node will be associated via edges to uploads which have users
 		userId := pub.GetString("user")
 
-		_, err := createNode(app, pub.Id, NodeTypePublication, userId)
+		label, data := getPublicationLabelAndData(pub)
+		_, err := createNode(app, pub.Id, NodeTypePublication, userId, label, data)
 		if err != nil {
 			e.App.Logger().Error("Failed to create node for publication:", "error", err)
 		}
@@ -212,6 +388,16 @@ func registerPublicationHooks(app *pocketbase.PocketBase) {
 		}
 		return e.Next()
 	})
+
+	app.OnRecordAfterUpdateSuccess(collections.Publications).BindFunc(func(e *core.RecordEvent) error {
+		pub := e.Record
+		userId := pub.GetString("user")
+		label, data := getPublicationLabelAndData(pub)
+		if err := updateNodeData(app, pub.Id, userId, NodeTypePublication, label, data); err != nil {
+			e.App.Logger().Error("Failed to update node data for publication:", "error", err)
+		}
+		return e.Next()
+	})
 }
 
 func registerTagHooks(app *pocketbase.PocketBase) {
@@ -219,7 +405,8 @@ func registerTagHooks(app *pocketbase.PocketBase) {
 		tag := e.Record
 		userId := tag.GetString("user")
 
-		_, err := createNode(app, tag.Id, NodeTypeTag, userId)
+		label, data := getTagLabelAndData(tag)
+		_, err := createNode(app, tag.Id, NodeTypeTag, userId, label, data)
 		if err != nil {
 			e.App.Logger().Error("Failed to create node for tag:", "error", err)
 		}
@@ -233,6 +420,16 @@ func registerTagHooks(app *pocketbase.PocketBase) {
 		}
 		return e.Next()
 	})
+
+	app.OnRecordAfterUpdateSuccess(collections.Tags).BindFunc(func(e *core.RecordEvent) error {
+		tag := e.Record
+		userId := tag.GetString("user")
+		label, data := getTagLabelAndData(tag)
+		if err := updateNodeData(app, tag.Id, userId, NodeTypeTag, label, data); err != nil {
+			e.App.Logger().Error("Failed to update node data for tag:", "error", err)
+		}
+		return e.Next()
+	})
 }
 
 func registerTopicHooks(app *pocketbase.PocketBase) {
@@ -240,7 +437,8 @@ func registerTopicHooks(app *pocketbase.PocketBase) {
 		topic := e.Record
 		userId := topic.GetString("user")
 
-		_, err := createNode(app, topic.Id, NodeTypeTopic, userId)
+		label, data := getTopicLabelAndData(topic)
+		_, err := createNode(app, topic.Id, NodeTypeTopic, userId, label, data)
 		if err != nil {
 			e.App.Logger().Error("Failed to create node for topic:", "error", err)
 		}
@@ -254,6 +452,16 @@ func registerTopicHooks(app *pocketbase.PocketBase) {
 		}
 		return e.Next()
 	})
+
+	app.OnRecordAfterUpdateSuccess(collections.Topics).BindFunc(func(e *core.RecordEvent) error {
+		topic := e.Record
+		userId := topic.GetString("user")
+		label, data := getTopicLabelAndData(topic)
+		if err := updateNodeData(app, topic.Id, userId, NodeTypeTopic, label, data); err != nil {
+			e.App.Logger().Error("Failed to update node data for topic:", "error", err)
+		}
+		return e.Next()
+	})
 }
 
 func registerHighlightHooks(app *pocketbase.PocketBase) {
@@ -261,7 +469,8 @@ func registerHighlightHooks(app *pocketbase.PocketBase) {
 		highlight := e.Record
 		userId := highlight.GetString("user")
 
-		highlightNodeId, err := createNode(app, highlight.Id, NodeTypeHighlight, userId)
+		label, data := getHighlightLabelAndData(highlight)
+		highlightNodeId, err := createNode(app, highlight.Id, NodeTypeHighlight, userId, label, data)
 		if err != nil {
 			e.App.Logger().Error("Failed to create node for highlight:", "error", err)
 			return e.Next()
@@ -292,6 +501,16 @@ func registerHighlightHooks(app *pocketbase.PocketBase) {
 		}
 		return e.Next()
 	})
+
+	app.OnRecordAfterUpdateSuccess(collections.Highlights).BindFunc(func(e *core.RecordEvent) error {
+		highlight := e.Record
+		userId := highlight.GetString("user")
+		label, data := getHighlightLabelAndData(highlight)
+		if err := updateNodeData(app, highlight.Id, userId, NodeTypeHighlight, label, data); err != nil {
+			e.App.Logger().Error("Failed to update node data for highlight:", "error", err)
+		}
+		return e.Next()
+	})
 }
 
 func registerBookmarkHooks(app *pocketbase.PocketBase) {
@@ -301,7 +520,8 @@ func registerBookmarkHooks(app *pocketbase.PocketBase) {
 		uploadId := bookmark.GetString("upload")
 		tags := bookmark.GetStringSlice("tags")
 
-		bookmarkNodeId, err := createNode(app, bookmark.Id, NodeTypeBookmark, userId)
+		label, data := getBookmarkLabelAndData(bookmark)
+		bookmarkNodeId, err := createNode(app, bookmark.Id, NodeTypeBookmark, userId, label, data)
 		if err != nil {
 			e.App.Logger().Error("Failed to create node for bookmark:", "error", err)
 			return e.Next()
@@ -330,6 +550,16 @@ func registerBookmarkHooks(app *pocketbase.PocketBase) {
 		}
 		return e.Next()
 	})
+
+	app.OnRecordAfterUpdateSuccess(collections.Bookmarks).BindFunc(func(e *core.RecordEvent) error {
+		bookmark := e.Record
+		userId := bookmark.GetString("user")
+		label, data := getBookmarkLabelAndData(bookmark)
+		if err := updateNodeData(app, bookmark.Id, userId, NodeTypeBookmark, label, data); err != nil {
+			e.App.Logger().Error("Failed to update node data for bookmark:", "error", err)
+		}
+		return e.Next()
+	})
 }
 
 func registerNotesHooks(app *pocketbase.PocketBase) {
@@ -339,7 +569,8 @@ func registerNotesHooks(app *pocketbase.PocketBase) {
 		uploadId := note.GetString("upload")
 		tags := note.GetStringSlice("tags")
 
-		noteNodeId, err := createNode(app, note.Id, NodeTypeNote, userId)
+		label, data := getNoteLabelAndData(note)
+		noteNodeId, err := createNode(app, note.Id, NodeTypeNote, userId, label, data)
 		if err != nil {
 			e.App.Logger().Error("Failed to create node for note:", "error", err)
 			return e.Next()
@@ -365,6 +596,16 @@ func registerNotesHooks(app *pocketbase.PocketBase) {
 	app.OnRecordAfterDeleteSuccess(collections.Notes).BindFunc(func(e *core.RecordEvent) error {
 		if err := deleteNodeAndEdges(app, e.Record.Id, e.Record.GetString("user"), NodeTypeNote); err != nil {
 			e.App.Logger().Error("Failed to delete node and edges for note:", "error", err)
+		}
+		return e.Next()
+	})
+
+	app.OnRecordAfterUpdateSuccess(collections.Notes).BindFunc(func(e *core.RecordEvent) error {
+		note := e.Record
+		userId := note.GetString("user")
+		label, data := getNoteLabelAndData(note)
+		if err := updateNodeData(app, note.Id, userId, NodeTypeNote, label, data); err != nil {
+			e.App.Logger().Error("Failed to update node data for note:", "error", err)
 		}
 		return e.Next()
 	})

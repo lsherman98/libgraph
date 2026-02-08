@@ -15,6 +15,7 @@ import { getUserRecord } from "@/lib/utils";
 import {
   UploadsStatusOptions,
   UploadsTypeOptions,
+  PeopleTypeOptions,
   type PeopleResponse,
   type PublicationsResponse,
   type TagsResponse,
@@ -103,10 +104,12 @@ function RouteComponent() {
     }
   };
 
-  const subjectOptions = (peopleQuery.data || []).map((p: PeopleResponse) => ({
-    label: p.name || "Unknown",
-    value: p.id,
-  }));
+  const authorOptions = (peopleQuery.data || [])
+    .filter((p: PeopleResponse) => !p.type || p.type === PeopleTypeOptions.author)
+    .map((p: PeopleResponse) => ({
+      label: p.name || "Unknown",
+      value: p.id,
+    }));
   const publicationOptions = (publicationsQuery.data || []).map((p: PublicationsResponse) => ({
     label: p.name || "Unknown",
     value: p.id,
@@ -154,7 +157,8 @@ function RouteComponent() {
           <CardContent className="p-0">
             <div className="divide-y">
               {files.map((file) => (
-                <div key={file.id} className="p-4 space-y-2">
+                <div key={file.id} className="p-4 space-y-3">
+                  {/* Row 1: File info, title, type, and status */}
                   <div className="flex items-center gap-2">
                     <div className="p-1.5 bg-muted rounded shrink-0">
                       <FileIcon className="h-4 w-4" />
@@ -180,76 +184,6 @@ function RouteComponent() {
                         ))}
                       </SelectContent>
                     </Select>
-                    <CreatableCombobox
-                      options={subjectOptions}
-                      value={file.subjects}
-                      className="h-8 text-sm w-40 shrink-0"
-                      isMulti
-                      onSelect={(val) => {
-                        const newSubjects = file.subjects.includes(val)
-                          ? file.subjects.filter((s) => s !== val)
-                          : [...file.subjects, val];
-                        updateFile(file.id, { subjects: newSubjects });
-                      }}
-                      onCreate={(name) => {
-                        createPersonMutation.mutateAsync({ name, user: getUserRecord().id }).then((record) => {
-                          updateFile(file.id, { subjects: [...file.subjects, record.id] });
-                        });
-                      }}
-                      placeholder="Subjects"
-                      emptyText="No people found."
-                    />
-                    <CreatableCombobox
-                      options={publicationOptions}
-                      value={file.publication}
-                      className="h-8 text-sm w-40 shrink-0"
-                      onSelect={(val) => updateFile(file.id, { publication: val })}
-                      onCreate={(name) => {
-                        createPublicationMutation.mutateAsync({ name }).then((record) => {
-                          updateFile(file.id, { publication: record.id });
-                        });
-                      }}
-                      placeholder="Publication"
-                      emptyText="No publications found."
-                    />
-                    <CreatableCombobox
-                      options={tagOptions}
-                      value={file.tags}
-                      className="h-8 text-sm w-30 shrink-0"
-                      isMulti
-                      onSelect={(val) => {
-                        const newTags = file.tags.includes(val)
-                          ? file.tags.filter((t) => t !== val)
-                          : [...file.tags, val];
-                        updateFile(file.id, { tags: newTags });
-                      }}
-                      onCreate={(title) => {
-                        createTagMutation.mutateAsync({ title, user: getUserRecord().id }).then((record) => {
-                          updateFile(file.id, { tags: [...file.tags, record.id] });
-                        });
-                      }}
-                      placeholder="Tags"
-                      emptyText="No tags found."
-                    />
-                    <CreatableCombobox
-                      options={topicOptions}
-                      value={file.topics}
-                      className="h-8 text-sm w-30 shrink-0"
-                      isMulti
-                      onSelect={(val) => {
-                        const newTopics = file.topics.includes(val)
-                          ? file.topics.filter((t) => t !== val)
-                          : [...file.topics, val];
-                        updateFile(file.id, { topics: newTopics });
-                      }}
-                      onCreate={(title) => {
-                        createTopicMutation.mutateAsync({ title, user: getUserRecord().id }).then((record) => {
-                          updateFile(file.id, { topics: [...file.topics, record.id] });
-                        });
-                      }}
-                      placeholder="Topics"
-                      emptyText="No topics found."
-                    />
                     <div className="w-8 shrink-0 flex justify-center">
                       {file.status === "PENDING" && (
                         <Button
@@ -268,6 +202,99 @@ function RouteComponent() {
                       {file.status === "ERROR" && <AlertCircle className="h-5 w-5 text-red-500" />}
                     </div>
                   </div>
+
+                  {/* Row 2: Authors (People) and Publication */}
+                  <div className="flex items-center gap-2 pl-9">
+                    <div className="flex items-center gap-2 flex-1">
+                      <span className="text-xs text-muted-foreground shrink-0 w-16">Authors</span>
+                      <CreatableCombobox
+                        options={authorOptions}
+                        value={file.subjects}
+                        className="h-8 text-sm flex-1"
+                        isMulti
+                        onSelect={(val) => {
+                          const newSubjects = file.subjects.includes(val)
+                            ? file.subjects.filter((s) => s !== val)
+                            : [...file.subjects, val];
+                          updateFile(file.id, { subjects: newSubjects });
+                        }}
+                        onCreate={(name) => {
+                          createPersonMutation
+                            .mutateAsync({ name, type: PeopleTypeOptions.author, user: getUserRecord().id })
+                            .then((record) => {
+                              updateFile(file.id, { subjects: [...file.subjects, record.id] });
+                            });
+                        }}
+                        placeholder="Select authors..."
+                        emptyText="No authors found."
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 flex-1">
+                      <span className="text-xs text-muted-foreground shrink-0 w-20">Publication</span>
+                      <CreatableCombobox
+                        options={publicationOptions}
+                        value={file.publication}
+                        className="h-8 text-sm flex-1"
+                        onSelect={(val) => updateFile(file.id, { publication: val })}
+                        onCreate={(name) => {
+                          createPublicationMutation.mutateAsync({ name }).then((record) => {
+                            updateFile(file.id, { publication: record.id });
+                          });
+                        }}
+                        placeholder="Select publication..."
+                        emptyText="No publications found."
+                      />
+                    </div>
+                  </div>
+
+                  {/* Row 3: Tags and Topics */}
+                  <div className="flex items-center gap-2 pl-9">
+                    <div className="flex items-center gap-2 flex-1">
+                      <span className="text-xs text-muted-foreground shrink-0 w-16">Tags</span>
+                      <CreatableCombobox
+                        options={tagOptions}
+                        value={file.tags}
+                        className="h-8 text-sm flex-1"
+                        isMulti
+                        onSelect={(val) => {
+                          const newTags = file.tags.includes(val)
+                            ? file.tags.filter((t) => t !== val)
+                            : [...file.tags, val];
+                          updateFile(file.id, { tags: newTags });
+                        }}
+                        onCreate={(title) => {
+                          createTagMutation.mutateAsync({ title, user: getUserRecord().id }).then((record) => {
+                            updateFile(file.id, { tags: [...file.tags, record.id] });
+                          });
+                        }}
+                        placeholder="Select tags..."
+                        emptyText="No tags found."
+                      />
+                    </div>
+                    <div className="flex items-center gap-2 flex-1">
+                      <span className="text-xs text-muted-foreground shrink-0 w-20">Topics</span>
+                      <CreatableCombobox
+                        options={topicOptions}
+                        value={file.topics}
+                        className="h-8 text-sm flex-1"
+                        isMulti
+                        onSelect={(val) => {
+                          const newTopics = file.topics.includes(val)
+                            ? file.topics.filter((t) => t !== val)
+                            : [...file.topics, val];
+                          updateFile(file.id, { topics: newTopics });
+                        }}
+                        onCreate={(title) => {
+                          createTopicMutation.mutateAsync({ title, user: getUserRecord().id }).then((record) => {
+                            updateFile(file.id, { topics: [...file.topics, record.id] });
+                          });
+                        }}
+                        placeholder="Select topics..."
+                        emptyText="No topics found."
+                      />
+                    </div>
+                  </div>
+
                   <div className="text-xs text-muted-foreground pl-9 truncate" title={file.file.name}>
                     {file.file.name} • {(file.file.size / 1024 / 1024).toFixed(2)} MB
                   </div>
