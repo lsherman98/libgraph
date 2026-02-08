@@ -1,5 +1,5 @@
 import { pb } from "../pocketbase"
-import { Collections, type Create, type EdgesResponse, type ChatsResponse, type MessagesResponse, type CollectionsResponse } from "../pocketbase-types"
+import { Collections, type Create, type EdgesResponse } from "../pocketbase-types"
 import type { EnrichedNodesResponse } from "../types"
 
 export async function getPageUrl(id: string) {
@@ -455,6 +455,8 @@ export interface ChatSource {
     upload_id?: string;
     title?: string;
     score?: number;
+    text?: string;
+    page_number?: number;
 }
 
 export interface ChatResponseData {
@@ -464,6 +466,7 @@ export interface ChatResponseData {
 
 export const sendChatMessage = async (
     message: string,
+    mode: "chat" | "search" = "chat",
     filters?: ChatFilters,
     history?: ChatMessage[]
 ): Promise<ChatResponseData> => {
@@ -476,6 +479,7 @@ export const sendChatMessage = async (
         },
         body: JSON.stringify({
             message,
+            mode,
             filters,
             history,
         }),

@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Loader2,
   User,
@@ -34,6 +35,8 @@ import {
   RotateCcw,
   PanelLeftClose,
   PanelLeft,
+  Search,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UploadsTypeOptions, MessagesRoleOptions, type MessagesResponse } from "@/lib/pocketbase-types";
@@ -52,6 +55,7 @@ function ChatPage() {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([]);
   const [input, setInput] = useState("");
+  const [mode, setMode] = useState<"chat" | "search">("chat");
   const [filters, setFilters] = useState<ChatFilters>({});
   const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -107,7 +111,7 @@ function ChatPage() {
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
       const history = localMessages.filter((m) => !m.isLoading).map((m) => ({ role: m.role, content: m.content }));
-      return sendChatMessage(message, filters, history);
+      return sendChatMessage(message, mode, filters, history);
     },
     onMutate: (message) => {
       const userMessage: LocalMessage = {
@@ -129,7 +133,10 @@ function ChatPage() {
       let chatId = activeChatId;
       if (!chatId) {
         // Create a new chat with the first message as the title
-        const title = message.length > 80 ? message.slice(0, 80) + "…" : message;
+        let title = message.length > 80 ? message.slice(0, 80) + "…" : message;
+        if (mode === "search") {
+          title = `Search: ${title}`;
+        }
         const chat = await createChatMutation.mutateAsync({ title });
         chatId = chat.id;
         setActiveChatId(chatId);
@@ -492,7 +499,26 @@ function ChatPage() {
             )}
             <div className="flex items-center gap-2">
               <Library className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Chat with your Library</span>
+              <span className="text-sm font-medium">Library</span>
+              <Separator orientation="vertical" className="h-4 mx-1" />
+              <Tabs value={mode} onValueChange={(v) => setMode(v as "chat" | "search")} className="h-8">
+                <TabsList className="h-8 bg-transparent p-0 gap-1">
+                  <TabsTrigger
+                    value="chat"
+                    className="h-7 px-2.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                  >
+                    <MessageSquare className="h-3 w-3 mr-1.5" />
+                    Chat
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="search"
+                    className="h-7 px-2.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none"
+                  >
+                    <Search className="h-3 w-3 mr-1.5" />
+                    Search
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
           </div>
           {localMessages.length > 0 && (
@@ -527,24 +553,40 @@ function ChatPage() {
               </div>
             </div>
           ) : localMessages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full px-4">
-              <div className="max-w-lg w-full text-center space-y-6">
+            <div className="flex flex-col items-center justify-center h-full px-4 text-center">
+              <div className="max-w-lg w-full space-y-6">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-primary/10 to-primary/5 border border-primary/10">
-                  <Sparkles className="h-8 w-8 text-primary/70" />
+                  {mode === "chat" ? (
+                    <Sparkles className="h-8 w-8 text-primary/70" />
+                  ) : (
+                    <Search className="h-8 w-8 text-primary/70" />
+                  )}
                 </div>
                 <div className="space-y-2">
-                  <h2 className="text-2xl font-semibold tracking-tight">Chat with your Library</h2>
+                  <h2 className="text-2xl font-semibold tracking-tight">
+                    {mode === "chat" ? "Chat with your Library" : "Search your Documents"}
+                  </h2>
                   <p className="text-muted-foreground text-sm leading-relaxed max-w-sm mx-auto">
-                    Ask questions about your documents and get answers with sources. Use filters to narrow your search.
+                    {mode === "chat"
+                      ? "Ask questions about your documents and get answers with sources. Use filters to narrow your search."
+                      : "Find specific passages and information across your entire library instantly."}
                   </p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-md mx-auto">
-                  {[
-                    "What are the key themes across my documents?",
-                    "Summarize the main arguments",
-                    "What do my sources say about this topic?",
-                    "Find connections between concepts",
-                  ].map((suggestion) => (
+                  {(mode === "chat"
+                    ? [
+                        "What are the key themes across my documents?",
+                        "Summarize the main arguments",
+                        "What do my sources say about this topic?",
+                        "Find connections between concepts",
+                      ]
+                    : [
+                        "Specific details about...",
+                        "Find mentions of...",
+                        "What does X say about Y?",
+                        "Search for data on...",
+                      ]
+                  ).map((suggestion) => (
                     <button
                       key={suggestion}
                       onClick={() => {
@@ -581,7 +623,7 @@ function ChatPage() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Ask a question about your documents..."
+                  placeholder={mode === "chat" ? "Ask a question about your documents..." : "Search for information..."}
                   disabled={chatMutation.isPending}
                   rows={1}
                   className="min-h-11 max-h-50 resize-none border-0 bg-transparent px-4 py-3 pr-12 text-sm focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
@@ -645,19 +687,60 @@ function MessageBubble({ message }: { message: LocalMessage }) {
       <div className="flex-1 min-w-0 space-y-3 pt-1">
         <div className="text-sm font-medium text-muted-foreground">{isUser ? "You" : "Assistant"}</div>
         <div className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</div>
-        {message.sources && message.sources.length > 0 && (
-          <div className="flex flex-wrap gap-2 pt-1">
-            {message.sources.map((source, idx) => (
-              <Link
-                key={idx}
-                to="/workspace"
-                search={{ id: source.upload_id, type: "upload" }}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
-              >
-                <FileText className="h-3 w-3" />
-                {source.title || "Document"}
-              </Link>
-            ))}
+
+        {!isUser && message.sources && message.sources.length > 0 && (
+          <div className="space-y-3 pt-1">
+            {/* If we have snippets (search mode), show them as cards */}
+            {message.sources.some((s) => s.text) ? (
+              <div className="grid grid-cols-1 gap-3">
+                {message.sources.map((source, idx) => (
+                  <div
+                    key={idx}
+                    className="group flex flex-col gap-2 rounded-xl border border-border bg-card p-3 transition-colors hover:border-primary/30"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <Link
+                        to="/workspace"
+                        search={{ id: source.upload_id, type: "upload" }}
+                        className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                      >
+                        <FileText className="h-3 w-3" />
+                        {source.title || "Document"}
+                        {source.page_number && (
+                          <span className="text-muted-foreground ml-1">Page {source.page_number}</span>
+                        )}
+                      </Link>
+                      {source.score && (
+                        <span className="text-[10px] tabular-nums text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                          {Math.round(source.score * 100)}% Match
+                        </span>
+                      )}
+                    </div>
+                    {source.text && (
+                      <p className="text-xs leading-relaxed text-muted-foreground line-clamp-3 italic">
+                        "{source.text}"
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              // Standard source badges for chat mode
+              <div className="flex flex-wrap gap-2">
+                {message.sources.map((source, idx) => (
+                  <Link
+                    key={idx}
+                    to="/workspace"
+                    search={{ id: source.upload_id, type: "upload" }}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+                  >
+                    <FileText className="h-3 w-3" />
+                    {source.title || "Document"}
+                    {source.page_number && <span className="text-[10px] opacity-70 ml-1">p.{source.page_number}</span>}
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

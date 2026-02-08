@@ -291,6 +291,24 @@ func (c *LlamaClient) Chat(req *ChatRequestBody) (*ChatResponse, error) {
 	return response, nil
 }
 
+func (c *LlamaClient) Retrieve(req *RetrieveRequestBody) (*RetrieveResponse, error) {
+	if c.PipelineID == "" {
+		return nil, errors.New("pipeline ID is not configured")
+	}
+
+	params := url.Values{}
+	params.Add("project_id", c.ProjectID)
+
+	endpoint := fmt.Sprintf("/api/v1/pipelines/%s/retrieve", c.PipelineID)
+
+	var response RetrieveResponse
+	if err := c.Do(context.Background(), http.MethodPost, endpoint, params, req, &response); err != nil {
+		return nil, err
+	}
+
+	return &response, nil
+}
+
 func (c *LlamaClient) Do(ctx context.Context, method, endpointPath string, queryParams url.Values, reqBody, resBody any) error {
 	endpoint, err := c.BaseURL.Parse(path.Join(c.BaseURL.Path, endpointPath))
 	if err != nil {

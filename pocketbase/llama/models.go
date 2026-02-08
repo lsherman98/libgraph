@@ -160,3 +160,25 @@ type NodeInfo struct {
 	Metadata map[string]interface{} `json:"metadata,omitempty"`
 	Score    float64                `json:"score,omitempty"`
 }
+
+// Retrieve API Types
+type RetrieveRequestBody struct {
+	ClassName           string              `json:"class_name"`
+	Query               string              `json:"query"`
+	RetrievalParameters RetrievalParameters `json:"retrieval_parameters"`
+}
+
+type RetrieveResponse struct {
+	Nodes []RetrieveNodeWithScore `json:"nodes"`
+}
+
+type RetrieveNodeWithScore struct {
+	Node  RetrieveNode `json:"node"`
+	Score float64      `json:"score"`
+}
+
+type RetrieveNode struct {
+	ID_      string                 `json:"id_"`
+	Text     string                 `json:"text"`
+	Metadata map[string]interface{} `json:"metadata"`
+}

@@ -2,6 +2,7 @@ package chat
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -13,6 +14,7 @@ import (
 
 type ChatRequest struct {
 	Message string           `json:"message"`
+	Mode    string           `json:"mode,omitempty"` // "chat" or "search"
 	Filters *MetadataFilters `json:"filters,omitempty"`
 	History []ChatMessage    `json:"history,omitempty"`
 }
@@ -38,9 +40,11 @@ type ChatResponse struct {
 }
 
 type ChatSource struct {
-	UploadID string  `json:"upload_id,omitempty"`
-	Title    string  `json:"title,omitempty"`
-	Score    float64 `json:"score,omitempty"`
+	UploadID   string  `json:"upload_id,omitempty"`
+	Title      string  `json:"title,omitempty"`
+	Score      float64 `json:"score,omitempty"`
+	Text       string  `json:"text,omitempty"`
+	PageNumber int     `json:"page_number,omitempty"`
 }
 
 func Init(app *pocketbase.PocketBase) error {
@@ -77,6 +81,52 @@ func Init(app *pocketbase.PocketBase) error {
 			var searchFilters *llama.SearchFilters
 			if req.Filters != nil {
 				searchFilters = buildSearchFilters(app, req.Filters)
+			}
+
+			if req.Mode == "search" {
+				retrieveReq := &llama.RetrieveRequestBody{
+					ClassName: "base_component",
+					Query:     req.Message,
+					RetrievalParameters: llama.RetrievalParameters{
+						ClassName:           "base_component",
+						DenseSimilarityTopK: 10,
+						EnableReranking:     true,
+						RerankTopN:          5,
+						RetrievalMode:       "chunks",
+						SearchFilters:       searchFilters,
+					},
+				}
+
+				resp, err := llamaClient.Retrieve(retrieveReq)
+				if err != nil {
+					app.Logger().Error("Retrieve request failed:", "error", err)
+					return apis.NewApiError(http.StatusInternalServerError, "Retrieve request failed", err)
+				}
+
+				sources := make([]ChatSource, 0)
+				for _, sn := range resp.Nodes {
+					source := ChatSource{
+						Score: sn.Score,
+						Text:  sn.Node.Text,
+					}
+					if sn.Node.Metadata != nil {
+						if uploadID, ok := sn.Node.Metadata["upload_id"].(string); ok {
+							source.UploadID = uploadID
+						}
+						if title, ok := sn.Node.Metadata["title"].(string); ok {
+							source.Title = title
+						}
+						if page, ok := sn.Node.Metadata["page_number"].(float64); ok {
+							source.PageNumber = int(page)
+						}
+					}
+					sources = append(sources, source)
+				}
+
+				return e.JSON(http.StatusOK, ChatResponse{
+					Message: fmt.Sprintf("Found %d relevant documents.", len(sources)),
+					Sources: sources,
+				})
 			}
 
 			// Convert history to llama format
@@ -135,6 +185,9 @@ func Init(app *pocketbase.PocketBase) error {
 					}
 					if title, ok := node.Metadata["title"].(string); ok {
 						source.Title = title
+					}
+					if page, ok := node.Metadata["page_number"].(float64); ok {
+						source.PageNumber = int(page)
 					}
 					sources = append(sources, source)
 				}
