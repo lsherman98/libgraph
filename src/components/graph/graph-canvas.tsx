@@ -15,7 +15,6 @@ import {
   Highlighter,
   Bookmark,
   MessageSquare,
-  Newspaper,
   Eye,
   EyeOff,
   LayoutGrid,
@@ -35,7 +34,6 @@ type LayoutMode = "force" | "dagre";
 const nodeTypeConfig: Record<NodesTypeOptions, { icon: React.ElementType; color: string; label: string }> = {
   [NodesTypeOptions.upload]: { icon: FileText, color: "#3b82f6", label: "Uploads" },
   [NodesTypeOptions.author]: { icon: User, color: "#9333ea", label: "Authors" },
-  [NodesTypeOptions.publication]: { icon: Newspaper, color: "#0ea5e9", label: "Publications" },
   [NodesTypeOptions.tag]: { icon: Tag, color: "#22c55e", label: "Tags" },
   [NodesTypeOptions.topic]: { icon: FolderOpen, color: "#f97316", label: "Topics" },
   [NodesTypeOptions.highlight]: { icon: Highlighter, color: "#eab308", label: "Highlights" },
@@ -52,6 +50,7 @@ const edgeTypeConfig: Record<EdgesTypeOptions, { color: string; label: string }>
   [EdgesTypeOptions.note_of]: { color: "#6366f1", label: "Note of" },
   [EdgesTypeOptions.published_by]: { color: "#0ea5e9", label: "Published by" },
   [EdgesTypeOptions.about_person]: { color: "#d946ef", label: "About person" },
+  [EdgesTypeOptions.links_to]: { color: "#14b8a6", label: "Links to" },
 };
 
 export function GraphCanvas() {

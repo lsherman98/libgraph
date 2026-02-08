@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createNode, updateNode, deleteNode, createEdge, updateEdge, deleteEdge, createWritingProject, updateWritingProject, deleteWritingProject, createChat, updateChat, deleteChat, createMessage } from "./api";
+import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createNode, updateNode, deleteNode, createEdge, updateEdge, deleteEdge, createWritingProject, updateWritingProject, deleteWritingProject, createChat, updateChat, deleteChat, createMessage, updateUpload, createCollection, updateCollection, deleteCollection } from "./api";
 import { handleError } from "../utils";
 import { Collections, type Create } from "../pocketbase-types";
 
@@ -11,6 +11,21 @@ export function useUpload() {
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["uploads"] });
+        },
+    })
+}
+
+export function useUpdateUpload() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.Uploads>> }) =>
+            updateUpload(id, data),
+        onError: handleError,
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ["uploads"] });
+            queryClient.invalidateQueries({ queryKey: ["upload", variables.id] });
+            queryClient.invalidateQueries({ queryKey: ["graph"] });
         },
     })
 }
@@ -325,6 +340,45 @@ export function useDeleteWritingProject() {
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["writingProjects"] });
+        },
+    });
+}
+
+// Collections mutations
+export function useCreateCollection() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (record: Create<Collections.Collections>) => createCollection(record),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["collections"] });
+        },
+    });
+}
+
+export function useUpdateCollection() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.Collections>> }) =>
+            updateCollection(id, data),
+        onError: handleError,
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ["collections"] });
+            queryClient.invalidateQueries({ queryKey: ["collection", variables.id] });
+        },
+    });
+}
+
+export function useDeleteCollection() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (id: string) => deleteCollection(id),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["collections"] });
         },
     });
 }

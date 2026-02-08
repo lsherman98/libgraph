@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useInfiniteQuery } from "@tanstack/react-query";
-import { getPeople, getPublications, getFirstPage, getPages, getPageUrl, getTags, getTopics, getUploads, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages } from "./api";
+import { getPeople, getPublications, getFirstPage, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection } from "./api";
 
 export function usePeople() {
     return useQuery({
@@ -37,6 +37,15 @@ export function useUploads() {
     return useQuery({
         queryKey: ["uploads"],
         queryFn: getUploads,
+        placeholderData: keepPreviousData
+    });
+}
+
+export function useUploadById(id: string | null) {
+    return useQuery({
+        queryKey: ["upload", id],
+        queryFn: () => id ? getUpload(id) : null,
+        enabled: !!id,
         placeholderData: keepPreviousData
     });
 }
@@ -190,6 +199,24 @@ export function useWorkspaceMaterials() {
     return useQuery({
         queryKey: ["workspaceMaterials"],
         queryFn: getWorkspaceMaterials,
+        placeholderData: keepPreviousData
+    });
+}
+
+// Collections hooks
+export function useCollections() {
+    return useQuery({
+        queryKey: ["collections"],
+        queryFn: getCollections,
+        placeholderData: keepPreviousData
+    });
+}
+
+export function useCollection(id: string | null) {
+    return useQuery({
+        queryKey: ["collection", id],
+        queryFn: () => id ? getCollection(id) : null,
+        enabled: !!id,
         placeholderData: keepPreviousData
     });
 }

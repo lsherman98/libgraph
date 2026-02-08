@@ -1,5 +1,5 @@
 import { pb } from "../pocketbase"
-import { Collections, type Create, type EdgesResponse, type ChatsResponse, type MessagesResponse } from "../pocketbase-types"
+import { Collections, type Create, type EdgesResponse, type ChatsResponse, type MessagesResponse, type CollectionsResponse } from "../pocketbase-types"
 import type { EnrichedNodesResponse } from "../types"
 
 export async function getPageUrl(id: string) {
@@ -13,6 +13,16 @@ export async function getPageUrl(id: string) {
 
 export const upload = async (upload: Create<Collections.Uploads>) => {
     return await pb.collection(Collections.Uploads).create(upload)
+}
+
+export const getUpload = async (id: string) => {
+    return await pb.collection(Collections.Uploads).getOne(id, {
+        expand: 'subjects,publication,topic,tags,upload'
+    })
+}
+
+export const updateUpload = async (id: string, data: Partial<Create<Collections.Uploads>>) => {
+    return await pb.collection(Collections.Uploads).update(id, data)
 }
 
 export const getPeople = async () => {
@@ -50,7 +60,7 @@ export const createTopic = async (data: Create<Collections.Topics>) => {
 export const getUploads = async () => {
     return await pb.collection(Collections.Uploads).getFullList({
         sort: '-created',
-        expand: 'subjects,publication,topic,tags'
+        expand: 'subjects,publication,topic,tags,upload'
     })
 }
 
@@ -348,6 +358,40 @@ export const getWorkspaceMaterials = async () => {
     return { uploads, highlights, bookmarks, notes };
 }
 
+// Collections API
+export const getCollections = async () => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) return [];
+    return await pb.collection(Collections.Collections).getFullList({
+        filter: `user = "${userId}"`,
+        sort: '-updated',
+        expand: 'uploads'
+    });
+}
+
+export const getCollection = async (id: string) => {
+    return await pb.collection(Collections.Collections).getOne(id, {
+        expand: 'uploads'
+    });
+}
+
+export const createCollection = async (data: Create<Collections.Collections>) => {
+    const userId = pb.authStore.record?.id;
+    if (!userId) throw new Error("User not authenticated");
+    return await pb.collection(Collections.Collections).create({
+        ...data,
+        user: userId
+    });
+}
+
+export const updateCollection = async (id: string, data: Partial<Create<Collections.Collections>>) => {
+    return await pb.collection(Collections.Collections).update(id, data);
+}
+
+export const deleteCollection = async (id: string) => {
+    return await pb.collection(Collections.Collections).delete(id);
+}
+
 // Chats API
 export const getChats = async () => {
     const userId = pb.authStore.record?.id;
@@ -404,6 +448,7 @@ export interface ChatFilters {
     types?: string[];
     topics?: string[];
     uploads?: string[];
+    collections?: string[];
 }
 
 export interface ChatSource {

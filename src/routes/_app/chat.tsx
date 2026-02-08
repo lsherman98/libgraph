@@ -1,7 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { usePeople, usePublications, useTags, useTopics, useUploads, useMessages } from "@/lib/api/queries";
+import {
+  usePeople,
+  usePublications,
+  useTags,
+  useTopics,
+  useUploads,
+  useMessages,
+  useCollections,
+} from "@/lib/api/queries";
 import { useCreateChat, useCreateMessage } from "@/lib/api/mutations";
 import { sendChatMessage, type ChatMessage, type ChatFilters, type ChatSource } from "@/lib/api/api";
 import { ChatHistorySidebar } from "@/components/chat/chat-history-sidebar";
@@ -28,7 +36,7 @@ import {
   PanelLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { UploadsTypeOptions, type MessagesResponse } from "@/lib/pocketbase-types";
+import { UploadsTypeOptions, MessagesRoleOptions, type MessagesResponse } from "@/lib/pocketbase-types";
 
 export const Route = createFileRoute("/_app/chat")({
   component: ChatPage,
@@ -56,6 +64,7 @@ function ChatPage() {
   const { data: tags } = useTags();
   const { data: topics } = useTopics();
   const { data: uploads } = useUploads();
+  const { data: collections } = useCollections();
 
   const { data: dbMessages, isLoading: isLoadingMessages } = useMessages(activeChatId);
   const createChatMutation = useCreateChat();
@@ -64,7 +73,7 @@ function ChatPage() {
   // Convert DB messages to local format when they load
   useEffect(() => {
     if (dbMessages && activeChatId) {
-      const converted: LocalMessage[] = dbMessages.map((m: MessagesResponse<ChatSource[]>) => ({
+      const converted: LocalMessage[] = (dbMessages as MessagesResponse<ChatSource[]>[]).map((m) => ({
         id: m.id,
         role: m.role as "user" | "assistant",
         content: m.content || "",
@@ -97,9 +106,7 @@ function ChatPage() {
 
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
-      const history = localMessages
-        .filter((m) => !m.isLoading)
-        .map((m) => ({ role: m.role, content: m.content }));
+      const history = localMessages.filter((m) => !m.isLoading).map((m) => ({ role: m.role, content: m.content }));
       return sendChatMessage(message, filters, history);
     },
     onMutate: (message) => {
@@ -131,14 +138,14 @@ function ChatPage() {
       // Save user message to DB
       await createMessageMutation.mutateAsync({
         chat: chatId,
-        role: "user",
+        role: MessagesRoleOptions.user,
         content: message,
       });
 
       // Save assistant message to DB
       await createMessageMutation.mutateAsync({
         chat: chatId,
-        role: "assistant",
+        role: MessagesRoleOptions.assistant,
         content: data.message,
         sources: data.sources || null,
       });
@@ -229,11 +236,7 @@ function ChatPage() {
     <div className="flex h-full w-full">
       {/* Chat History Sidebar */}
       {isSidebarOpen && (
-        <ChatHistorySidebar
-          activeChatId={activeChatId}
-          onSelectChat={handleSelectChat}
-          onNewChat={handleNewChat}
-        />
+        <ChatHistorySidebar activeChatId={activeChatId} onSelectChat={handleSelectChat} onNewChat={handleNewChat} />
       )}
 
       {/* Filter Panel */}
@@ -256,6 +259,48 @@ function ChatPage() {
           <Separator />
           <ScrollArea className="flex-1">
             <div className="p-4 space-y-5">
+              {/* Collection Filter */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Collection</label>
+                <Select
+                  value={filters.collections?.[0] || "all"}
+                  onValueChange={(value) => {
+                    if (value === "all") {
+                      setFilters((prev) => {
+                        const newFilters = { ...prev };
+                        delete newFilters.collections;
+                        return newFilters;
+                      });
+                    } else {
+                      setFilters((prev) => ({
+                        ...prev,
+                        collections: [value],
+                      }));
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-9 text-sm">
+                    <SelectValue placeholder="All collections" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All collections</SelectItem>
+                    {collections?.map((collection) => (
+                      <SelectItem key={collection.id} value={collection.id}>
+                        <div className="flex items-center gap-2">
+                          <Library className="h-3.5 w-3.5 text-muted-foreground" />
+                          {collection.name || "Untitled"}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {collections?.length === 0 && (
+                  <p className="text-[11px] text-muted-foreground">
+                    No collections yet. Create one in Library → Collections.
+                  </p>
+                )}
+              </div>
+
               {/* Subject Filter */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Subject</label>
@@ -415,11 +460,7 @@ function ChatPage() {
                     className="h-8 w-8"
                     onClick={() => setIsSidebarOpen(!isSidebarOpen)}
                   >
-                    {isSidebarOpen ? (
-                      <PanelLeftClose className="h-4 w-4" />
-                    ) : (
-                      <PanelLeft className="h-4 w-4" />
-                    )}
+                    {isSidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">

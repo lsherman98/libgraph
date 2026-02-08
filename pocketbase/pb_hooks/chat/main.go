@@ -24,6 +24,7 @@ type MetadataFilters struct {
 	Types        []string `json:"types,omitempty"`
 	Topics       []string `json:"topics,omitempty"`
 	Uploads      []string `json:"uploads,omitempty"`
+	Collections  []string `json:"collections,omitempty"`
 }
 
 type ChatMessage struct {
@@ -75,7 +76,7 @@ func Init(app *pocketbase.PocketBase) error {
 			// Build search filters from metadata
 			var searchFilters *llama.SearchFilters
 			if req.Filters != nil {
-				searchFilters = buildSearchFilters(req.Filters)
+				searchFilters = buildSearchFilters(app, req.Filters)
 			}
 
 			// Convert history to llama format
@@ -151,8 +152,23 @@ func Init(app *pocketbase.PocketBase) error {
 	return nil
 }
 
-func buildSearchFilters(filters *MetadataFilters) *llama.SearchFilters {
+func buildSearchFilters(app *pocketbase.PocketBase, filters *MetadataFilters) *llama.SearchFilters {
 	var filterList []llama.SearchFilter
+
+	// Resolve collections into upload IDs
+	if len(filters.Collections) > 0 {
+		for _, collectionId := range filters.Collections {
+			record, err := app.FindRecordById("collections", collectionId)
+			if err != nil {
+				app.Logger().Error("Failed to resolve collection", "id", collectionId, "error", err)
+				continue
+			}
+			uploadIds := record.GetStringSlice("uploads")
+			for _, uid := range uploadIds {
+				filters.Uploads = append(filters.Uploads, uid)
+			}
+		}
+	}
 
 	// Add tag filters
 	for _, tag := range filters.Tags {

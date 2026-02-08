@@ -9,14 +9,16 @@ import {
 import { AnnotationsPanel } from "@/components/reader/annotations-panel";
 import { HighlightEditorPanel } from "@/components/reader/highlight-editor-panel";
 import { BookmarkEditorPanel, NoteEditorPanel } from "@/components/reader/bookmark-note-editor-panel";
+import { DocumentInfoPanel } from "@/components/reader/document-info-panel";
 import { WorkspacePanel } from "@/components/writer";
-import { Highlighter, Layers, PenLine, Bookmark, StickyNote } from "lucide-react";
-import { useWorkspaceTabsStore, type WriterTab } from "@/lib/stores/workspace-tabs-store";
+import { Highlighter, Layers, PenLine, Bookmark, StickyNote, Info } from "lucide-react";
+import { useWorkspaceTabsStore, type WriterTab, type ReaderTab } from "@/lib/stores/workspace-tabs-store";
 import { useWritingProject } from "@/lib/api/queries";
 import { useUpdateWritingProject } from "@/lib/api/mutations";
 import { useReaderStore } from "@/lib/stores/reader-store";
 import { useLocation } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface RightSidebarProps extends React.ComponentProps<typeof Sidebar> {
   currentPageId?: string;
@@ -123,6 +125,19 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
   const isBookmarkEditorOpen = !!pendingBookmark || !!editingBookmark;
   const isNoteEditorOpen = !!pendingNote || !!editingNote;
 
+  // Get the upload ID from the active reader tab
+  const readerTab = activeTab?.type === "reader" ? (activeTab as ReaderTab) : null;
+  const readerUploadId = readerTab?.uploadId ?? null;
+
+  const [sidebarTab, setSidebarTab] = useState<"annotations" | "info">("annotations");
+
+  // Reset to annotations tab when an editor panel opens
+  useEffect(() => {
+    if (isHighlightEditorOpen || isBookmarkEditorOpen || isNoteEditorOpen) {
+      setSidebarTab("annotations");
+    }
+  }, [isHighlightEditorOpen, isBookmarkEditorOpen, isNoteEditorOpen]);
+
   // Determine which header to show
   const getHeaderContent = () => {
     if (isHighlightEditorOpen) {
@@ -149,11 +164,21 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
         </>
       );
     }
+
+    // Show tab switcher between Annotations and Document Info
     return (
-      <>
-        <Highlighter className="h-4 w-4" />
-        <span className="font-semibold text-sm">Annotations</span>
-      </>
+      <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as "annotations" | "info")} className="w-full">
+        <TabsList className="w-full h-8">
+          <TabsTrigger value="annotations" className="flex-1 gap-1 text-xs h-7">
+            <Highlighter className="h-3.5 w-3.5" />
+            Annotations
+          </TabsTrigger>
+          <TabsTrigger value="info" className="flex-1 gap-1 text-xs h-7">
+            <Info className="h-3.5 w-3.5" />
+            Document
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
     );
   };
 
@@ -162,6 +187,11 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
     if (isHighlightEditorOpen) return <HighlightEditorPanel />;
     if (isBookmarkEditorOpen) return <BookmarkEditorPanel />;
     if (isNoteEditorOpen) return <NoteEditorPanel />;
+
+    if (sidebarTab === "info" && readerUploadId) {
+      return <DocumentInfoPanel uploadId={readerUploadId} />;
+    }
+
     return (
       <AnnotationsPanel
         currentPageId={currentPageId}

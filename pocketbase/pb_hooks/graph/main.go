@@ -34,6 +34,7 @@ const (
 	EdgeTypeNoteOf      EdgeType = "note_of"
 	EdgeTypePublishedBy EdgeType = "published_by"
 	EdgeTypeAboutPerson EdgeType = "about_person"
+	EdgeTypeLinksTo     EdgeType = "links_to"
 )
 
 func Init(app *pocketbase.PocketBase) error {
@@ -267,6 +268,77 @@ func deleteNodeAndEdges(app *pocketbase.PocketBase, recordId string, userId stri
 	return app.Delete(node)
 }
 
+// syncEdgesForRelation syncs edges between a source node and a set of target records.
+// It deletes edges that are no longer needed and creates new ones.
+func syncEdgesForRelation(app *pocketbase.PocketBase, sourceNodeId string, targetRecordIds []string, targetNodeType NodeType, edgeType EdgeType, userId string, sourceIsTarget bool) error {
+	// Find all existing edges of this type from/to source node
+	var filterStr string
+	if sourceIsTarget {
+		filterStr = fmt.Sprintf("target = '%s' && type = '%s' && user = '%s'", sourceNodeId, string(edgeType), userId)
+	} else {
+		filterStr = fmt.Sprintf("source = '%s' && type = '%s' && user = '%s'", sourceNodeId, string(edgeType), userId)
+	}
+
+	existingEdges, err := app.FindRecordsByFilter(
+		collections.Edges,
+		filterStr,
+		"",
+		0,
+		0,
+		dbx.Params{},
+	)
+	if err != nil {
+		existingEdges = []*core.Record{}
+	}
+
+	// Build a set of existing target/source node IDs
+	existingMap := map[string]*core.Record{}
+	for _, edge := range existingEdges {
+		if sourceIsTarget {
+			existingMap[edge.GetString("source")] = edge
+		} else {
+			existingMap[edge.GetString("target")] = edge
+		}
+	}
+
+	// Build set of desired target node IDs
+	desiredMap := map[string]bool{}
+	for _, recordId := range targetRecordIds {
+		targetNode, _ := findNodeByRecord(app, recordId, userId, targetNodeType)
+		if targetNode != nil {
+			desiredMap[targetNode.Id] = true
+		}
+	}
+
+	// Delete edges no longer needed
+	for nodeId, edge := range existingMap {
+		if !desiredMap[nodeId] {
+			app.Delete(edge)
+		}
+	}
+
+	// Create new edges
+	for nodeId := range desiredMap {
+		if _, exists := existingMap[nodeId]; !exists {
+			if sourceIsTarget {
+				createEdge(app, nodeId, sourceNodeId, edgeType, userId)
+			} else {
+				createEdge(app, sourceNodeId, nodeId, edgeType, userId)
+			}
+		}
+	}
+
+	return nil
+}
+
+// syncSingleEdge syncs a single relation (e.g. publication) for a node.
+func syncSingleEdge(app *pocketbase.PocketBase, sourceNodeId string, targetRecordId string, targetNodeType NodeType, edgeType EdgeType, userId string, sourceIsTarget bool) error {
+	if targetRecordId == "" {
+		return syncEdgesForRelation(app, sourceNodeId, []string{}, targetNodeType, edgeType, userId, sourceIsTarget)
+	}
+	return syncEdgesForRelation(app, sourceNodeId, []string{targetRecordId}, targetNodeType, edgeType, userId, sourceIsTarget)
+}
+
 func registerUploadHooks(app *pocketbase.PocketBase) {
 	app.OnRecordAfterCreateSuccess(collections.Uploads).BindFunc(func(e *core.RecordEvent) error {
 		upload := e.Record
@@ -313,6 +385,15 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 			}
 		}
 
+		// Create edges for related/linked uploads
+		relatedUploads := upload.GetStringSlice("upload")
+		for _, relatedId := range relatedUploads {
+			relatedNode, _ := findNodeByRecord(app, relatedId, userId, NodeTypeUpload)
+			if relatedNode != nil {
+				createEdge(app, nodeId, relatedNode.Id, EdgeTypeLinksTo, userId)
+			}
+		}
+
 		return e.Next()
 	})
 
@@ -330,6 +411,44 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 		if err := updateNodeData(app, upload.Id, userId, NodeTypeUpload, label, data); err != nil {
 			e.App.Logger().Error("Failed to update node data for upload:", "error", err)
 		}
+
+		// Sync all edges for the upload
+		uploadNode, err := findNodeByRecord(app, upload.Id, userId, NodeTypeUpload)
+		if err != nil || uploadNode == nil {
+			e.App.Logger().Error("Failed to find upload node for edge sync:", "error", err)
+			return e.Next()
+		}
+
+		// Sync subjects (about_person) - subject node is source, upload node is target
+		subjects := upload.GetStringSlice("subjects")
+		if err := syncEdgesForRelation(app, uploadNode.Id, subjects, NodeTypeAuthor, EdgeTypeAboutPerson, userId, true); err != nil {
+			e.App.Logger().Error("Failed to sync subject edges:", "error", err)
+		}
+
+		// Sync publication (published_by) - publication node is source, upload node is target
+		publicationId := upload.GetString("publication")
+		if err := syncSingleEdge(app, uploadNode.Id, publicationId, NodeTypePublication, EdgeTypePublishedBy, userId, true); err != nil {
+			e.App.Logger().Error("Failed to sync publication edge:", "error", err)
+		}
+
+		// Sync tags (tagged_with) - tag node is source, upload node is target
+		tags := upload.GetStringSlice("tags")
+		if err := syncEdgesForRelation(app, uploadNode.Id, tags, NodeTypeTag, EdgeTypeTaggedWith, userId, true); err != nil {
+			e.App.Logger().Error("Failed to sync tag edges:", "error", err)
+		}
+
+		// Sync topics (belongs_to) - topic node is source, upload node is target
+		topics := upload.GetStringSlice("topic")
+		if err := syncEdgesForRelation(app, uploadNode.Id, topics, NodeTypeTopic, EdgeTypeBelongsTo, userId, true); err != nil {
+			e.App.Logger().Error("Failed to sync topic edges:", "error", err)
+		}
+
+		// Sync related uploads (links_to) - upload node is source, related node is target
+		relatedUploads := upload.GetStringSlice("upload")
+		if err := syncEdgesForRelation(app, uploadNode.Id, relatedUploads, NodeTypeUpload, EdgeTypeLinksTo, userId, false); err != nil {
+			e.App.Logger().Error("Failed to sync related upload edges:", "error", err)
+		}
+
 		return e.Next()
 	})
 }
