@@ -55,17 +55,14 @@ export function HighlightPopover({
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      // Use setTimeout to allow the click to process first
-      setTimeout(() => {
-        // Check if the click is inside the popover or inside a portal (like the tag combobox)
-        if (
-          popoverRef.current &&
-          !popoverRef.current.contains(e.target as Node) &&
-          !(e.target as HTMLElement).closest('[data-slot="popover-content"]')
-        ) {
-          onDismiss();
-        }
-      }, 0);
+      // Check if the click is inside the popover or inside a portal (like the tag combobox)
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target as Node) &&
+        !(e.target as HTMLElement).closest('[data-slot="popover-content"]')
+      ) {
+        onDismiss();
+      }
     };
 
     const handleEscape = (e: KeyboardEvent) => {
@@ -173,16 +170,14 @@ export function ExistingHighlightPopover({
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      setTimeout(() => {
-        // Check if the click is inside the popover or inside a portal (like the tag combobox)
-        if (
-          popoverRef.current &&
-          !popoverRef.current.contains(e.target as Node) &&
-          !(e.target as HTMLElement).closest('[data-slot="popover-content"]')
-        ) {
-          onDismiss();
-        }
-      }, 0);
+      // Check if the click is inside the popover or inside a portal (like the tag combobox)
+      if (
+        popoverRef.current &&
+        !popoverRef.current.contains(e.target as Node) &&
+        !(e.target as HTMLElement).closest('[data-slot="popover-content"]')
+      ) {
+        onDismiss();
+      }
     };
 
     const handleEscape = (e: KeyboardEvent) => {

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
@@ -138,6 +139,69 @@ func (c *LlamaClient) GetParseJob(jobId string) (*ParseJobResponse, error) {
 	var response ParseJobResponse
 	if err := c.Do(context.Background(), http.MethodGet, path.Join("/api/v2/parse", jobId), params, nil, &response); err != nil {
 		return nil, err
+	}
+
+	return &response, nil
+}
+
+// UploadFileContent uploads raw file content (e.g. a transcript markdown) to LlamaIndex Cloud
+// using multipart form upload. Returns the file ID for pipeline indexing.
+func (c *LlamaClient) UploadFileContent(name string, content []byte, externalFileID string) (*UploadFileContentResponse, error) {
+	params := url.Values{}
+	params.Add("project_id", c.ProjectID)
+
+	endpointURL, err := c.BaseURL.Parse(path.Join(c.BaseURL.Path, "/api/v1/files"))
+	if err != nil {
+		return nil, err
+	}
+	endpointURL.RawQuery = params.Encode()
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+
+	// Add file field
+	part, err := writer.CreateFormFile("upload_file", name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create form file: %w", err)
+	}
+	if _, err = part.Write(content); err != nil {
+		return nil, fmt.Errorf("failed to write content: %w", err)
+	}
+
+	// Add external_file_id if provided
+	if externalFileID != "" {
+		if err := writer.WriteField("external_file_id", externalFileID); err != nil {
+			return nil, fmt.Errorf("failed to write external_file_id: %w", err)
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close multipart writer: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, endpointURL.String(), &body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Authorization", "Bearer "+c.APIKey)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := c.Client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("LlamaIndex: file upload failed with status: %s, body: %s", resp.Status, string(respBody))
+	}
+
+	var response UploadFileContentResponse
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return nil, fmt.Errorf("failed to decode upload response: %w", err)
 	}
 
 	return &response, nil

@@ -175,6 +175,44 @@ func handleAudioUpload(app *pocketbase.PocketBase, e *core.RecordEvent, upload *
 				slog.Error("[uploads] failed to save transcript chunk", "uploadID", uploadID, "error", saveErr, "chunk", idx)
 			}
 		}
+		slog.Info("[uploads] transcript chunks saved, starting LlamaIndex pipeline integration", "uploadID", uploadID)
+
+		// LlamaIndex Pipeline Integration — upload transcript to RAG pipeline
+		llamaClient, llamaErr := llama.New(app)
+		if llamaErr != nil {
+			slog.Error("[uploads] failed to create LlamaIndex client for audio transcript", "uploadID", uploadID, "error", llamaErr)
+			// Non-fatal: transcript is still saved locally and in FTS
+		} else {
+			transcriptFilename := fmt.Sprintf("%s_transcript.md", title)
+			uploadRes, uploadErr := llamaClient.UploadFileContent(transcriptFilename, []byte(markdown), upload.Id)
+			if uploadErr != nil {
+				slog.Error("[uploads] failed to upload transcript to LlamaIndex Cloud", "uploadID", uploadID, "error", uploadErr)
+			} else {
+				slog.Info("[uploads] transcript uploaded to LlamaIndex Cloud", "uploadID", uploadID, "llamaFileID", uploadRes.ID)
+
+				metadata := map[string]interface{}{
+					"upload_id":      upload.Id,
+					"title":          title,
+					"user_id":        upload.GetString("user"),
+					"topic_id":       upload.GetString("topic"),
+					"type":           upload.GetString("type"),
+					"publication_id": upload.GetString("publication"),
+				}
+
+				_, pipelineErr := llamaClient.AddFilesToPipeline(uploadRes.ID, metadata)
+				if pipelineErr != nil {
+					slog.Error("[uploads] failed to add transcript to LlamaIndex pipeline", "uploadID", uploadID, "error", pipelineErr)
+				} else {
+					slog.Info("[uploads] transcript added to LlamaIndex pipeline", "uploadID", uploadID)
+
+					upload.Set("llama_file_id", uploadRes.ID)
+					if saveErr := app.Save(upload); saveErr != nil {
+						slog.Error("[uploads] failed to save llama_file_id on upload", "uploadID", uploadID, "error", saveErr)
+					}
+				}
+			}
+		}
+
 		slog.Info("[uploads] transcription flow completed successfully", "uploadID", uploadID)
 	})
 

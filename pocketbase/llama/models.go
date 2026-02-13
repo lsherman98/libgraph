@@ -83,6 +83,13 @@ type UploadFileFromURLResponse struct {
 	CreatedAt string `json:"created_at"`
 }
 
+type UploadFileContentResponse struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	ProjectId string `json:"project_id"`
+	CreatedAt string `json:"created_at"`
+}
+
 type PipelineFile struct {
 	FileID         string                 `json:"file_id"`
 	CustomMetadata map[string]interface{} `json:"custom_metadata,omitempty"`

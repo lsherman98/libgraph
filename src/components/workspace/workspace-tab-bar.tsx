@@ -234,17 +234,25 @@ function TabItem({ tab, isActive, isSplit, onClick, onClose }: TabItemProps) {
         </span>
       )}
 
-      {/* Close button */}
-      <button
+      {/* Close button - using span to avoid nested button inside TabsTrigger */}
+      <span
+        role="button"
+        tabIndex={0}
         className={cn(
           "absolute right-1.5 h-5 w-5 rounded-sm flex items-center justify-center shrink-0",
           "opacity-0 group-hover:opacity-100 transition-opacity",
           "hover:bg-muted",
         )}
         onClick={onClose}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onClose(e as unknown as React.MouseEvent);
+          }
+        }}
       >
         <X className="h-3 w-3" />
-      </button>
+      </span>
     </TabsTrigger>
   );
 }

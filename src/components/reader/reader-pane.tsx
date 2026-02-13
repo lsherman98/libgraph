@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   useInfinitePages,
   usePageMarkdown,
@@ -51,8 +51,11 @@ import {
   findTextOffset,
   getSelectionInfo,
   findHighlightElement,
+  splitMarkdownIntoChunks,
+  highlightsForChunk,
   type SelectionInfo,
   type HighlightRange,
+  type MarkdownChunk,
 } from "@/lib/highlight-utils";
 
 interface ReaderPaneProps {
@@ -102,6 +105,20 @@ function MarkdownContent({
   const [tempHighlight, setTempHighlight] = useState<HighlightRange | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  // --- Chunking for large markdown files ---
+  const chunks = useMemo(() => (content ? splitMarkdownIntoChunks(content) : []), [content]);
+  const isChunked = chunks.length > 1;
+  const [currentChunkIndex, setCurrentChunkIndex] = useState(0);
+
+  // Reset chunk index when content changes
+  useEffect(() => {
+    setCurrentChunkIndex(0);
+  }, [content]);
+
+  const currentChunk: MarkdownChunk | undefined = chunks[currentChunkIndex];
+  const chunkContent = currentChunk?.content ?? content;
+  const chunkStartOffset = currentChunk?.startOffset ?? 0;
 
   // Store callback refs to avoid stale closures
   const onCreateHighlightRef = useRef(onCreateHighlight);
@@ -174,15 +191,16 @@ function MarkdownContent({
           setSelection(selectionInfo);
           setActiveHighlight(null);
 
-          if (content) {
-            const offsets = findTextOffset(content, selectionInfo.text);
+          if (chunkContent) {
+            const offsets = findTextOffset(chunkContent, selectionInfo.text);
             if (offsets) {
+              // Store page-level offsets (chunk offset added back)
               setTempHighlight({
                 id: "temp-selection",
                 text: selectionInfo.text,
                 color: HighlightsColorOptions.yellow,
-                startOffset: offsets.start,
-                endOffset: offsets.end,
+                startOffset: offsets.start + chunkStartOffset,
+                endOffset: offsets.end + chunkStartOffset,
               });
             } else {
               setTempHighlight(null);
@@ -194,25 +212,27 @@ function MarkdownContent({
         }
       });
     },
-    [highlights, content],
+    [highlights, chunkContent, chunkStartOffset],
   );
 
   const handleHighlight = useCallback(
     (color: HighlightsColorOptions, note?: string, tags?: string[]) => {
-      if (!selection || !content || !onCreateHighlight) return;
+      if (!selection || !chunkContent || !onCreateHighlight) return;
 
       let startOffset, endOffset;
       if (tempHighlight && tempHighlight.text === selection.text) {
+        // tempHighlight already has page-level offsets
         startOffset = tempHighlight.startOffset;
         endOffset = tempHighlight.endOffset;
       } else {
-        const offsets = findTextOffset(content, selection.text);
+        const offsets = findTextOffset(chunkContent, selection.text);
         if (!offsets) {
           console.warn("Could not find text offset for selection");
           return;
         }
-        startOffset = offsets.start;
-        endOffset = offsets.end;
+        // Convert chunk-local offsets to page-level
+        startOffset = offsets.start + chunkStartOffset;
+        endOffset = offsets.end + chunkStartOffset;
       }
 
       onCreateHighlight({
@@ -228,7 +248,7 @@ function MarkdownContent({
       setTempHighlight(null);
       window.getSelection()?.removeAllRanges();
     },
-    [selection, content, onCreateHighlight, tempHighlight],
+    [selection, chunkContent, chunkStartOffset, onCreateHighlight, tempHighlight],
   );
 
   const handleUpdateHighlightColor = useCallback(
@@ -369,7 +389,13 @@ function MarkdownContent({
     });
   }
 
-  const processedContent = injectHighlightsIntoMarkdown(content, allHighlights);
+  // If content is chunked, filter & adjust highlights for the current chunk
+  const chunkHighlights = isChunked && currentChunk ? highlightsForChunk(allHighlights, currentChunk) : allHighlights;
+
+  const processedContent = injectHighlightsIntoMarkdown(
+    isChunked ? (currentChunk?.content ?? "") : content,
+    chunkHighlights,
+  );
 
   return (
     <div className="reader-content relative" ref={contentRef} onMouseUp={handleMouseUp}>
@@ -521,6 +547,39 @@ function MarkdownContent({
       >
         {processedContent}
       </Markdown>
+
+      {/* Sub-page navigation for chunked large markdown */}
+      {isChunked && (
+        <div className="flex items-center justify-center gap-2 py-4 mt-4 border-t border-current/10">
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={currentChunkIndex === 0}
+            onClick={() => {
+              setCurrentChunkIndex((i) => Math.max(0, i - 1));
+              contentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            Prev
+          </Button>
+          <span className="text-xs tabular-nums opacity-60">
+            Section {currentChunkIndex + 1} of {chunks.length}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={currentChunkIndex === chunks.length - 1}
+            onClick={() => {
+              setCurrentChunkIndex((i) => Math.min(chunks.length - 1, i + 1));
+              contentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
+          >
+            Next
+            <ChevronRight className="h-4 w-4 ml-1" />
+          </Button>
+        </div>
+      )}
 
       <div ref={popoverRef}>
         {selection && (

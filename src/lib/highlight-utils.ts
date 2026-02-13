@@ -218,3 +218,115 @@ export function getBlockPreviewText(element: HTMLElement): string {
     const text = element.textContent || "";
     return text.slice(0, 150).trim();
 }
+
+// --- Large markdown chunking utilities ---
+
+/**
+ * Maximum characters per chunk before we split a page into sub-pages.
+ * 5 MB of markdown — only extremely large files will be chunked.
+ */
+export const MAX_CHUNK_SIZE = 50_000;
+
+/**
+ * A chunk of markdown content and its byte-offset range in the original source.
+ */
+export interface MarkdownChunk {
+    /** The markdown text for this chunk */
+    content: string;
+    /** Start character offset in the original full markdown */
+    startOffset: number;
+    /** End character offset (exclusive) in the original full markdown */
+    endOffset: number;
+    /** 0-based chunk index */
+    index: number;
+}
+
+/**
+ * Split large markdown content into smaller chunks at paragraph boundaries (\n\n).
+ * If the content is under maxSize it is returned as a single chunk.
+ */
+export function splitMarkdownIntoChunks(
+    markdown: string,
+    maxSize: number = MAX_CHUNK_SIZE,
+): MarkdownChunk[] {
+    if (markdown.length <= maxSize) {
+        return [{ content: markdown, startOffset: 0, endOffset: markdown.length, index: 0 }];
+    }
+
+    const chunks: MarkdownChunk[] = [];
+    let cursor = 0;
+
+    while (cursor < markdown.length) {
+        let end = cursor + maxSize;
+
+        if (end >= markdown.length) {
+            // Last chunk – take everything remaining
+            chunks.push({
+                content: markdown.slice(cursor),
+                startOffset: cursor,
+                endOffset: markdown.length,
+                index: chunks.length,
+            });
+            break;
+        }
+
+        // Try to find a paragraph boundary (\n\n) to split on, searching backwards
+        // from the max position. Look within the last 20% of the chunk to avoid
+        // chunks that are too small.
+        const searchStart = cursor + Math.floor(maxSize * 0.8);
+        const searchRegion = markdown.slice(searchStart, end);
+        const lastBreak = searchRegion.lastIndexOf("\n\n");
+
+        if (lastBreak !== -1) {
+            end = searchStart + lastBreak + 2; // include the \n\n in the current chunk
+        } else {
+            // No paragraph break found – try a single newline
+            const lastNewline = searchRegion.lastIndexOf("\n");
+            if (lastNewline !== -1) {
+                end = searchStart + lastNewline + 1;
+            }
+            // else: hard-cut at maxSize (very long paragraph)
+        }
+
+        chunks.push({
+            content: markdown.slice(cursor, end),
+            startOffset: cursor,
+            endOffset: end,
+            index: chunks.length,
+        });
+
+        cursor = end;
+    }
+
+    return chunks;
+}
+
+/**
+ * Map page-level highlights to chunk-local highlights by adjusting offsets.
+ * Only highlights that overlap with the chunk's range are returned.
+ */
+export function highlightsForChunk(
+    highlights: HighlightRange[],
+    chunk: MarkdownChunk,
+): HighlightRange[] {
+    const result: HighlightRange[] = [];
+
+    for (const h of highlights) {
+        // Check for overlap
+        if (h.endOffset <= chunk.startOffset || h.startOffset >= chunk.endOffset) {
+            continue; // no overlap
+        }
+
+        // Clamp + adjust offsets to chunk-local coordinates
+        const localStart = Math.max(0, h.startOffset - chunk.startOffset);
+        const localEnd = Math.min(chunk.content.length, h.endOffset - chunk.startOffset);
+
+        result.push({
+            ...h,
+            startOffset: localStart,
+            endOffset: localEnd,
+        });
+    }
+
+    return result;
+}
