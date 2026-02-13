@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/lsherman98/libgraph/pocketbase/collections"
+	"github.com/lsherman98/libgraph/pocketbase/llama"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -401,6 +402,18 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 		if err := deleteNodeAndEdges(app, e.Record.Id, e.Record.GetString("user"), NodeTypeUpload); err != nil {
 			e.App.Logger().Error("Failed to delete node and edges for upload:", "error", err)
 		}
+
+		// Remove document from LlamaIndex pipeline
+		llamaFileId := e.Record.GetString("llama_file_id")
+		if llamaFileId != "" {
+			llamaClient, err := llama.New(app)
+			if err != nil {
+				e.App.Logger().Error("Failed to create LlamaIndex client:", "error", err)
+			} else if err := llamaClient.DeletePipelineDocument(llamaFileId); err != nil {
+				e.App.Logger().Error("Failed to delete document from pipeline:", "error", err, "llama_file_id", llamaFileId)
+			}
+		}
+
 		return e.Next()
 	})
 

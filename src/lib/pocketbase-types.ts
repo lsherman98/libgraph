@@ -303,6 +303,7 @@ export type UploadsRecord = {
 	created: IsoAutoDateString
 	file?: FileNameString
 	id: string
+	llama_file_id?: string
 	num_pages?: number
 	publication?: RecordIdString
 	status?: UploadsStatusOptions

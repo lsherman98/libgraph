@@ -186,6 +186,19 @@ func (c *LlamaClient) AddFilesToPipeline(fileId string, metadata map[string]inte
 	return &response, nil
 }
 
+func (c *LlamaClient) DeletePipelineDocument(documentId string) error {
+	if c.PipelineID == "" {
+		return errors.New("pipeline ID is not configured")
+	}
+
+	endpoint := fmt.Sprintf("/api/v1/pipelines/%s/documents/%s", c.PipelineID, documentId)
+	if err := c.Do(context.Background(), http.MethodDelete, endpoint, nil, nil, nil); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c *LlamaClient) Chat(req *ChatRequestBody) (*ChatResponse, error) {
 	if c.PipelineID == "" {
 		return nil, errors.New("pipeline ID is not configured")

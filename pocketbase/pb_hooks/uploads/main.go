@@ -112,6 +112,12 @@ func Init(app *pocketbase.PocketBase) error {
 				e.App.Logger().Error("Failed to add file to pipeline:", "error", err)
 				return
 			}
+
+			// Persist the LlamaIndex file ID so we can delete the document from the pipeline later
+			upload.Set("llama_file_id", uploadRes.ID)
+			if err := app.Save(upload); err != nil {
+				e.App.Logger().Error("Failed to save llama_file_id on upload:", "error", err)
+			}
 		})
 
 		return e.Next()
