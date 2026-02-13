@@ -25,6 +25,13 @@ import { Input } from "@/components/ui/input";
 import { BookOpen, BookMarked, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from "lucide-react";
 import { pb } from "@/lib/pocketbase";
 import { Collections, HighlightsColorOptions } from "@/lib/pocketbase-types";
+
+const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac", ".wma", ".webm", ".mp4"]);
+
+function isAudioFile(filename: string): boolean {
+  const ext = filename.toLowerCase().slice(filename.lastIndexOf("."));
+  return AUDIO_EXTENSIONS.has(ext);
+}
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useReaderSettings, usePageSettings, FONT_FAMILIES } from "@/lib/hooks/use-reader-settings";
@@ -928,6 +935,7 @@ export function ReaderPane({
   onTitleLoad,
 }: ReaderPaneProps) {
   const [upload, setUpload] = useState<any>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const {
     isReadingMode,
@@ -1172,9 +1180,20 @@ export function ReaderPane({
         .getOne(uploadId, {
           expand: "subjects,publication,topic,tags",
         })
-        .then((data) => {
+        .then(async (data) => {
           setUpload(data);
           onTitleLoadRef.current?.(data.title || "Untitled");
+
+          // Build audio URL if the file is audio
+          if (data.file && isAudioFile(data.file)) {
+            try {
+              const token = await pb.files.getToken();
+              const url = pb.files.getURL(data, data.file, { token });
+              setAudioUrl(url);
+            } catch (err) {
+              console.error("Failed to get audio file URL:", err);
+            }
+          }
         })
         .catch(console.error);
     }
@@ -1401,6 +1420,14 @@ export function ReaderPane({
             />
           </div>
         </header>
+      )}
+      {audioUrl && (
+        <div className="shrink-0 border-b bg-muted/30 px-4 py-3">
+          <audio controls className="w-full max-w-3xl mx-auto block" preload="metadata">
+            <source src={audioUrl} />
+            Your browser does not support the audio element.
+          </audio>
+        </div>
       )}
       <main
         className="flex-1 min-h-0 overflow-hidden transition-colors duration-300"

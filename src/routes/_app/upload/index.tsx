@@ -52,18 +52,24 @@ function RouteComponent() {
   const createTagMutation = useCreateTag();
   const createTopicMutation = useCreateTopic();
 
+  const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac", ".wma", ".webm", ".mp4"]);
+
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    const newFiles = acceptedFiles.map((file) => ({
-      id: Math.random().toString(36).substring(7),
-      file,
-      name: file.name.replace(/\.[^/.]+$/, ""),
-      type: UploadsTypeOptions.book,
-      subjects: [],
-      publication: "",
-      tags: [],
-      topics: [],
-      status: "PENDING" as const,
-    }));
+    const newFiles = acceptedFiles.map((file) => {
+      const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+      const detectedType = AUDIO_EXTENSIONS.has(ext) ? UploadsTypeOptions.podcast : UploadsTypeOptions.book;
+      return {
+        id: Math.random().toString(36).substring(7),
+        file,
+        name: file.name.replace(/\.[^/.]+$/, ""),
+        type: detectedType,
+        subjects: [],
+        publication: "",
+        tags: [],
+        topics: [],
+        status: "PENDING" as const,
+      };
+    });
     setFiles((prev) => [...prev, ...newFiles]);
   }, []);
 
