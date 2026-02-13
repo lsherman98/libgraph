@@ -409,7 +409,7 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 			llamaClient, err := llama.New(app)
 			if err != nil {
 				e.App.Logger().Error("Failed to create LlamaIndex client:", "error", err)
-			} else if err := llamaClient.DeletePipelineDocument(llamaFileId); err != nil {
+			} else if err := llamaClient.DeletePipelineFile(llamaFileId); err != nil {
 				e.App.Logger().Error("Failed to delete document from pipeline:", "error", err, "llama_file_id", llamaFileId)
 			}
 		}

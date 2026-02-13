@@ -25,6 +25,10 @@ export const updateUpload = async (id: string, data: Partial<Create<Collections.
     return await pb.collection(Collections.Uploads).update(id, data)
 }
 
+export const deleteUpload = async (id: string) => {
+    return await pb.collection(Collections.Uploads).delete(id)
+}
+
 export const getPeople = async () => {
     return await pb.collection(Collections.People).getFullList({ sort: 'name' })
 }

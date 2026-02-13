@@ -7,6 +7,7 @@ import {
   useCreateCollection,
   useUpdateCollection,
   useDeleteCollection,
+  useDeleteUpload,
 } from "@/lib/api/mutations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -138,7 +139,15 @@ function EmptyState() {
   );
 }
 
-function DocumentRow({ upload, onEdit }: { upload: UploadsResponse; onEdit: () => void }) {
+function DocumentRow({
+  upload,
+  onEdit,
+  onDelete,
+}: {
+  upload: UploadsResponse;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   const navigate = useNavigate();
   const TypeIcon = typeIcons[upload.type] || FileText;
   const status = statusConfig[upload.status] || statusConfig.PENDING;
@@ -189,17 +198,30 @@ function DocumentRow({ upload, onEdit }: { upload: UploadsResponse; onEdit: () =
         })}
       </TableCell>
       <TableCell>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit();
-          }}
-        >
-          <Pencil className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
       </TableCell>
     </TableRow>
   );
@@ -216,6 +238,7 @@ function RouteComponent() {
   const createCollection = useCreateCollection();
   const updateCollectionMutation = useUpdateCollection();
   const deleteCollectionMutation = useDeleteCollection();
+  const deleteUploadMutation = useDeleteUpload();
 
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -348,7 +371,20 @@ function RouteComponent() {
                 </TableHeader>
                 <TableBody>
                   {uploads?.map((upload) => (
-                    <DocumentRow key={upload.id} upload={upload} onEdit={() => setEditingUpload(upload)} />
+                    <DocumentRow
+                      key={upload.id}
+                      upload={upload}
+                      onEdit={() => setEditingUpload(upload)}
+                      onDelete={() => {
+                        if (
+                          confirm(
+                            "Are you sure you want to delete this document? This will also remove its graph data and indexed content.",
+                          )
+                        ) {
+                          deleteUploadMutation.mutate(upload.id);
+                        }
+                      }}
+                    />
                   ))}
                 </TableBody>
               </Table>
