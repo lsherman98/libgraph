@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   usePeople,
@@ -11,7 +11,14 @@ import {
   useCollections,
 } from "@/lib/api/queries";
 import { useCreateChat, useCreateMessage } from "@/lib/api/mutations";
-import { sendChatMessage, type ChatMessage, type ChatFilters, type ChatSource } from "@/lib/api/api";
+import {
+  sendChatMessage,
+  type ChatMessage,
+  type ChatFilters,
+  type ChatSource,
+  type LLMParameters,
+  type RetrievalParameters,
+} from "@/lib/api/api";
 import { ChatHistorySidebar } from "@/components/chat/chat-history-sidebar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,6 +29,10 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import {
   Loader2,
   User,
@@ -37,9 +48,11 @@ import {
   PanelLeft,
   Search,
   MessageSquare,
+  Settings2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UploadsTypeOptions, MessagesRoleOptions, type MessagesResponse } from "@/lib/pocketbase-types";
+import { SourcePreviewDialog } from "@/components/chat/source-preview-dialog";
 
 export const Route = createFileRoute("/_app/chat")({
   component: ChatPage,
@@ -58,7 +71,25 @@ function ChatPage() {
   const [mode, setMode] = useState<"chat" | "search">("chat");
   const [filters, setFilters] = useState<ChatFilters>({});
   const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(false);
+  const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [llmParams, setLlmParams] = useState<LLMParameters>({
+    model_name: "GPT_4O_MINI",
+    temperature: 0.1,
+    use_citation: true,
+    use_chain_of_thought_reasoning: false,
+    system_prompt: "",
+  });
+  const [retrievalParams, setRetrievalParams] = useState<RetrievalParameters>({
+    dense_similarity_top_k: 10,
+    enable_reranking: true,
+    rerank_top_n: 5,
+    retrieval_mode: "chunks",
+    retrieve_page_figure_nodes: false,
+    retrieve_page_screenshot_nodes: false,
+  });
+  const [previewSource, setPreviewSource] = useState<ChatSource | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const queryClient = useQueryClient();
@@ -111,7 +142,7 @@ function ChatPage() {
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
       const history = localMessages.filter((m) => !m.isLoading).map((m) => ({ role: m.role, content: m.content }));
-      return sendChatMessage(message, mode, filters, history);
+      return sendChatMessage(message, mode, filters, history, mode === "chat" ? llmParams : undefined, retrievalParams);
     },
     onMutate: (message) => {
       const userMessage: LocalMessage = {
@@ -226,6 +257,11 @@ function ChatPage() {
 
   const hasActiveFilters = Object.values(filters).some((arr) => arr && arr.length > 0);
   const activeFilterCount = Object.values(filters).reduce((count, arr) => count + (arr?.length || 0), 0);
+
+  const handleSourceClick = (source: ChatSource) => {
+    setPreviewSource(source);
+    setIsPreviewOpen(true);
+  };
 
   const handleNewChat = () => {
     setActiveChatId(null);
@@ -453,6 +489,266 @@ function ChatPage() {
         </div>
       )}
 
+      {/* Settings Panel */}
+      {isSettingsPanelOpen && (
+        <div className="w-72 shrink-0 border-r border-border bg-muted/30 flex flex-col">
+          <div className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Settings2 className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-semibold">Settings</span>
+            </div>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsSettingsPanelOpen(false)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <Separator />
+          <ScrollArea className="flex-1">
+            <div className="p-4 space-y-6">
+              {/* LLM Parameters — only shown in chat mode */}
+              {mode === "chat" && (
+                <div className="space-y-4">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    LLM Parameters
+                  </h4>
+
+                  {/* Model */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Model</Label>
+                    <Select
+                      value={llmParams.model_name || "GPT_4O_MINI"}
+                      onValueChange={(v) => setLlmParams((p) => ({ ...p, model_name: v }))}
+                    >
+                      <SelectTrigger className="h-9 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="GPT_4O_MINI">GPT-4o Mini</SelectItem>
+                        <SelectItem value="GPT_4O">GPT-4o</SelectItem>
+                        <SelectItem value="GPT_4_TURBO">GPT-4 Turbo</SelectItem>
+                        <SelectItem value="GPT_3_5_TURBO">GPT-3.5 Turbo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Temperature */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Temperature</Label>
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {llmParams.temperature?.toFixed(1)}
+                      </span>
+                    </div>
+                    <Slider
+                      value={[llmParams.temperature ?? 0.1]}
+                      onValueChange={([v]) => setLlmParams((p) => ({ ...p, temperature: v }))}
+                      min={0}
+                      max={1}
+                      step={0.1}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {/* System Prompt */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">System Prompt</Label>
+                    <Textarea
+                      value={llmParams.system_prompt || ""}
+                      onChange={(e) => setLlmParams((p) => ({ ...p, system_prompt: e.target.value }))}
+                      placeholder="Optional system prompt..."
+                      rows={3}
+                      className="text-xs resize-none"
+                    />
+                  </div>
+
+                  {/* Use Citation */}
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Use Citations</Label>
+                    <Switch
+                      checked={llmParams.use_citation ?? true}
+                      onCheckedChange={(v) => setLlmParams((p) => ({ ...p, use_citation: v }))}
+                    />
+                  </div>
+
+                  {/* Chain of Thought */}
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Chain of Thought</Label>
+                    <Switch
+                      checked={llmParams.use_chain_of_thought_reasoning ?? false}
+                      onCheckedChange={(v) => setLlmParams((p) => ({ ...p, use_chain_of_thought_reasoning: v }))}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {mode === "chat" && <Separator />}
+
+              {/* Retrieval Parameters */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Retrieval Parameters
+                </h4>
+
+                {/* Retrieval Mode */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Retrieval Mode</Label>
+                  <Select
+                    value={retrievalParams.retrieval_mode || "chunks"}
+                    onValueChange={(v) =>
+                      setRetrievalParams((p) => ({ ...p, retrieval_mode: v as "chunks" | "files" }))
+                    }
+                  >
+                    <SelectTrigger className="h-9 text-sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="chunks">Chunks</SelectItem>
+                      <SelectItem value="files">Files</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Dense Similarity Top K */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Dense Similarity Top K</Label>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {retrievalParams.dense_similarity_top_k ?? 10}
+                    </span>
+                  </div>
+                  <Slider
+                    value={[retrievalParams.dense_similarity_top_k ?? 10]}
+                    onValueChange={([v]) => setRetrievalParams((p) => ({ ...p, dense_similarity_top_k: v }))}
+                    min={1}
+                    max={50}
+                    step={1}
+                    className="w-full"
+                  />
+                </div>
+
+                {/* Dense Similarity Cutoff */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Dense Similarity Cutoff</Label>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {(retrievalParams.dense_similarity_cutoff ?? 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <Slider
+                    value={[retrievalParams.dense_similarity_cutoff ?? 0]}
+                    onValueChange={([v]) => setRetrievalParams((p) => ({ ...p, dense_similarity_cutoff: v }))}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    className="w-full"
+                  />
+                </div>
+
+                {/* Sparse Similarity Top K */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Sparse Similarity Top K</Label>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {retrievalParams.sparse_similarity_top_k ?? 0}
+                    </span>
+                  </div>
+                  <Slider
+                    value={[retrievalParams.sparse_similarity_top_k ?? 0]}
+                    onValueChange={([v]) => setRetrievalParams((p) => ({ ...p, sparse_similarity_top_k: v }))}
+                    min={0}
+                    max={50}
+                    step={1}
+                    className="w-full"
+                  />
+                </div>
+
+                {/* Alpha (hybrid search balance) */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Alpha (hybrid balance)</Label>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {(retrievalParams.alpha ?? 0).toFixed(2)}
+                    </span>
+                  </div>
+                  <Slider
+                    value={[retrievalParams.alpha ?? 0]}
+                    onValueChange={([v]) => setRetrievalParams((p) => ({ ...p, alpha: v }))}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    className="w-full"
+                  />
+                </div>
+
+                {/* Files Top K */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Files Top K</Label>
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {retrievalParams.files_top_k ?? 0}
+                    </span>
+                  </div>
+                  <Slider
+                    value={[retrievalParams.files_top_k ?? 0]}
+                    onValueChange={([v]) => setRetrievalParams((p) => ({ ...p, files_top_k: v }))}
+                    min={0}
+                    max={20}
+                    step={1}
+                    className="w-full"
+                  />
+                </div>
+
+                {/* Enable Reranking */}
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Enable Reranking</Label>
+                  <Switch
+                    checked={retrievalParams.enable_reranking ?? true}
+                    onCheckedChange={(v) => setRetrievalParams((p) => ({ ...p, enable_reranking: v }))}
+                  />
+                </div>
+
+                {/* Rerank Top N */}
+                {retrievalParams.enable_reranking && (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Rerank Top N</Label>
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {retrievalParams.rerank_top_n ?? 5}
+                      </span>
+                    </div>
+                    <Slider
+                      value={[retrievalParams.rerank_top_n ?? 5]}
+                      onValueChange={([v]) => setRetrievalParams((p) => ({ ...p, rerank_top_n: v }))}
+                      min={1}
+                      max={20}
+                      step={1}
+                      className="w-full"
+                    />
+                  </div>
+                )}
+
+                {/* Retrieve Page Figure Nodes */}
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Page Figure Nodes</Label>
+                  <Switch
+                    checked={retrievalParams.retrieve_page_figure_nodes ?? false}
+                    onCheckedChange={(v) => setRetrievalParams((p) => ({ ...p, retrieve_page_figure_nodes: v }))}
+                  />
+                </div>
+
+                {/* Retrieve Page Screenshot Nodes */}
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">Page Screenshot Nodes</Label>
+                  <Switch
+                    checked={retrievalParams.retrieve_page_screenshot_nodes ?? false}
+                    onCheckedChange={(v) => setRetrievalParams((p) => ({ ...p, retrieve_page_screenshot_nodes: v }))}
+                  />
+                </div>
+              </div>
+            </div>
+          </ScrollArea>
+        </div>
+      )}
+
       {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Chat Header Bar */}
@@ -494,6 +790,23 @@ function ChatPage() {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Show filters</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+            {!isSettingsPanelOpen && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setIsSettingsPanelOpen(true)}
+                    >
+                      <Settings2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Pipeline settings</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             )}
@@ -605,7 +918,7 @@ function ChatPage() {
             <div className="max-w-3xl mx-auto py-6 px-4">
               <div className="space-y-6">
                 {localMessages.map((message) => (
-                  <MessageBubble key={message.id} message={message} />
+                  <MessageBubble key={message.id} message={message} onSourceClick={handleSourceClick} />
                 ))}
                 <div ref={messagesEndRef} />
               </div>
@@ -650,12 +963,144 @@ function ChatPage() {
           </div>
         </div>
       </div>
+
+      {/* Source Preview Dialog */}
+      <SourcePreviewDialog source={previewSource} open={isPreviewOpen} onOpenChange={setIsPreviewOpen} />
     </div>
   );
 }
 
-function MessageBubble({ message }: { message: LocalMessage }) {
+/** Build a map from node_id → numbered citation index (1-based), deduped in order of appearance in the text */
+function buildCitationMap(content: string, sources: ChatSource[]): Map<string, number> {
+  const map = new Map<string, number>();
+  const regex = /\[citation:([a-f0-9-]+)\]/g;
+  let match: RegExpExecArray | null;
+  let idx = 1;
+  while ((match = regex.exec(content)) !== null) {
+    const nodeId = match[1];
+    if (!map.has(nodeId)) {
+      map.set(nodeId, idx++);
+    }
+  }
+  // Also assign numbers to any sources not cited inline (appended at the end)
+  for (const s of sources) {
+    if (s.node_id && !map.has(s.node_id)) {
+      map.set(s.node_id, idx++);
+    }
+  }
+  return map;
+}
+
+/** Render message content with inline citation markers replaced by clickable superscript badges */
+function CitationContent({
+  content,
+  sources,
+  citationMap,
+  onSourceClick,
+}: {
+  content: string;
+  sources: ChatSource[];
+  citationMap: Map<string, number>;
+  onSourceClick?: (source: ChatSource) => void;
+}) {
+  const sourceByNodeId = useMemo(() => {
+    const m = new Map<string, ChatSource>();
+    for (const s of sources) {
+      if (s.node_id) m.set(s.node_id, s);
+    }
+    return m;
+  }, [sources]);
+
+  const parts = useMemo(() => {
+    const result: { type: "text" | "citation"; value: string }[] = [];
+    const regex = /\[citation:([a-f0-9-]+)\]/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = regex.exec(content)) !== null) {
+      if (match.index > lastIndex) {
+        result.push({ type: "text", value: content.slice(lastIndex, match.index) });
+      }
+      result.push({ type: "citation", value: match[1] });
+      lastIndex = regex.lastIndex;
+    }
+    if (lastIndex < content.length) {
+      result.push({ type: "text", value: content.slice(lastIndex) });
+    }
+    return result;
+  }, [content]);
+
+  return (
+    <span>
+      {parts.map((part, i) => {
+        if (part.type === "text") {
+          return (
+            <span key={i} className="whitespace-pre-wrap">
+              {part.value}
+            </span>
+          );
+        }
+        const num = citationMap.get(part.value);
+        const source = sourceByNodeId.get(part.value);
+        if (!num) return null;
+        return (
+          <Popover key={i}>
+            <PopoverTrigger asChild>
+              <button className="inline-flex items-center justify-center h-4 min-w-4 px-1 text-[10px] font-semibold rounded bg-primary/15 text-primary hover:bg-primary/25 transition-colors align-super cursor-pointer leading-none ml-0.5">
+                {num}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent side="top" align="start" className="w-96 max-h-64 overflow-y-auto p-3">
+              {source ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => onSourceClick?.(source)}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline cursor-pointer text-left"
+                    >
+                      <FileText className="h-3 w-3 shrink-0" />
+                      {source.title || "Document"}
+                      {source.page_number ? (
+                        <span className="text-muted-foreground ml-1">p.{source.page_number}</span>
+                      ) : null}
+                    </button>
+                    {source.score ? (
+                      <span className="text-[10px] tabular-nums text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
+                        {Math.round(source.score * 100)}%
+                      </span>
+                    ) : null}
+                  </div>
+                  {source.text && (
+                    <p className="text-xs leading-relaxed text-muted-foreground italic">
+                      "{source.text.length > 500 ? source.text.slice(0, 500) + "…" : source.text}"
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">Source not found</p>
+              )}
+            </PopoverContent>
+          </Popover>
+        );
+      })}
+    </span>
+  );
+}
+
+function MessageBubble({
+  message,
+  onSourceClick,
+}: {
+  message: LocalMessage;
+  onSourceClick?: (source: ChatSource) => void;
+}) {
   const isUser = message.role === "user";
+
+  const hasCitations = !isUser && message.content?.includes("[citation:");
+  const citationMap = useMemo(
+    () =>
+      hasCitations && message.sources ? buildCitationMap(message.content, message.sources) : new Map<string, number>(),
+    [hasCitations, message.content, message.sources],
+  );
 
   if (message.isLoading) {
     return (
@@ -686,61 +1131,64 @@ function MessageBubble({ message }: { message: LocalMessage }) {
       </div>
       <div className="flex-1 min-w-0 space-y-3 pt-1">
         <div className="text-sm font-medium text-muted-foreground">{isUser ? "You" : "Assistant"}</div>
-        <div className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</div>
 
+        {/* Message content — with or without inline citations */}
+        <div className="text-sm leading-relaxed">
+          {hasCitations && message.sources ? (
+            <CitationContent
+              content={message.content}
+              sources={message.sources}
+              citationMap={citationMap}
+              onSourceClick={onSourceClick}
+            />
+          ) : (
+            <span className="whitespace-pre-wrap">{message.content}</span>
+          )}
+        </div>
+
+        {/* Source cards — numbered to match inline citations */}
         {!isUser && message.sources && message.sources.length > 0 && (
-          <div className="space-y-3 pt-1">
-            {/* If we have snippets (search mode), show them as cards */}
-            {message.sources.some((s) => s.text) ? (
-              <div className="grid grid-cols-1 gap-3">
-                {message.sources.map((source, idx) => (
-                  <div
+          <div className="space-y-2 pt-2">
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Sources</p>
+            <div className="grid grid-cols-1 gap-2">
+              {message.sources.map((source, idx) => {
+                const citNum = source.node_id ? citationMap.get(source.node_id) : undefined;
+                return (
+                  <button
                     key={idx}
-                    className="group flex flex-col gap-2 rounded-xl border border-border bg-card p-3 transition-colors hover:border-primary/30"
+                    onClick={() => onSourceClick?.(source)}
+                    className="group flex flex-col gap-1.5 rounded-xl border border-border bg-card p-3 transition-colors hover:border-primary/30 text-left w-full cursor-pointer"
                   >
                     <div className="flex items-center justify-between gap-4">
-                      <Link
-                        to="/workspace"
-                        search={{ id: source.upload_id, type: "upload" }}
-                        className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-                      >
-                        <FileText className="h-3 w-3" />
-                        {source.title || "Document"}
-                        {source.page_number && (
-                          <span className="text-muted-foreground ml-1">Page {source.page_number}</span>
+                      <div className="flex items-center gap-2 min-w-0">
+                        {citNum != null && (
+                          <span className="flex items-center justify-center h-5 min-w-5 px-1 text-[10px] font-semibold rounded bg-primary/15 text-primary shrink-0">
+                            {citNum}
+                          </span>
                         )}
-                      </Link>
-                      {source.score && (
-                        <span className="text-[10px] tabular-nums text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary group-hover:underline truncate">
+                          <FileText className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{source.title || "Document"}</span>
+                          {source.page_number ? (
+                            <span className="text-muted-foreground ml-1 shrink-0">p.{source.page_number}</span>
+                          ) : null}
+                        </span>
+                      </div>
+                      {source.score ? (
+                        <span className="text-[10px] tabular-nums text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
                           {Math.round(source.score * 100)}% Match
                         </span>
-                      )}
+                      ) : null}
                     </div>
                     {source.text && (
                       <p className="text-xs leading-relaxed text-muted-foreground line-clamp-3 italic">
                         "{source.text}"
                       </p>
                     )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              // Standard source badges for chat mode
-              <div className="flex flex-wrap gap-2">
-                {message.sources.map((source, idx) => (
-                  <Link
-                    key={idx}
-                    to="/workspace"
-                    search={{ id: source.upload_id, type: "upload" }}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
-                  >
-                    <FileText className="h-3 w-3" />
-                    {source.title || "Document"}
-                    {source.page_number && <span className="text-[10px] opacity-70 ml-1">p.{source.page_number}</span>}
-                  </Link>
-                ))}
-              </div>
-            )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>

@@ -152,6 +152,7 @@ func (c *LlamaClient) UploadFileFromURL(upload *core.Record) (*UploadFileFromURL
 	body := &UploadFileFromURLRequest{
 		Url:             url,
 		Name:            upload.GetString("file"),
+		ExternalFileID:  upload.Id,
 		FollowRedirects: true,
 		VerifySsl:       true,
 	}
@@ -232,6 +233,10 @@ func (c *LlamaClient) Chat(req *ChatRequestBody) (*ChatResponse, error) {
 	response := &ChatResponse{}
 
 	bodyStr := string(respBody)
+
+	// Debug: log the full raw response from LlamaIndex
+	c.App.Logger().Info("LlamaIndex Chat raw response", "body", bodyStr)
+
 	lines := strings.Split(bodyStr, "\n")
 
 	var textParts []string
@@ -288,6 +293,10 @@ func (c *LlamaClient) Chat(req *ChatRequestBody) (*ChatResponse, error) {
 
 	response.Response = strings.Join(textParts, "")
 
+	// Debug: log the parsed response
+	parsedJSON, _ := json.MarshalIndent(response, "", "  ")
+	c.App.Logger().Info("LlamaIndex Chat parsed response", "parsed", string(parsedJSON))
+
 	return response, nil
 }
 
@@ -296,14 +305,64 @@ func (c *LlamaClient) Retrieve(req *RetrieveRequestBody) (*RetrieveResponse, err
 		return nil, errors.New("pipeline ID is not configured")
 	}
 
-	params := url.Values{}
-	params.Add("project_id", c.ProjectID)
-
 	endpoint := fmt.Sprintf("/api/v1/pipelines/%s/retrieve", c.PipelineID)
 
-	var response RetrieveResponse
-	if err := c.Do(context.Background(), http.MethodPost, endpoint, params, req, &response); err != nil {
+	fullURL, err := c.BaseURL.Parse(path.Join(c.BaseURL.Path, endpoint))
+	if err != nil {
 		return nil, err
+	}
+
+	params := url.Values{}
+	params.Add("project_id", c.ProjectID)
+	fullURL.RawQuery = params.Encode()
+
+	bodyBytes, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq, err := http.NewRequest(http.MethodPost, fullURL.String(), bytes.NewBuffer(bodyBytes))
+	if err != nil {
+		return nil, err
+	}
+
+	httpReq.Header.Add("Accept", "application/json")
+	httpReq.Header.Add("Authorization", "Bearer "+c.APIKey)
+	httpReq.Header.Add("Content-Type", "application/json")
+
+	resp, err := c.Client.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("LlamaIndex: API request failed with status: %s, body: %s", resp.Status, string(respBody))
+	}
+
+	// Log the full raw response from LlamaIndex
+	c.App.Logger().Info("LlamaIndex Retrieve raw response", "body", string(respBody))
+
+	var response RetrieveResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse retrieve response: %w", err)
+	}
+
+	// Log parsed nodes with their metadata
+	for i, node := range response.Nodes {
+		metaJSON, _ := json.MarshalIndent(node.Node.Metadata, "", "  ")
+		c.App.Logger().Info("LlamaIndex Retrieve node",
+			"index", i,
+			"node_id", node.Node.ID_,
+			"score", node.Score,
+			"text_length", len(node.Node.Text),
+			"metadata", string(metaJSON),
+		)
 	}
 
 	return &response, nil

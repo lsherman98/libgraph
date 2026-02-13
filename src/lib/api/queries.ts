@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useInfiniteQuery } from "@tanstack/react-query";
-import { getPeople, getPublications, getFirstPage, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection } from "./api";
+import { getPeople, getPublications, getFirstPage, getPageByNumber, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection } from "./api";
 
 export function usePeople() {
     return useQuery({
@@ -55,6 +55,15 @@ export function useFirstPage(uploadId: string | null) {
         queryKey: ["firstPage", uploadId],
         queryFn: () => uploadId ? getFirstPage(uploadId) : null,
         enabled: !!uploadId,
+        placeholderData: keepPreviousData
+    });
+}
+
+export function usePageByNumber(uploadId: string | null, pageNumber: number | null) {
+    return useQuery({
+        queryKey: ["pageByNumber", uploadId, pageNumber],
+        queryFn: () => (uploadId && pageNumber != null) ? getPageByNumber(uploadId, pageNumber) : null,
+        enabled: !!uploadId && pageNumber != null,
         placeholderData: keepPreviousData
     });
 }

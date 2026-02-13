@@ -52,7 +52,7 @@ export function ChatHistorySidebar({ activeChatId, onSelectChat, onNewChat }: Ch
   const groupedChats = groupChatsByTime(chats || []);
 
   return (
-    <div className="w-64 shrink-0 border-r border-border bg-muted/30 flex flex-col">
+    <div className="w-64 shrink-0 border-r border-border bg-muted/30 flex flex-col overflow-hidden">
       <div className="p-3">
         <Button variant="outline" className="w-full justify-start gap-2 text-sm" onClick={onNewChat}>
           <Plus className="h-4 w-4" />
@@ -60,8 +60,8 @@ export function ChatHistorySidebar({ activeChatId, onSelectChat, onNewChat }: Ch
         </Button>
       </div>
       <Separator />
-      <ScrollArea className="flex-1">
-        <div className="p-2 space-y-4">
+      <ScrollArea className="flex-1 [&_[data-slot=scroll-area-viewport]]:!overflow-x-hidden">
+        <div className="p-2 space-y-4 max-w-full overflow-hidden">
           {isLoading && <div className="px-2 py-4 text-xs text-muted-foreground text-center">Loading chats...</div>}
           {!isLoading && (!chats || chats.length === 0) && (
             <div className="px-2 py-4 text-xs text-muted-foreground text-center">No conversations yet</div>
@@ -95,14 +95,18 @@ export function ChatHistorySidebar({ activeChatId, onSelectChat, onNewChat }: Ch
                       <button
                         onClick={() => onSelectChat(chat.id)}
                         className={cn(
-                          "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-left transition-colors",
+                          "w-full min-w-0 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-left transition-colors overflow-hidden",
                           activeChatId === chat.id
                             ? "bg-accent text-accent-foreground"
                             : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                         )}
                       >
                         <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate flex-1">{chat.title || "Untitled"}</span>
+                        <span className="truncate flex-1">
+                          {(chat.title || "Untitled").length > 25
+                            ? (chat.title || "Untitled").slice(0, 25) + "…"
+                            : (chat.title || "Untitled")}
+                        </span>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <div

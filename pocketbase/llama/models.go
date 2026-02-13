@@ -71,6 +71,7 @@ type WebhookConfiguration struct {
 type UploadFileFromURLRequest struct {
 	Url             string `json:"url"`
 	Name            string `json:"name,omitempty"`
+	ExternalFileID  string `json:"external_file_id,omitempty"`
 	FollowRedirects bool   `json:"follow_redirects"`
 	VerifySsl       bool   `json:"verify_ssl"`
 }
@@ -118,17 +119,19 @@ type LLMParameters struct {
 }
 
 type RetrievalParameters struct {
-	ClassName               string         `json:"class_name"`
-	Alpha                   float64        `json:"alpha,omitempty"`
-	DenseSimilarityCutoff   float64        `json:"dense_similarity_cutoff,omitempty"`
-	DenseSimilarityTopK     int            `json:"dense_similarity_top_k,omitempty"`
-	EnableReranking         bool           `json:"enable_reranking"`
-	FilesTopK               int            `json:"files_top_k,omitempty"`
-	RerankTopN              int            `json:"rerank_top_n,omitempty"`
-	RetrievalMode           string         `json:"retrieval_mode"`
-	RetrievePageFigureNodes bool           `json:"retrieve_page_figure_nodes,omitempty"`
-	SearchFilters           *SearchFilters `json:"search_filters,omitempty"`
-	SparseSimilarityTopK    int            `json:"sparse_similarity_top_k,omitempty"`
+	ClassName                    string                 `json:"class_name"`
+	Alpha                        *float64               `json:"alpha,omitempty"`
+	DenseSimilarityCutoff        *float64               `json:"dense_similarity_cutoff,omitempty"`
+	DenseSimilarityTopK          *int                   `json:"dense_similarity_top_k,omitempty"`
+	EnableReranking              *bool                  `json:"enable_reranking,omitempty"`
+	FilesTopK                    *int                   `json:"files_top_k,omitempty"`
+	RerankTopN                   *int                   `json:"rerank_top_n,omitempty"`
+	RetrievalMode                string                 `json:"retrieval_mode"`
+	RetrievePageFigureNodes      *bool                  `json:"retrieve_page_figure_nodes,omitempty"`
+	RetrievePageScreenshotNodes  *bool                  `json:"retrieve_page_screenshot_nodes,omitempty"`
+	SearchFilters                *SearchFilters         `json:"search_filters,omitempty"`
+	SearchFiltersInferenceSchema map[string]interface{} `json:"search_filters_inference_schema,omitempty"`
+	SparseSimilarityTopK         *int                   `json:"sparse_similarity_top_k,omitempty"`
 }
 
 type SearchFilters struct {
@@ -161,11 +164,22 @@ type NodeInfo struct {
 	Score    float64                `json:"score,omitempty"`
 }
 
-// Retrieve API Types
+// Retrieve API Types (flat structure per LlamaIndex search docs)
 type RetrieveRequestBody struct {
-	ClassName           string              `json:"class_name"`
-	Query               string              `json:"query"`
-	RetrievalParameters RetrievalParameters `json:"retrieval_parameters"`
+	ClassName                    string                 `json:"class_name"`
+	Query                        string                 `json:"query"`
+	Alpha                        *float64               `json:"alpha,omitempty"`
+	DenseSimilarityCutoff        *float64               `json:"dense_similarity_cutoff,omitempty"`
+	DenseSimilarityTopK          *int                   `json:"dense_similarity_top_k,omitempty"`
+	EnableReranking              *bool                  `json:"enable_reranking,omitempty"`
+	FilesTopK                    *int                   `json:"files_top_k,omitempty"`
+	RerankTopN                   *int                   `json:"rerank_top_n,omitempty"`
+	RetrievalMode                string                 `json:"retrieval_mode,omitempty"`
+	RetrievePageFigureNodes      *bool                  `json:"retrieve_page_figure_nodes,omitempty"`
+	RetrievePageScreenshotNodes  *bool                  `json:"retrieve_page_screenshot_nodes,omitempty"`
+	SearchFilters                *SearchFilters         `json:"search_filters,omitempty"`
+	SearchFiltersInferenceSchema map[string]interface{} `json:"search_filters_inference_schema,omitempty"`
+	SparseSimilarityTopK         *int                   `json:"sparse_similarity_top_k,omitempty"`
 }
 
 type RetrieveResponse struct {

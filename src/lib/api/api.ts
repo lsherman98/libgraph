@@ -71,6 +71,13 @@ export const getFirstPage = async (uploadId: string) => {
     return pages.items[0] || null;
 }
 
+export const getPageByNumber = async (uploadId: string, pageNumber: number) => {
+    const pages = await pb.collection(Collections.Pages).getList(1, 1, {
+        filter: `upload = "${uploadId}" && page = ${pageNumber}`
+    });
+    return pages.items[0] || null;
+}
+
 export const getPages = async (uploadId: string, page = 1, perPage = 5) => {
     return await pb.collection(Collections.Pages).getList(page, perPage, {
         filter: `upload = "${uploadId}"`,
@@ -453,10 +460,35 @@ export interface ChatFilters {
 
 export interface ChatSource {
     upload_id?: string;
+    external_file_id?: string;
+    node_id?: string;
     title?: string;
     score?: number;
     text?: string;
     page_number?: number;
+    start_char_idx?: number;
+    end_char_idx?: number;
+}
+
+export interface LLMParameters {
+    model_name?: string;
+    system_prompt?: string;
+    temperature?: number;
+    use_chain_of_thought_reasoning?: boolean;
+    use_citation?: boolean;
+}
+
+export interface RetrievalParameters {
+    alpha?: number;
+    dense_similarity_cutoff?: number;
+    dense_similarity_top_k?: number;
+    enable_reranking?: boolean;
+    files_top_k?: number;
+    rerank_top_n?: number;
+    retrieval_mode?: 'chunks' | 'files';
+    retrieve_page_figure_nodes?: boolean;
+    retrieve_page_screenshot_nodes?: boolean;
+    sparse_similarity_top_k?: number;
 }
 
 export interface ChatResponseData {
@@ -468,7 +500,9 @@ export const sendChatMessage = async (
     message: string,
     mode: "chat" | "search" = "chat",
     filters?: ChatFilters,
-    history?: ChatMessage[]
+    history?: ChatMessage[],
+    llmParameters?: LLMParameters,
+    retrievalParameters?: RetrievalParameters,
 ): Promise<ChatResponseData> => {
     const baseUrl = pb.baseURL.endsWith('/') ? pb.baseURL.slice(0, -1) : pb.baseURL;
     const response = await fetch(`${baseUrl}/api/chat`, {
@@ -482,6 +516,8 @@ export const sendChatMessage = async (
             mode,
             filters,
             history,
+            llm_parameters: llmParameters,
+            retrieval_parameters: retrievalParameters,
         }),
     });
 
