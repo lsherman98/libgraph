@@ -105,7 +105,7 @@ export function ChatHistorySidebar({ activeChatId, onSelectChat, onNewChat }: Ch
                         <span className="truncate flex-1">
                           {(chat.title || "Untitled").length > 25
                             ? (chat.title || "Untitled").slice(0, 25) + "…"
-                            : (chat.title || "Untitled")}
+                            : chat.title || "Untitled"}
                         </span>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
