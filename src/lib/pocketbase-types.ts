@@ -312,9 +312,8 @@ export enum UploadsStatusOptions {
 	"FAILED" = "FAILED",
 	"SUCCESS" = "SUCCESS",
 }
-export type UploadsRecord<Tdiarization = unknown> = {
+export type UploadsRecord = {
 	created: IsoAutoDateString
-	diarization?: null | Tdiarization
 	file?: FileNameString
 	id: string
 	llama_file_id?: string
@@ -385,7 +384,7 @@ export type PeopleResponse<Texpand = unknown> = Required<PeopleRecord> & BaseSys
 export type PublicationsResponse<Texpand = unknown> = Required<PublicationsRecord> & BaseSystemFields<Texpand>
 export type TagsResponse<Texpand = unknown> = Required<TagsRecord> & BaseSystemFields<Texpand>
 export type TopicsResponse<Texpand = unknown> = Required<TopicsRecord> & BaseSystemFields<Texpand>
-export type UploadsResponse<Tdiarization = unknown, Texpand = unknown> = Required<UploadsRecord<Tdiarization>> & BaseSystemFields<Texpand>
+export type UploadsResponse<Texpand = unknown> = Required<UploadsRecord> & BaseSystemFields<Texpand>
 export type UsersResponse<Texpand = unknown> = Required<UsersRecord> & AuthSystemFields<Texpand>
 export type WritingProjectsResponse<Texpand = unknown> = Required<WritingProjectsRecord> & BaseSystemFields<Texpand>
 

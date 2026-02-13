@@ -1,7 +1,6 @@
 package uploads
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -142,17 +141,6 @@ func handleAudioUpload(app *pocketbase.PocketBase, e *core.RecordEvent, upload *
 			return
 		}
 		slog.Info("[uploads] transcript page saved", "uploadID", uploadID, "pageID", newPage.Id)
-
-		// Store diarization data as JSON on the upload record
-		if len(segments) > 0 {
-			diarizationJSON, err := json.Marshal(segments)
-			if err != nil {
-				slog.Error("[uploads] failed to marshal diarization data", "uploadID", uploadID, "error", err)
-			} else {
-				upload.Set("diarization", json.RawMessage(diarizationJSON))
-				slog.Info("[uploads] diarization data stored on upload", "uploadID", uploadID, "diarizationSize", len(diarizationJSON))
-			}
-		}
 
 		upload.Set("status", "SUCCESS")
 		upload.Set("num_pages", 1)
