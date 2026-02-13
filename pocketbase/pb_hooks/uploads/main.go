@@ -2,6 +2,8 @@ package uploads
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/lsherman98/libgraph/pocketbase/collections"
@@ -91,6 +93,48 @@ func Init(app *pocketbase.PocketBase) error {
 				e.App.Logger().Error("Failed to update upload status to SUCCESS:", "error", err)
 			}
 
+			// Create document chunks for full-text search
+			chunksCollection, chunkErr := app.FindCollectionByNameOrId(collections.DocumentChunks)
+			if chunkErr != nil {
+				e.App.Logger().Error("Failed to find document_chunks collection:", "error", chunkErr)
+			} else {
+				for i, page := range pages {
+					// Find the saved page record to get its ID
+					pageRecords, findErr := app.FindRecordsByFilter(
+						collections.Pages,
+						"upload = {:uploadId} && page = {:pageNum}",
+						"",
+						1,
+						0,
+						map[string]any{"uploadId": upload.Id, "pageNum": page.PageNumber},
+					)
+					if findErr != nil || len(pageRecords) == 0 {
+						e.App.Logger().Error("Failed to find page record for chunking:", "error", findErr, "pageIndex", i)
+						continue
+					}
+					pageRec := pageRecords[0]
+
+					chunks := chunkMarkdown(page.Markdown)
+
+					for idx, chunk := range chunks {
+						if strings.TrimSpace(chunk) == "" {
+							continue
+						}
+						chunkRecord := core.NewRecord(chunksCollection)
+						chunkRecord.Set("upload", upload.Id)
+						chunkRecord.Set("page", pageRec.Id)
+						chunkRecord.Set("page_number", page.PageNumber)
+						chunkRecord.Set("chunk_index", idx)
+						chunkRecord.Set("content", stripMarkdown(chunk))
+						chunkRecord.Set("user", upload.GetString("user"))
+
+						if saveErr := app.Save(chunkRecord); saveErr != nil {
+							e.App.Logger().Error("Failed to save document chunk:", "error", saveErr, "page", page.PageNumber, "chunk", idx)
+						}
+					}
+				}
+			}
+
 			// LlamaIndex Pipeline Integration
 			uploadRes, err := llamaClient.UploadFileFromURL(upload)
 			if err != nil {
@@ -124,4 +168,72 @@ func Init(app *pocketbase.PocketBase) error {
 	})
 
 	return nil
+}
+
+// chunkMarkdown splits markdown into chunks by double newlines (paragraph-level).
+// Each chunk is a logical paragraph or block.
+func chunkMarkdown(markdown string) []string {
+	// Split on double newlines (paragraph boundaries)
+	parts := strings.Split(markdown, "\n\n")
+	chunks := []string{}
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			chunks = append(chunks, trimmed)
+		}
+	}
+	return chunks
+}
+
+// stripMarkdown removes common markdown syntax to produce plain text for indexing.
+func stripMarkdown(md string) string {
+	// Remove images
+	re := regexp.MustCompile(`!\[([^\]]*)\]\([^)]+\)`)
+	text := re.ReplaceAllString(md, "$1")
+
+	// Remove links but keep text
+	re = regexp.MustCompile(`\[([^\]]+)\]\([^)]+\)`)
+	text = re.ReplaceAllString(text, "$1")
+
+	// Remove HTML tags
+	re = regexp.MustCompile(`<[^>]+>`)
+	text = re.ReplaceAllString(text, "")
+
+	// Remove heading markers
+	re = regexp.MustCompile(`(?m)^#{1,6}\s+`)
+	text = re.ReplaceAllString(text, "")
+
+	// Remove bold/italic markers
+	text = strings.ReplaceAll(text, "**", "")
+	text = strings.ReplaceAll(text, "__", "")
+	text = strings.ReplaceAll(text, "*", "")
+	text = strings.ReplaceAll(text, "_", "")
+
+	// Remove blockquote markers
+	re = regexp.MustCompile(`(?m)^>\s*`)
+	text = re.ReplaceAllString(text, "")
+
+	// Remove list markers
+	re = regexp.MustCompile(`(?m)^[\s]*[-*+]\s+`)
+	text = re.ReplaceAllString(text, "")
+	re = regexp.MustCompile(`(?m)^[\s]*\d+\.\s+`)
+	text = re.ReplaceAllString(text, "")
+
+	// Remove code blocks
+	re = regexp.MustCompile("```[\\s\\S]*?```")
+	text = re.ReplaceAllString(text, "")
+
+	// Remove inline code
+	re = regexp.MustCompile("`([^`]+)`")
+	text = re.ReplaceAllString(text, "$1")
+
+	// Remove horizontal rules
+	re = regexp.MustCompile(`(?m)^[-*_]{3,}\s*$`)
+	text = re.ReplaceAllString(text, "")
+
+	// Collapse whitespace
+	re = regexp.MustCompile(`\s+`)
+	text = re.ReplaceAllString(text, " ")
+
+	return strings.TrimSpace(text)
 }

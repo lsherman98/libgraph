@@ -7,6 +7,7 @@ import (
 
 	"github.com/joho/godotenv"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/chat"
+	fts "github.com/lsherman98/libgraph/pocketbase/pb_hooks/full_text_search"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/graph"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/uploads"
 
@@ -46,6 +47,10 @@ func main() {
 
 	if err := chat.Init(app); err != nil {
 		log.Fatal("Failed to initialize Chat hooks: ", err)
+	}
+
+	if err := fts.Init(app, "document_chunks"); err != nil {
+		log.Fatal("Failed to initialize Full Text Search: ", err)
 	}
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {

@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useInfiniteQuery } from "@tanstack/react-query";
-import { getPeople, getPublications, getFirstPage, getPageByNumber, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection } from "./api";
+import { getPeople, getPublications, getFirstPage, getPageByNumber, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection, fullTextSearch } from "./api";
 
 export function usePeople() {
     return useQuery({
@@ -254,5 +254,14 @@ export function useMessages(chatId: string | null) {
         queryFn: () => chatId ? getMessages(chatId) : [],
         enabled: !!chatId,
         placeholderData: keepPreviousData
+    });
+}
+
+export function useFullTextSearch(uploadId: string | null, query: string) {
+    return useQuery({
+        queryKey: ["fts", uploadId, query],
+        queryFn: () => fullTextSearch(uploadId!, query),
+        enabled: !!uploadId && query.trim().length > 0,
+        placeholderData: keepPreviousData,
     });
 }

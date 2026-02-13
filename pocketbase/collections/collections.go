@@ -16,4 +16,5 @@ const (
 	Nodes               = "nodes"
 	Edges               = "edges"
 	Notes               = "notes"
+	DocumentChunks      = "document_chunks"
 )

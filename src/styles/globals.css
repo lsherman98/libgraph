@@ -314,3 +314,16 @@
   border-top: 1px solid var(--border);
   margin: 1.5rem 0;
 }
+
+/* Full-text search highlights */
+.fts-search-highlight {
+  background-color: rgba(250, 204, 21, 0.4);
+  border-radius: 2px;
+  transition: background-color 0.15s ease;
+}
+
+.fts-search-highlight-active {
+  background-color: rgba(251, 146, 60, 0.7);
+  outline: 2px solid rgba(251, 146, 60, 0.9);
+  outline-offset: 1px;
+}

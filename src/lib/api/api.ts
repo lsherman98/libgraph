@@ -532,3 +532,36 @@ export const sendChatMessage = async (
 
     return response.json();
 }
+
+// Full-text search for document chunks
+export interface FtsSearchResult {
+    id: string;
+    content: string;
+    upload: string;
+    page_number: string;
+    chunk_index: string;
+}
+
+export const fullTextSearch = async (uploadId: string, query: string): Promise<FtsSearchResult[]> => {
+    if (!query.trim()) return [];
+
+    const base = pb.baseURL.replace(/\/+$/, '');
+    const response = await fetch(
+        `${base}/api/collections/document_chunks/records/full-text-search?search=${encodeURIComponent(query)}`,
+        {
+            headers: {
+                Authorization: pb.authStore.token,
+            },
+        }
+    );
+
+    if (response.status === 204) return [];
+    if (!response.ok) {
+        throw new Error("Full-text search failed");
+    }
+
+    const results: FtsSearchResult[] = await response.json();
+
+    // Filter to only results belonging to this upload
+    return results.filter((r) => r.upload === uploadId);
+}

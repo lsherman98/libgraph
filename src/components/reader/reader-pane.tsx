@@ -37,6 +37,7 @@ import Markdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import { HighlightPopover, ExistingHighlightPopover, HighlightMark } from "@/components/reader/highlight-popover";
 import { BlockActions } from "@/components/reader/bookmark-button";
+import { DocumentSearchBar } from "@/components/reader/document-search-bar";
 import {
   injectHighlightsIntoMarkdown,
   toHighlightRanges,
@@ -806,18 +807,20 @@ function PaginatedPageContent({
   const pageNotes = notes.filter((n) => n.block_id?.startsWith(pageId));
 
   return (
-    <MarkdownContent
-      content={markdown}
-      isLoading={isLoading}
-      pageId={pageId}
-      pageNumber={pageNumber}
-      highlights={highlightRanges}
-      bookmarks={pageBookmarks}
-      notes={pageNotes}
-      onCreateHighlight={(data) => onCreateHighlight(pageId, data)}
-      onUpdateHighlight={onUpdateHighlight}
-      onDeleteHighlight={onDeleteHighlight}
-    />
+    <div id={`page-${pageNumber}`} className="reader-page">
+      <MarkdownContent
+        content={markdown}
+        isLoading={isLoading}
+        pageId={pageId}
+        pageNumber={pageNumber}
+        highlights={highlightRanges}
+        bookmarks={pageBookmarks}
+        notes={pageNotes}
+        onCreateHighlight={(data) => onCreateHighlight(pageId, data)}
+        onUpdateHighlight={onUpdateHighlight}
+        onDeleteHighlight={onDeleteHighlight}
+      />
+    </div>
   );
 }
 
@@ -1342,6 +1345,21 @@ export function ReaderPane({
               <div className="hidden xl:flex items-center gap-1 px-2 border-r">
                 <QuickFontSizeControl fontSize={settings.fontSize} onChange={(fontSize) => setSettings({ fontSize })} />
               </div>
+              <DocumentSearchBar
+                uploadId={uploadId}
+                onNavigateToPage={(pageNumber) => {
+                  handlePageChange(pageNumber);
+                  if (settings.viewMode === "scroll") {
+                    setTimeout(() => {
+                      const el = document.getElementById(`page-${pageNumber}`);
+                      if (el) {
+                        el.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }
+                    }, 100);
+                  }
+                }}
+                isReadingMode={isReadingMode}
+              />
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -1394,6 +1412,7 @@ export function ReaderPane({
         <ScrollArea className="h-full w-full">
           <div className="w-full max-w-full overflow-hidden">
             <div
+              data-reader-root
               className="mx-auto px-4 sm:pl-10 sm:pr-6 py-6 sm:py-8 max-w-4xl wrap-break-word overflow-wrap-anywhere"
               style={{
                 fontFamily: FONT_FAMILIES[settings.fontFamily].value,

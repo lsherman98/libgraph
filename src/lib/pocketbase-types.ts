@@ -14,6 +14,7 @@ export enum Collections {
 	Bookmarks = "bookmarks",
 	Chats = "chats",
 	Collections = "collections",
+	DocumentChunks = "document_chunks",
 	Edges = "edges",
 	Highlights = "highlights",
 	Messages = "messages",
@@ -135,6 +136,18 @@ export type CollectionsRecord = {
 	name?: string
 	updated: IsoAutoDateString
 	uploads?: RecordIdString
+	user?: RecordIdString
+}
+
+export type DocumentChunksRecord = {
+	chunk_index?: number
+	content?: string
+	created: IsoAutoDateString
+	id: string
+	page?: RecordIdString
+	page_number?: number
+	updated: IsoAutoDateString
+	upload?: RecordIdString
 	user?: RecordIdString
 }
 
@@ -360,6 +373,7 @@ export type SuperusersResponse<Texpand = unknown> = Required<SuperusersRecord> &
 export type BookmarksResponse<Texpand = unknown> = Required<BookmarksRecord> & BaseSystemFields<Texpand>
 export type ChatsResponse<Texpand = unknown> = Required<ChatsRecord> & BaseSystemFields<Texpand>
 export type CollectionsResponse<Texpand = unknown> = Required<CollectionsRecord> & BaseSystemFields<Texpand>
+export type DocumentChunksResponse<Texpand = unknown> = Required<DocumentChunksRecord> & BaseSystemFields<Texpand>
 export type EdgesResponse<Texpand = unknown> = Required<EdgesRecord> & BaseSystemFields<Texpand>
 export type HighlightsResponse<Texpand = unknown> = Required<HighlightsRecord> & BaseSystemFields<Texpand>
 export type MessagesResponse<Tsources = unknown, Texpand = unknown> = Required<MessagesRecord<Tsources>> & BaseSystemFields<Texpand>
@@ -385,6 +399,7 @@ export type CollectionRecords = {
 	bookmarks: BookmarksRecord
 	chats: ChatsRecord
 	collections: CollectionsRecord
+	document_chunks: DocumentChunksRecord
 	edges: EdgesRecord
 	highlights: HighlightsRecord
 	messages: MessagesRecord
@@ -409,6 +424,7 @@ export type CollectionResponses = {
 	bookmarks: BookmarksResponse
 	chats: ChatsResponse
 	collections: CollectionsResponse
+	document_chunks: DocumentChunksResponse
 	edges: EdgesResponse
 	highlights: HighlightsResponse
 	messages: MessagesResponse

@@ -1,9 +1,9 @@
 pb:
-	cd pocketbase && go run . serve
+	cd pocketbase && go run --tags "fts5" . serve
 
 build:
 	pnpm build
-	cd pocketbase && go build -o server .
+	cd pocketbase && go build -o server --tags "fts5" .
 
 deploy: 
 	cd pocketbase && ./deploy.sh

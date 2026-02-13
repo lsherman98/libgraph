@@ -7,9 +7,9 @@
     "build": "tsc -b && vite build && pnpm run postbuild",
     "postbuild": "cp -r dist/* pocketbase/pb_public/",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "pb:serve": "cd pocketbase && go run . serve",
+    "pb:serve": "cd pocketbase && go run --tags \"fts5\" . serve",
     "pb:typegen": "pocketbase-typegen --db ./pocketbase/pb_data/data.db --out src/lib/pocketbase-types.ts",
-    "pb:build": "cd pocketbase && go build ."
+    "pb:build": "cd pocketbase && go build --tags \"fts5\" ."
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
