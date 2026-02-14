@@ -103,7 +103,6 @@ type PipelineFileResponse struct {
 
 type AddFilesToPipelineResponse []PipelineFileResponse
 
-// Chat API Types
 type ChatRequestBody struct {
 	ClassName string    `json:"class_name"`
 	Data      ChatData  `json:"data"`
@@ -164,14 +163,23 @@ type ChatResponse struct {
 	Nodes    []NodeInfo `json:"nodes,omitempty"`
 }
 
-type NodeInfo struct {
-	ID       string                 `json:"id,omitempty"`
-	Text     string                 `json:"text,omitempty"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
-	Score    float64                `json:"score,omitempty"`
+type NodeMetadata struct {
+	UploadID       string `json:"upload_id,omitempty"`
+	ExternalFileID string `json:"external_file_id,omitempty"`
+	Title          string `json:"title,omitempty"`
+	PageNumber     *int   `json:"page_number,omitempty"`
+	PageLabel      *int   `json:"page_label,omitempty"`
+	StartCharIdx   *int   `json:"start_char_idx,omitempty"`
+	EndCharIdx     *int   `json:"end_char_idx,omitempty"`
 }
 
-// Retrieve API Types (flat structure per LlamaIndex search docs)
+type NodeInfo struct {
+	ID       string        `json:"id,omitempty"`
+	Text     string        `json:"text,omitempty"`
+	Metadata *NodeMetadata `json:"metadata,omitempty"`
+	Score    float64       `json:"score,omitempty"`
+}
+
 type RetrieveRequestBody struct {
 	ClassName                    string                 `json:"class_name"`
 	Query                        string                 `json:"query"`
@@ -190,16 +198,20 @@ type RetrieveRequestBody struct {
 }
 
 type RetrieveResponse struct {
-	Nodes []RetrieveNodeWithScore `json:"nodes"`
+	Nodes []NodeInfo
 }
 
-type RetrieveNodeWithScore struct {
-	Node  RetrieveNode `json:"node"`
-	Score float64      `json:"score"`
+type retrieveRawResponse struct {
+	Nodes []retrieveRawNodeWithScore `json:"nodes"`
 }
 
-type RetrieveNode struct {
-	ID_      string                 `json:"id_"`
-	Text     string                 `json:"text"`
-	Metadata map[string]interface{} `json:"metadata"`
+type retrieveRawNodeWithScore struct {
+	Node  retrieveRawNode `json:"node"`
+	Score float64         `json:"score"`
+}
+
+type retrieveRawNode struct {
+	ID_      string        `json:"id_"`
+	Text     string        `json:"text"`
+	Metadata *NodeMetadata `json:"metadata"`
 }

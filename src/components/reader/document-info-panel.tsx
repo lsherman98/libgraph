@@ -217,7 +217,9 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
                 className="text-sm"
                 onSelect={(val) => setPublication(val)}
                 onCreate={(name) => {
-                  createPublicationMutation.mutateAsync({ name }).then((record) => setPublication(record.id));
+                  createPublicationMutation
+                    .mutateAsync({ name, user: getUserRecord().id })
+                    .then((record) => setPublication(record.id));
                 }}
                 placeholder="Select publication..."
                 emptyText="No publications found."

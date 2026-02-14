@@ -237,6 +237,7 @@ function ChatPage() {
   };
 
   const handleFilterChange = (key: keyof ChatFilters, value: string) => {
+    if (key === "condition") return; // condition is handled separately
     if (value === "all") {
       setFilters((prev) => {
         const newFilters = { ...prev };
@@ -255,8 +256,14 @@ function ChatPage() {
     setFilters({});
   };
 
-  const hasActiveFilters = Object.values(filters).some((arr) => arr && arr.length > 0);
-  const activeFilterCount = Object.values(filters).reduce((count, arr) => count + (arr?.length || 0), 0);
+  const hasActiveFilters = Object.values(filters).some((val) => {
+    if (typeof val === "string") return false; // skip condition
+    return Array.isArray(val) && val.length > 0;
+  });
+  const activeFilterCount = Object.entries(filters).reduce((count, [key, val]) => {
+    if (key === "condition") return count;
+    return count + (Array.isArray(val) ? val.length : 0);
+  }, 0);
 
   const handleSourceClick = (source: ChatSource) => {
     setPreviewSource(source);
@@ -302,6 +309,42 @@ function ChatPage() {
           <Separator />
           <ScrollArea className="flex-1">
             <div className="p-4 space-y-5">
+              {/* Filter Condition Toggle */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Match Mode</label>
+                <div className="flex items-center gap-1 rounded-lg border border-border bg-background p-1">
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                      (filters.condition || "or") === "or"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() => setFilters((prev) => ({ ...prev, condition: "or" }))}
+                  >
+                    Match Any (OR)
+                  </button>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                      filters.condition === "and"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() => setFilters((prev) => ({ ...prev, condition: "and" }))}
+                  >
+                    Match All (AND)
+                  </button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {(filters.condition || "or") === "or"
+                    ? "Results match any selected filter."
+                    : "Results must match all selected filters."}
+                </p>
+              </div>
+
               {/* Collection Filter */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Collection</label>

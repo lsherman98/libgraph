@@ -135,7 +135,7 @@ export type CollectionsRecord = {
 	id: string
 	name?: string
 	updated: IsoAutoDateString
-	uploads?: RecordIdString
+	uploads?: RecordIdString[]
 	user?: RecordIdString
 }
 
@@ -279,6 +279,7 @@ export type PublicationsRecord = {
 	type?: PublicationsTypeOptions
 	updated: IsoAutoDateString
 	url?: string
+	user?: RecordIdString
 }
 
 export type TagsRecord = {
@@ -318,9 +319,9 @@ export type UploadsRecord = {
 	id: string
 	llama_file_id?: string
 	num_pages?: number
+	people?: RecordIdString[]
 	publication?: RecordIdString
 	status?: UploadsStatusOptions
-	subjects?: RecordIdString[]
 	tags?: RecordIdString[]
 	title?: string
 	topic?: RecordIdString[]

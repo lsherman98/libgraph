@@ -243,7 +243,7 @@ function RouteComponent() {
                         className="h-8 text-sm flex-1"
                         onSelect={(val) => updateFile(file.id, { publication: val })}
                         onCreate={(name) => {
-                          createPublicationMutation.mutateAsync({ name }).then((record) => {
+                          createPublicationMutation.mutateAsync({ name, user: getUserRecord().id }).then((record) => {
                             updateFile(file.id, { publication: record.id });
                           });
                         }}

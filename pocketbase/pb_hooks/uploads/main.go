@@ -2,7 +2,6 @@ package uploads
 
 import (
 	"fmt"
-	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"github.com/lsherman98/libgraph/pocketbase/collections"
 	"github.com/lsherman98/libgraph/pocketbase/llama"
 	"github.com/lsherman98/libgraph/pocketbase/mistral"
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/filesystem"
@@ -17,107 +17,66 @@ import (
 )
 
 func Init(app *pocketbase.PocketBase) error {
-	app.OnRecordAfterCreateSuccess(collections.Uploads).BindFunc(func(e *core.RecordEvent) error {
+	app.OnRecordCreateRequest(collections.Uploads).BindFunc(func(e *core.RecordRequestEvent) error {
 		upload := e.Record
 		filename := upload.GetString("file")
-		uploadID := upload.Id
-		uploadType := upload.GetString("type")
 
-		slog.Info("[uploads] OnRecordAfterCreateSuccess triggered",
-			"uploadID", uploadID,
-			"filename", filename,
-			"type", uploadType,
-			"isAudio", mistral.IsAudioFile(filename),
-		)
-
-		// Branch: audio files go through Mistral transcription
-		if mistral.IsAudioFile(filename) {
-			slog.Info("[uploads] routing to audio transcription (Mistral)", "uploadID", uploadID)
-			return handleAudioUpload(app, e, upload)
+		token, err := e.Auth.NewFileToken()
+		if err != nil {
+			e.App.Logger().Error("Failed to create file token:", "error", err)
+			return err
 		}
 
-		// Otherwise, use LlamaIndex document parsing
-		slog.Info("[uploads] routing to document parsing (LlamaIndex)", "uploadID", uploadID)
-		return handleDocumentUpload(app, e, upload)
+		if mistral.IsAudioFile(filename) {
+			handleAudioUpload(app, e, upload, token)
+			return e.Next()
+		}
+
+		handleDocumentUpload(app, e, upload, token)
+		return e.Next()
 	})
 
 	return nil
 }
 
-// handleAudioUpload transcribes audio files using the Mistral API.
-func handleAudioUpload(app *pocketbase.PocketBase, e *core.RecordEvent, upload *core.Record) error {
+func handleAudioUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent, upload *core.Record, token string) error {
 	uploadID := upload.Id
 	title := upload.GetString("title")
-	filename := upload.GetString("file")
-
-	slog.Info("[uploads] handleAudioUpload started",
-		"uploadID", uploadID,
-		"title", title,
-		"filename", filename,
-	)
 
 	mistralClient, err := mistral.New(app)
 	if err != nil {
-		slog.Error("[uploads] failed to create Mistral client", "uploadID", uploadID, "error", err)
 		upload.Set("status", "FAILED")
 		app.Save(upload)
 		return err
 	}
 
-	slog.Info("[uploads] Mistral client created, setting status to PROCESSING", "uploadID", uploadID)
 	upload.Set("status", "PROCESSING")
 	if err := app.Save(upload); err != nil {
-		slog.Error("[uploads] failed to update upload status to PROCESSING", "uploadID", uploadID, "error", err)
+		app.Logger().Error("failed to update upload status:", "error", err)
 	}
 
 	routine.FireAndForget(func() {
-		defer func() {
-			if r := recover(); r != nil {
-				slog.Error("[uploads] PANIC in transcription goroutine", "uploadID", uploadID, "panic", r)
-				upload.Set("status", "FAILED")
-				app.Save(upload)
-			}
-		}()
-
-		slog.Info("[uploads] transcription goroutine started", "uploadID", uploadID)
-
 		res, err := mistralClient.Transcribe(upload)
 		if err != nil {
-			slog.Error("[uploads] Mistral transcription failed", "uploadID", uploadID, "error", err)
+			e.App.Logger().Error("Mistral transcription failed", "uploadID", uploadID, "error", err)
 			upload.Set("status", "FAILED")
-			app.Save(upload)
+			e.App.Save(upload)
 			return
 		}
 
-		slog.Info("[uploads] transcription API returned successfully",
-			"uploadID", uploadID,
-			"textLength", len(res.Text),
-			"segmentCount", len(res.Segments),
-		)
-
-		// Group segments by speaker into diarization segments
 		segments := mistral.GroupSegmentsBySpeaker(res.Segments)
-		slog.Info("[uploads] diarization segments grouped",
-			"uploadID", uploadID,
-			"segmentCount", len(segments),
-			"hasDiarization", len(segments) > 0,
-		)
 
-		// Generate speaker-labeled markdown
 		var markdown string
 		if len(segments) > 0 {
 			markdown = mistral.FormatTranscriptMarkdown(segments)
 		} else {
 			markdown = mistral.FormatPlainTranscriptMarkdown(res.Text)
 		}
-		slog.Info("[uploads] transcript markdown generated", "uploadID", uploadID, "markdownLength", len(markdown))
 
-		// Save a page record with the markdown file (same as document flow)
 		pagesCollection, err := app.FindCollectionByNameOrId(collections.Pages)
 		if err != nil {
-			slog.Error("[uploads] failed to find pages collection", "uploadID", uploadID, "error", err)
 			upload.Set("status", "FAILED")
-			app.Save(upload)
+			e.App.Save(upload)
 			return
 		}
 
@@ -127,38 +86,29 @@ func handleAudioUpload(app *pocketbase.PocketBase, e *core.RecordEvent, upload *
 
 		f, err := filesystem.NewFileFromBytes([]byte(markdown), fmt.Sprintf("%s_transcript.md", title))
 		if err != nil {
-			slog.Error("[uploads] failed to create file from transcript", "uploadID", uploadID, "error", err)
 			upload.Set("status", "FAILED")
-			app.Save(upload)
+			e.App.Save(upload)
 			return
 		}
 		newPage.Set("markdown", f)
-
-		if err = app.Save(newPage); err != nil {
-			slog.Error("[uploads] failed to save transcript page", "uploadID", uploadID, "error", err)
+		if err = e.App.Save(newPage); err != nil {
 			upload.Set("status", "FAILED")
-			app.Save(upload)
+			e.App.Save(upload)
 			return
 		}
-		slog.Info("[uploads] transcript page saved", "uploadID", uploadID, "pageID", newPage.Id)
 
 		upload.Set("status", "SUCCESS")
 		upload.Set("num_pages", 1)
-		if err := app.Save(upload); err != nil {
-			slog.Error("[uploads] failed to update upload status to SUCCESS", "uploadID", uploadID, "error", err)
-		} else {
-			slog.Info("[uploads] upload status set to SUCCESS", "uploadID", uploadID)
+		if err := e.App.Save(upload); err != nil {
+			e.App.Logger().Error("failed to update upload status to SUCCESS", "uploadID", uploadID, "error", err)
 		}
 
-		// Create document chunks for full-text search
 		chunksCollection, chunkErr := app.FindCollectionByNameOrId(collections.DocumentChunks)
 		if chunkErr != nil {
-			slog.Error("[uploads] failed to find document_chunks collection", "uploadID", uploadID, "error", chunkErr)
 			return
 		}
 
 		chunks := chunkMarkdown(markdown)
-		slog.Info("[uploads] creating document chunks for full-text search", "uploadID", uploadID, "chunkCount", len(chunks))
 		for idx, chunk := range chunks {
 			if strings.TrimSpace(chunk) == "" {
 				continue
@@ -170,27 +120,21 @@ func handleAudioUpload(app *pocketbase.PocketBase, e *core.RecordEvent, upload *
 			chunkRecord.Set("chunk_index", idx)
 			chunkRecord.Set("content", stripMarkdown(chunk))
 			chunkRecord.Set("user", upload.GetString("user"))
-
-			if saveErr := app.Save(chunkRecord); saveErr != nil {
-				slog.Error("[uploads] failed to save transcript chunk", "uploadID", uploadID, "error", saveErr, "chunk", idx)
+			if saveErr := e.App.Save(chunkRecord); saveErr != nil {
+				e.App.Logger().Error("failed to save transcript chunk", "uploadID", uploadID, "error", saveErr, "chunk", idx)
 			}
 		}
-		slog.Info("[uploads] transcript chunks saved, starting LlamaIndex pipeline integration", "uploadID", uploadID)
 
-		// LlamaIndex Pipeline Integration — upload transcript to RAG pipeline
 		llamaClient, llamaErr := llama.New(app)
 		if llamaErr != nil {
-			slog.Error("[uploads] failed to create LlamaIndex client for audio transcript", "uploadID", uploadID, "error", llamaErr)
-			// Non-fatal: transcript is still saved locally and in FTS
+			e.App.Logger().Error("failed to create LlamaIndex client for audio transcript", "uploadID", uploadID, "error", llamaErr)
 		} else {
 			transcriptFilename := fmt.Sprintf("%s_transcript.md", title)
 			uploadRes, uploadErr := llamaClient.UploadFileContent(transcriptFilename, []byte(markdown), upload.Id)
 			if uploadErr != nil {
-				slog.Error("[uploads] failed to upload transcript to LlamaIndex Cloud", "uploadID", uploadID, "error", uploadErr)
+				e.App.Logger().Error("failed to upload transcript to LlamaIndex Cloud", "uploadID", uploadID, "error", uploadErr)
 			} else {
-				slog.Info("[uploads] transcript uploaded to LlamaIndex Cloud", "uploadID", uploadID, "llamaFileID", uploadRes.ID)
-
-				metadata := map[string]interface{}{
+				metadata := map[string]any{
 					"upload_id":      upload.Id,
 					"title":          title,
 					"user_id":        upload.GetString("user"),
@@ -201,26 +145,21 @@ func handleAudioUpload(app *pocketbase.PocketBase, e *core.RecordEvent, upload *
 
 				_, pipelineErr := llamaClient.AddFilesToPipeline(uploadRes.ID, metadata)
 				if pipelineErr != nil {
-					slog.Error("[uploads] failed to add transcript to LlamaIndex pipeline", "uploadID", uploadID, "error", pipelineErr)
+					app.Logger().Error("failed to add transcript to LlamaIndex pipeline", "uploadID", uploadID, "error", pipelineErr)
 				} else {
-					slog.Info("[uploads] transcript added to LlamaIndex pipeline", "uploadID", uploadID)
-
 					upload.Set("llama_file_id", uploadRes.ID)
 					if saveErr := app.Save(upload); saveErr != nil {
-						slog.Error("[uploads] failed to save llama_file_id on upload", "uploadID", uploadID, "error", saveErr)
+						app.Logger().Error("failed to save llama_file_id on upload", "uploadID", uploadID, "error", saveErr)
 					}
 				}
 			}
 		}
-
-		slog.Info("[uploads] transcription flow completed successfully", "uploadID", uploadID)
 	})
 
 	return e.Next()
 }
 
-// handleDocumentUpload processes document files using LlamaIndex parsing.
-func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordEvent, upload *core.Record) error {
+func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent, upload *core.Record, token string) error {
 	title := upload.GetString("title")
 
 	llamaClient, err := llama.New(app)
@@ -228,7 +167,7 @@ func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordEvent, uploa
 		return err
 	}
 
-	res, err := llamaClient.Parse(upload)
+	res, err := llamaClient.Parse(upload, token)
 	if err != nil {
 		e.App.Logger().Error("Failed to start parse job:", "error", err)
 		upload.Set("status", "FAILED")
@@ -285,7 +224,6 @@ func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordEvent, uploa
 				e.App.Logger().Error("Failed to create file from markdown bytes:", "error", err)
 			}
 			newPage.Set("markdown", f)
-
 			if err = app.Save(newPage); err != nil {
 				e.App.Logger().Error("Failed to save new page record:", "error", err)
 			}
@@ -297,25 +235,20 @@ func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordEvent, uploa
 			e.App.Logger().Error("Failed to update upload status to SUCCESS:", "error", err)
 		}
 
-		// Create document chunks for full-text search
 		chunksCollection, chunkErr := app.FindCollectionByNameOrId(collections.DocumentChunks)
 		if chunkErr != nil {
 			e.App.Logger().Error("Failed to find document_chunks collection:", "error", chunkErr)
 		} else {
 			for i, page := range pages {
-				pageRecords, findErr := app.FindRecordsByFilter(
+				pageRecord, err := app.FindFirstRecordByFilter(
 					collections.Pages,
 					"upload = {:uploadId} && page = {:pageNum}",
-					"",
-					1,
-					0,
-					map[string]any{"uploadId": upload.Id, "pageNum": page.PageNumber},
+					dbx.Params{"uploadId": upload.Id, "pageNum": page.PageNumber},
 				)
-				if findErr != nil || len(pageRecords) == 0 {
-					e.App.Logger().Error("Failed to find page record for chunking:", "error", findErr, "pageIndex", i)
+				if err != nil {
+					e.App.Logger().Error("Failed to find page record for chunking:", "error", err, "pageIndex", i)
 					continue
 				}
-				pageRec := pageRecords[0]
 
 				chunks := chunkMarkdown(page.Markdown)
 
@@ -325,12 +258,11 @@ func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordEvent, uploa
 					}
 					chunkRecord := core.NewRecord(chunksCollection)
 					chunkRecord.Set("upload", upload.Id)
-					chunkRecord.Set("page", pageRec.Id)
+					chunkRecord.Set("page", pageRecord.Id)
 					chunkRecord.Set("page_number", page.PageNumber)
 					chunkRecord.Set("chunk_index", idx)
 					chunkRecord.Set("content", stripMarkdown(chunk))
 					chunkRecord.Set("user", upload.GetString("user"))
-
 					if saveErr := app.Save(chunkRecord); saveErr != nil {
 						e.App.Logger().Error("Failed to save document chunk:", "error", saveErr, "page", page.PageNumber, "chunk", idx)
 					}
@@ -338,14 +270,13 @@ func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordEvent, uploa
 			}
 		}
 
-		// LlamaIndex Pipeline Integration
-		uploadRes, err := llamaClient.UploadFileFromURL(upload)
+		uploadRes, err := llamaClient.UploadFileFromURL(upload, token)
 		if err != nil {
 			e.App.Logger().Error("Failed to upload file to Llama Cloud:", "error", err)
 			return
 		}
 
-		metadata := map[string]interface{}{
+		metadata := map[string]any{
 			"upload_id":      upload.Id,
 			"title":          title,
 			"user_id":        upload.GetString("user"),
@@ -369,12 +300,9 @@ func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordEvent, uploa
 	return e.Next()
 }
 
-// chunkMarkdown splits markdown into chunks by double newlines (paragraph-level).
-// Each chunk is a logical paragraph or block.
 func chunkMarkdown(markdown string) []string {
-	const maxChunkSize = 4500 // stay under the 5000-char DB limit after stripping
+	const maxChunkSize = 4500
 
-	// Split on double newlines (paragraph boundaries)
 	parts := strings.Split(markdown, "\n\n")
 	chunks := []string{}
 	for _, part := range parts {
@@ -382,11 +310,12 @@ func chunkMarkdown(markdown string) []string {
 		if trimmed == "" {
 			continue
 		}
+
 		if len(trimmed) <= maxChunkSize {
 			chunks = append(chunks, trimmed)
 			continue
 		}
-		// Split oversized chunks on sentence boundaries
+
 		sentences := splitSentences(trimmed)
 		current := ""
 		for _, s := range sentences {
@@ -399,8 +328,8 @@ func chunkMarkdown(markdown string) []string {
 				current = s
 			}
 		}
+
 		if current != "" {
-			// If a single sentence is still too long, hard-split it
 			for len(current) > maxChunkSize {
 				chunks = append(chunks, current[:maxChunkSize])
 				current = current[maxChunkSize:]
@@ -410,13 +339,12 @@ func chunkMarkdown(markdown string) []string {
 			}
 		}
 	}
+
 	return chunks
 }
 
-// splitSentences splits text into sentences on ". ", "? ", "! " boundaries.
 func splitSentences(text string) []string {
 	re := regexp.MustCompile(`([.!?])\s+`)
-	// Replace with the punctuation + a null byte as a split marker
 	marked := re.ReplaceAllString(text, "${1}\x00")
 	parts := strings.Split(marked, "\x00")
 	result := []string{}
@@ -429,53 +357,41 @@ func splitSentences(text string) []string {
 	return result
 }
 
-// stripMarkdown removes common markdown syntax to produce plain text for indexing.
 func stripMarkdown(md string) string {
-	// Remove images
 	re := regexp.MustCompile(`!\[([^\]]*)\]\([^)]+\)`)
 	text := re.ReplaceAllString(md, "$1")
 
-	// Remove links but keep text
 	re = regexp.MustCompile(`\[([^\]]+)\]\([^)]+\)`)
 	text = re.ReplaceAllString(text, "$1")
 
-	// Remove HTML tags
 	re = regexp.MustCompile(`<[^>]+>`)
 	text = re.ReplaceAllString(text, "")
 
-	// Remove heading markers
 	re = regexp.MustCompile(`(?m)^#{1,6}\s+`)
 	text = re.ReplaceAllString(text, "")
 
-	// Remove bold/italic markers
 	text = strings.ReplaceAll(text, "**", "")
 	text = strings.ReplaceAll(text, "__", "")
 	text = strings.ReplaceAll(text, "*", "")
 	text = strings.ReplaceAll(text, "_", "")
 
-	// Remove blockquote markers
 	re = regexp.MustCompile(`(?m)^>\s*`)
 	text = re.ReplaceAllString(text, "")
 
-	// Remove list markers
 	re = regexp.MustCompile(`(?m)^[\s]*[-*+]\s+`)
 	text = re.ReplaceAllString(text, "")
 	re = regexp.MustCompile(`(?m)^[\s]*\d+\.\s+`)
 	text = re.ReplaceAllString(text, "")
 
-	// Remove code blocks
 	re = regexp.MustCompile("```[\\s\\S]*?```")
 	text = re.ReplaceAllString(text, "")
 
-	// Remove inline code
 	re = regexp.MustCompile("`([^`]+)`")
 	text = re.ReplaceAllString(text, "$1")
 
-	// Remove horizontal rules
 	re = regexp.MustCompile(`(?m)^[-*_]{3,}\s*$`)
 	text = re.ReplaceAllString(text, "")
 
-	// Collapse whitespace
 	re = regexp.MustCompile(`\s+`)
 	text = re.ReplaceAllString(text, " ")
 

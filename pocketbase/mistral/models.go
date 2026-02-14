@@ -1,6 +1,5 @@
 package mistral
 
-// TranscriptionResponse represents the response from the Mistral transcription API.
 type TranscriptionResponse struct {
 	Model    string                 `json:"model"`
 	Text     string                 `json:"text"`
@@ -10,7 +9,6 @@ type TranscriptionResponse struct {
 	Type     string                 `json:"type,omitempty"`
 }
 
-// TranscriptionUsage represents token/audio usage info from the API.
 type TranscriptionUsage struct {
 	PromptAudioSeconds float64 `json:"prompt_audio_seconds"`
 	PromptTokens       int     `json:"prompt_tokens"`
@@ -20,7 +18,6 @@ type TranscriptionUsage struct {
 	NumCachedTokens    int     `json:"num_cached_tokens,omitempty"`
 }
 
-// TranscriptionSegment represents a segment returned by the API with optional speaker diarization.
 type TranscriptionSegment struct {
 	Text      string  `json:"text"`
 	Start     float64 `json:"start"`
@@ -29,8 +26,6 @@ type TranscriptionSegment struct {
 	Type      string  `json:"type,omitempty"`
 }
 
-// DiarizationSegment is a higher-level representation grouping consecutive segments
-// by speaker for storage and display purposes.
 type DiarizationSegment struct {
 	Speaker string  `json:"speaker"`
 	Start   float64 `json:"start"`

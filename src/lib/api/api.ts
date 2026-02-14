@@ -453,6 +453,7 @@ export interface ChatMessage {
 }
 
 export interface ChatFilters {
+    condition?: 'and' | 'or';
     tags?: string[];
     subjects?: string[];
     publications?: string[];

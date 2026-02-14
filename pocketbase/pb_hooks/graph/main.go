@@ -11,47 +11,15 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
-type NodeType string
-
-const (
-	NodeTypeUpload      NodeType = "upload"
-	NodeTypeHighlight   NodeType = "highlight"
-	NodeTypeBookmark    NodeType = "bookmark"
-	NodeTypeAuthor      NodeType = "author"
-	NodeTypePublication NodeType = "publication"
-	NodeTypeTag         NodeType = "tag"
-	NodeTypeTopic       NodeType = "topic"
-	NodeTypeNote        NodeType = "note"
-)
-
-type EdgeType string
-
-const (
-	EdgeTypeAuthoredBy  EdgeType = "authored_by"
-	EdgeTypeTaggedWith  EdgeType = "tagged_with"
-	EdgeTypeBelongsTo   EdgeType = "belongs_to"
-	EdgeTypeHighlightOf EdgeType = "highlight_of"
-	EdgeTypeBookmarkOf  EdgeType = "bookmark_of"
-	EdgeTypeNoteOf      EdgeType = "note_of"
-	EdgeTypePublishedBy EdgeType = "published_by"
-	EdgeTypeAboutPerson EdgeType = "about_person"
-	EdgeTypeLinksTo     EdgeType = "links_to"
-)
-
 func Init(app *pocketbase.PocketBase) error {
 	registerUploadHooks(app)
-	registerPeopleHooks(app)
-	registerPublicationHooks(app)
-	registerTagHooks(app)
-	registerTopicHooks(app)
-	registerHighlightHooks(app)
-	registerBookmarkHooks(app)
-	registerNotesHooks(app)
+	registerSimpleNodeHooks(app)
+	registerAnnotationCreateHooks(app)
 
 	return nil
 }
 
-func createNode(app *pocketbase.PocketBase, recordId string, nodeType NodeType, userId string, label string, data map[string]interface{}) (string, error) {
+func createNode(app *pocketbase.PocketBase, recordId string, nodeType NodeType, userId string, label string, data map[string]any) (string, error) {
 	nodesCollection, err := app.FindCollectionByNameOrId(collections.Nodes)
 	if err != nil {
 		return "", err
@@ -77,7 +45,7 @@ func createNode(app *pocketbase.PocketBase, recordId string, nodeType NodeType, 
 	return node.Id, nil
 }
 
-func updateNodeData(app *pocketbase.PocketBase, recordId string, userId string, nodeType NodeType, label string, data map[string]interface{}) error {
+func updateNodeData(app *pocketbase.PocketBase, recordId string, userId string, nodeType NodeType, label string, data map[string]any) error {
 	node, err := findNodeByRecord(app, recordId, userId, nodeType)
 	if err != nil || node == nil {
 		return err
@@ -95,71 +63,78 @@ func updateNodeData(app *pocketbase.PocketBase, recordId string, userId string, 
 	return app.Save(node)
 }
 
-// Helper functions to extract label and data from records
-
-func getUploadLabelAndData(record *core.Record) (string, map[string]interface{}) {
+func getUploadLabelAndData(record *core.Record) (string, map[string]any) {
 	title := record.GetString("title")
 	if title == "" {
 		title = "Untitled Upload"
 	}
-	data := map[string]interface{}{
+
+	data := map[string]any{
 		"title":     title,
 		"type":      record.GetString("type"),
-		"status":    record.GetString("status"),
 		"num_pages": record.GetInt("num_pages"),
 	}
+
 	return title, data
 }
 
-func getPersonLabelAndData(record *core.Record) (string, map[string]interface{}) {
+func getPersonLabelAndData(record *core.Record) (string, map[string]any) {
 	name := record.GetString("name")
 	if name == "" {
 		name = "Unknown Person"
 	}
-	data := map[string]interface{}{
+
+	data := map[string]any{
 		"name":   name,
 		"type":   record.GetString("type"),
 		"source": record.GetString("source"),
 	}
+
 	return name, data
 }
 
-func getPublicationLabelAndData(record *core.Record) (string, map[string]interface{}) {
+func getPublicationLabelAndData(record *core.Record) (string, map[string]any) {
 	name := record.GetString("name")
 	if name == "" {
 		name = "Unknown Publication"
 	}
-	data := map[string]interface{}{
+
+	data := map[string]any{
 		"name": name,
 		"type": record.GetString("type"),
 		"url":  record.GetString("url"),
 	}
+
 	return name, data
 }
 
-func getTagLabelAndData(record *core.Record) (string, map[string]interface{}) {
+func getTagLabelAndData(record *core.Record) (string, map[string]any) {
 	title := record.GetString("title")
 	if title == "" {
 		title = "Untitled Tag"
 	}
-	data := map[string]interface{}{
+
+	data := map[string]any{
 		"title": title,
 	}
+
 	return title, data
 }
 
-func getTopicLabelAndData(record *core.Record) (string, map[string]interface{}) {
+func getTopicLabelAndData(record *core.Record) (string, map[string]any) {
 	title := record.GetString("title")
 	if title == "" {
 		title = "Untitled Topic"
 	}
-	data := map[string]interface{}{
+
+	data := map[string]any{
 		"title": title,
 	}
+
 	return title, data
 }
 
-func getHighlightLabelAndData(record *core.Record) (string, map[string]interface{}) {
+func getHighlightLabelAndData(record *core.Record) (string, map[string]any) {
 	text := record.GetString("text")
 	label := text
 	if len(label) > 40 {
@@ -168,15 +143,17 @@ func getHighlightLabelAndData(record *core.Record) (string, map[string]interface
 	if label == "" {
 		label = "Highlight"
 	}
-	data := map[string]interface{}{
+
+	data := map[string]any{
 		"text":    text,
 		"color":   record.GetString("color"),
 		"comment": record.GetString("comment"),
 	}
+
 	return label, data
 }
 
-func getBookmarkLabelAndData(record *core.Record) (string, map[string]interface{}) {
+func getBookmarkLabelAndData(record *core.Record) (string, map[string]any) {
 	comment := record.GetString("comment")
 	pageNum := record.GetInt("page_number")
 	label := comment
@@ -190,14 +167,16 @@ func getBookmarkLabelAndData(record *core.Record) (string, map[string]interface{
 	if len(label) > 40 {
 		label = label[:40] + "..."
 	}
-	data := map[string]interface{}{
+
+	data := map[string]any{
 		"comment":     comment,
 		"page_number": pageNum,
 	}
+
 	return label, data
 }
 
-func getNoteLabelAndData(record *core.Record) (string, map[string]interface{}) {
+func getNoteLabelAndData(record *core.Record) (string, map[string]any) {
 	content := record.GetString("content")
 	pageNum := record.GetInt("page_number")
 	label := content
@@ -211,10 +190,12 @@ func getNoteLabelAndData(record *core.Record) (string, map[string]interface{}) {
 			label = "Note"
 		}
 	}
-	data := map[string]interface{}{
+
+	data := map[string]any{
 		"content":     content,
 		"page_number": pageNum,
 	}
+
 	return label, data
 }
 
@@ -269,15 +250,12 @@ func deleteNodeAndEdges(app *pocketbase.PocketBase, recordId string, userId stri
 	return app.Delete(node)
 }
 
-// syncEdgesForRelation syncs edges between a source node and a set of target records.
-// It deletes edges that are no longer needed and creates new ones.
 func syncEdgesForRelation(app *pocketbase.PocketBase, sourceNodeId string, targetRecordIds []string, targetNodeType NodeType, edgeType EdgeType, userId string, sourceIsTarget bool) error {
-	// Find all existing edges of this type from/to source node
 	var filterStr string
 	if sourceIsTarget {
-		filterStr = fmt.Sprintf("target = '%s' && type = '%s' && user = '%s'", sourceNodeId, string(edgeType), userId)
+		filterStr = "target = {:nodeId} && type = {:edgeType} && user = {:userId}"
 	} else {
-		filterStr = fmt.Sprintf("source = '%s' && type = '%s' && user = '%s'", sourceNodeId, string(edgeType), userId)
+		filterStr = "source = {:nodeId} && type = {:edgeType} && user = {:userId}"
 	}
 
 	existingEdges, err := app.FindRecordsByFilter(
@@ -286,13 +264,12 @@ func syncEdgesForRelation(app *pocketbase.PocketBase, sourceNodeId string, targe
 		"",
 		0,
 		0,
-		dbx.Params{},
+		dbx.Params{"nodeId": sourceNodeId, "edgeType": string(edgeType), "userId": userId},
 	)
 	if err != nil {
 		existingEdges = []*core.Record{}
 	}
 
-	// Build a set of existing target/source node IDs
 	existingMap := map[string]*core.Record{}
 	for _, edge := range existingEdges {
 		if sourceIsTarget {
@@ -302,7 +279,6 @@ func syncEdgesForRelation(app *pocketbase.PocketBase, sourceNodeId string, targe
 		}
 	}
 
-	// Build set of desired target node IDs
 	desiredMap := map[string]bool{}
 	for _, recordId := range targetRecordIds {
 		targetNode, _ := findNodeByRecord(app, recordId, userId, targetNodeType)
@@ -311,14 +287,12 @@ func syncEdgesForRelation(app *pocketbase.PocketBase, sourceNodeId string, targe
 		}
 	}
 
-	// Delete edges no longer needed
 	for nodeId, edge := range existingMap {
 		if !desiredMap[nodeId] {
 			app.Delete(edge)
 		}
 	}
 
-	// Create new edges
 	for nodeId := range desiredMap {
 		if _, exists := existingMap[nodeId]; !exists {
 			if sourceIsTarget {
@@ -332,7 +306,6 @@ func syncEdgesForRelation(app *pocketbase.PocketBase, sourceNodeId string, targe
 	return nil
 }
 
-// syncSingleEdge syncs a single relation (e.g. publication) for a node.
 func syncSingleEdge(app *pocketbase.PocketBase, sourceNodeId string, targetRecordId string, targetNodeType NodeType, edgeType EdgeType, userId string, sourceIsTarget bool) error {
 	if targetRecordId == "" {
 		return syncEdgesForRelation(app, sourceNodeId, []string{}, targetNodeType, edgeType, userId, sourceIsTarget)
@@ -352,8 +325,7 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 			return e.Next()
 		}
 
-		// Create edges for subjects (people the upload is about)
-		subjects := upload.GetStringSlice("subjects")
+		subjects := upload.GetStringSlice("people")
 		for _, subjectId := range subjects {
 			subjectNode, _ := findNodeByRecord(app, subjectId, userId, NodeTypeAuthor)
 			if subjectNode != nil {
@@ -361,7 +333,6 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 			}
 		}
 
-		// Create edge for publication (source of the upload)
 		publicationId := upload.GetString("publication")
 		if publicationId != "" {
 			pubNode, _ := findNodeByRecord(app, publicationId, userId, NodeTypePublication)
@@ -378,7 +349,7 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 			}
 		}
 
-		topics := upload.GetStringSlice("topic")
+		topics := upload.GetStringSlice("topics")
 		for _, topicId := range topics {
 			topicNode, _ := findNodeByRecord(app, topicId, userId, NodeTypeTopic)
 			if topicNode != nil {
@@ -386,8 +357,7 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 			}
 		}
 
-		// Create edges for related/linked uploads
-		relatedUploads := upload.GetStringSlice("upload")
+		relatedUploads := upload.GetStringSlice("uploads")
 		for _, relatedId := range relatedUploads {
 			relatedNode, _ := findNodeByRecord(app, relatedId, userId, NodeTypeUpload)
 			if relatedNode != nil {
@@ -403,7 +373,6 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 			e.App.Logger().Error("Failed to delete node and edges for upload:", "error", err)
 		}
 
-		// Remove document from LlamaIndex pipeline
 		llamaFileId := e.Record.GetString("llama_file_id")
 		if llamaFileId != "" {
 			llamaClient, err := llama.New(app)
@@ -425,39 +394,33 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 			e.App.Logger().Error("Failed to update node data for upload:", "error", err)
 		}
 
-		// Sync all edges for the upload
 		uploadNode, err := findNodeByRecord(app, upload.Id, userId, NodeTypeUpload)
 		if err != nil || uploadNode == nil {
 			e.App.Logger().Error("Failed to find upload node for edge sync:", "error", err)
 			return e.Next()
 		}
 
-		// Sync subjects (about_person) - subject node is source, upload node is target
-		subjects := upload.GetStringSlice("subjects")
+		subjects := upload.GetStringSlice("people")
 		if err := syncEdgesForRelation(app, uploadNode.Id, subjects, NodeTypeAuthor, EdgeTypeAboutPerson, userId, true); err != nil {
 			e.App.Logger().Error("Failed to sync subject edges:", "error", err)
 		}
 
-		// Sync publication (published_by) - publication node is source, upload node is target
 		publicationId := upload.GetString("publication")
 		if err := syncSingleEdge(app, uploadNode.Id, publicationId, NodeTypePublication, EdgeTypePublishedBy, userId, true); err != nil {
 			e.App.Logger().Error("Failed to sync publication edge:", "error", err)
 		}
 
-		// Sync tags (tagged_with) - tag node is source, upload node is target
 		tags := upload.GetStringSlice("tags")
 		if err := syncEdgesForRelation(app, uploadNode.Id, tags, NodeTypeTag, EdgeTypeTaggedWith, userId, true); err != nil {
 			e.App.Logger().Error("Failed to sync tag edges:", "error", err)
 		}
 
-		// Sync topics (belongs_to) - topic node is source, upload node is target
-		topics := upload.GetStringSlice("topic")
+		topics := upload.GetStringSlice("topics")
 		if err := syncEdgesForRelation(app, uploadNode.Id, topics, NodeTypeTopic, EdgeTypeBelongsTo, userId, true); err != nil {
 			e.App.Logger().Error("Failed to sync topic edges:", "error", err)
 		}
 
-		// Sync related uploads (links_to) - upload node is source, related node is target
-		relatedUploads := upload.GetStringSlice("upload")
+		relatedUploads := upload.GetStringSlice("uploads")
 		if err := syncEdgesForRelation(app, uploadNode.Id, relatedUploads, NodeTypeUpload, EdgeTypeLinksTo, userId, false); err != nil {
 			e.App.Logger().Error("Failed to sync related upload edges:", "error", err)
 		}
@@ -466,279 +429,80 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 	})
 }
 
-func registerPeopleHooks(app *pocketbase.PocketBase) {
-	app.OnRecordAfterCreateSuccess(collections.People).BindFunc(func(e *core.RecordEvent) error {
-		person := e.Record
-		userId := person.GetString("user")
+func registerSimpleNodeHooks(app *pocketbase.PocketBase) {
+	app.OnRecordAfterCreateSuccess(
+		collections.People, collections.Publications, collections.Tags, collections.Topics,
+	).BindFunc(func(e *core.RecordEvent) error {
+		record := e.Record
+		collName := record.Collection().Name
+		userId := record.GetString("user")
 
-		label, data := getPersonLabelAndData(person)
-		_, err := createNode(app, person.Id, NodeTypeAuthor, userId, label, data)
-		if err != nil {
-			e.App.Logger().Error("Failed to create node for person:", "error", err)
+		label, data := collectionLabelData[collName](record)
+		if _, err := createNode(app, record.Id, collectionNodeType[collName], userId, label, data); err != nil {
+			e.App.Logger().Error("Failed to create node:", "collection", collName, "error", err)
 		}
 
 		return e.Next()
 	})
 
-	app.OnRecordAfterDeleteSuccess(collections.People).BindFunc(func(e *core.RecordEvent) error {
-		if err := deleteNodeAndEdges(app, e.Record.Id, e.Record.GetString("user"), NodeTypeAuthor); err != nil {
-			e.App.Logger().Error("Failed to delete node and edges for person:", "error", err)
+	app.OnRecordAfterDeleteSuccess(
+		collections.People, collections.Publications, collections.Tags, collections.Topics,
+		collections.Highlights, collections.Bookmarks, collections.Notes,
+	).BindFunc(func(e *core.RecordEvent) error {
+		collName := e.Record.Collection().Name
+		if err := deleteNodeAndEdges(app, e.Record.Id, e.Record.GetString("user"), collectionNodeType[collName]); err != nil {
+			e.App.Logger().Error("Failed to delete node and edges:", "collection", collName, "error", err)
 		}
 		return e.Next()
 	})
 
-	app.OnRecordAfterUpdateSuccess(collections.People).BindFunc(func(e *core.RecordEvent) error {
-		person := e.Record
-		userId := person.GetString("user")
-		label, data := getPersonLabelAndData(person)
-		if err := updateNodeData(app, person.Id, userId, NodeTypeAuthor, label, data); err != nil {
-			e.App.Logger().Error("Failed to update node data for person:", "error", err)
-		}
-		return e.Next()
-	})
-}
+	app.OnRecordAfterUpdateSuccess(
+		collections.People, collections.Publications, collections.Tags, collections.Topics,
+		collections.Highlights, collections.Bookmarks, collections.Notes,
+	).BindFunc(func(e *core.RecordEvent) error {
+		record := e.Record
+		collName := record.Collection().Name
+		userId := record.GetString("user")
 
-func registerPublicationHooks(app *pocketbase.PocketBase) {
-	app.OnRecordAfterCreateSuccess(collections.Publications).BindFunc(func(e *core.RecordEvent) error {
-		pub := e.Record
-		// Publications don't have a user field, use empty string
-		// The node will be associated via edges to uploads which have users
-		userId := pub.GetString("user")
-
-		label, data := getPublicationLabelAndData(pub)
-		_, err := createNode(app, pub.Id, NodeTypePublication, userId, label, data)
-		if err != nil {
-			e.App.Logger().Error("Failed to create node for publication:", "error", err)
-		}
-
-		return e.Next()
-	})
-
-	app.OnRecordAfterDeleteSuccess(collections.Publications).BindFunc(func(e *core.RecordEvent) error {
-		if err := deleteNodeAndEdges(app, e.Record.Id, e.Record.GetString("user"), NodeTypePublication); err != nil {
-			e.App.Logger().Error("Failed to delete node and edges for publication:", "error", err)
-		}
-		return e.Next()
-	})
-
-	app.OnRecordAfterUpdateSuccess(collections.Publications).BindFunc(func(e *core.RecordEvent) error {
-		pub := e.Record
-		userId := pub.GetString("user")
-		label, data := getPublicationLabelAndData(pub)
-		if err := updateNodeData(app, pub.Id, userId, NodeTypePublication, label, data); err != nil {
-			e.App.Logger().Error("Failed to update node data for publication:", "error", err)
+		label, data := collectionLabelData[collName](record)
+		if err := updateNodeData(app, record.Id, userId, collectionNodeType[collName], label, data); err != nil {
+			e.App.Logger().Error("Failed to update node data:", "collection", collName, "error", err)
 		}
 		return e.Next()
 	})
 }
 
-func registerTagHooks(app *pocketbase.PocketBase) {
-	app.OnRecordAfterCreateSuccess(collections.Tags).BindFunc(func(e *core.RecordEvent) error {
-		tag := e.Record
-		userId := tag.GetString("user")
+func registerAnnotationCreateHooks(app *pocketbase.PocketBase) {
+	app.OnRecordAfterCreateSuccess(
+		collections.Highlights, collections.Bookmarks, collections.Notes,
+	).BindFunc(func(e *core.RecordEvent) error {
+		record := e.Record
+		collName := record.Collection().Name
+		userId := record.GetString("user")
 
-		label, data := getTagLabelAndData(tag)
-		_, err := createNode(app, tag.Id, NodeTypeTag, userId, label, data)
+		label, data := collectionLabelData[collName](record)
+		nodeId, err := createNode(app, record.Id, collectionNodeType[collName], userId, label, data)
 		if err != nil {
-			e.App.Logger().Error("Failed to create node for tag:", "error", err)
-		}
-
-		return e.Next()
-	})
-
-	app.OnRecordAfterDeleteSuccess(collections.Tags).BindFunc(func(e *core.RecordEvent) error {
-		if err := deleteNodeAndEdges(app, e.Record.Id, e.Record.GetString("user"), NodeTypeTag); err != nil {
-			e.App.Logger().Error("Failed to delete node and edges for tag:", "error", err)
-		}
-		return e.Next()
-	})
-
-	app.OnRecordAfterUpdateSuccess(collections.Tags).BindFunc(func(e *core.RecordEvent) error {
-		tag := e.Record
-		userId := tag.GetString("user")
-		label, data := getTagLabelAndData(tag)
-		if err := updateNodeData(app, tag.Id, userId, NodeTypeTag, label, data); err != nil {
-			e.App.Logger().Error("Failed to update node data for tag:", "error", err)
-		}
-		return e.Next()
-	})
-}
-
-func registerTopicHooks(app *pocketbase.PocketBase) {
-	app.OnRecordAfterCreateSuccess(collections.Topics).BindFunc(func(e *core.RecordEvent) error {
-		topic := e.Record
-		userId := topic.GetString("user")
-
-		label, data := getTopicLabelAndData(topic)
-		_, err := createNode(app, topic.Id, NodeTypeTopic, userId, label, data)
-		if err != nil {
-			e.App.Logger().Error("Failed to create node for topic:", "error", err)
-		}
-
-		return e.Next()
-	})
-
-	app.OnRecordAfterDeleteSuccess(collections.Topics).BindFunc(func(e *core.RecordEvent) error {
-		if err := deleteNodeAndEdges(app, e.Record.Id, e.Record.GetString("user"), NodeTypeTopic); err != nil {
-			e.App.Logger().Error("Failed to delete node and edges for topic:", "error", err)
-		}
-		return e.Next()
-	})
-
-	app.OnRecordAfterUpdateSuccess(collections.Topics).BindFunc(func(e *core.RecordEvent) error {
-		topic := e.Record
-		userId := topic.GetString("user")
-		label, data := getTopicLabelAndData(topic)
-		if err := updateNodeData(app, topic.Id, userId, NodeTypeTopic, label, data); err != nil {
-			e.App.Logger().Error("Failed to update node data for topic:", "error", err)
-		}
-		return e.Next()
-	})
-}
-
-func registerHighlightHooks(app *pocketbase.PocketBase) {
-	app.OnRecordAfterCreateSuccess(collections.Highlights).BindFunc(func(e *core.RecordEvent) error {
-		highlight := e.Record
-		userId := highlight.GetString("user")
-
-		label, data := getHighlightLabelAndData(highlight)
-		highlightNodeId, err := createNode(app, highlight.Id, NodeTypeHighlight, userId, label, data)
-		if err != nil {
-			e.App.Logger().Error("Failed to create node for highlight:", "error", err)
+			e.App.Logger().Error("Failed to create node:", "collection", collName, "error", err)
 			return e.Next()
 		}
 
-		uploadId := highlight.GetString("upload")
+		uploadId := record.GetString("upload")
 		if uploadId != "" {
 			uploadNode, _ := findNodeByRecord(app, uploadId, userId, NodeTypeUpload)
 			if uploadNode != nil {
-				createEdge(app, uploadNode.Id, highlightNodeId, EdgeTypeHighlightOf, userId)
+				createEdge(app, uploadNode.Id, nodeId, annotationUploadEdgeType[collName], userId)
 			}
 		}
 
-		tags := highlight.GetStringSlice("tags")
+		tags := record.GetStringSlice("tags")
 		for _, tagId := range tags {
 			tagNode, _ := findNodeByRecord(app, tagId, userId, NodeTypeTag)
 			if tagNode != nil {
-				createEdge(app, tagNode.Id, highlightNodeId, EdgeTypeTaggedWith, userId)
+				createEdge(app, tagNode.Id, nodeId, EdgeTypeTaggedWith, userId)
 			}
 		}
 
-		return e.Next()
-	})
-
-	app.OnRecordAfterDeleteSuccess(collections.Highlights).BindFunc(func(e *core.RecordEvent) error {
-		if err := deleteNodeAndEdges(app, e.Record.Id, e.Record.GetString("user"), NodeTypeHighlight); err != nil {
-			e.App.Logger().Error("Failed to delete node and edges for highlight:", "error", err)
-		}
-		return e.Next()
-	})
-
-	app.OnRecordAfterUpdateSuccess(collections.Highlights).BindFunc(func(e *core.RecordEvent) error {
-		highlight := e.Record
-		userId := highlight.GetString("user")
-		label, data := getHighlightLabelAndData(highlight)
-		if err := updateNodeData(app, highlight.Id, userId, NodeTypeHighlight, label, data); err != nil {
-			e.App.Logger().Error("Failed to update node data for highlight:", "error", err)
-		}
-		return e.Next()
-	})
-}
-
-func registerBookmarkHooks(app *pocketbase.PocketBase) {
-	app.OnRecordAfterCreateSuccess(collections.Bookmarks).BindFunc(func(e *core.RecordEvent) error {
-		bookmark := e.Record
-		userId := bookmark.GetString("user")
-		uploadId := bookmark.GetString("upload")
-		tags := bookmark.GetStringSlice("tags")
-
-		label, data := getBookmarkLabelAndData(bookmark)
-		bookmarkNodeId, err := createNode(app, bookmark.Id, NodeTypeBookmark, userId, label, data)
-		if err != nil {
-			e.App.Logger().Error("Failed to create node for bookmark:", "error", err)
-			return e.Next()
-		}
-
-		if uploadId != "" {
-			uploadNode, _ := findNodeByRecord(app, uploadId, userId, NodeTypeUpload)
-			if uploadNode != nil {
-				createEdge(app, uploadNode.Id, bookmarkNodeId, EdgeTypeBookmarkOf, userId)
-			}
-		}
-
-		for _, tagId := range tags {
-			tagNode, _ := findNodeByRecord(app, tagId, userId, NodeTypeTag)
-			if tagNode != nil {
-				createEdge(app, tagNode.Id, bookmarkNodeId, EdgeTypeTaggedWith, userId)
-			}
-		}
-
-		return e.Next()
-	})
-
-	app.OnRecordAfterDeleteSuccess(collections.Bookmarks).BindFunc(func(e *core.RecordEvent) error {
-		if err := deleteNodeAndEdges(app, e.Record.Id, e.Record.GetString("user"), NodeTypeBookmark); err != nil {
-			e.App.Logger().Error("Failed to delete node and edges for bookmark:", "error", err)
-		}
-		return e.Next()
-	})
-
-	app.OnRecordAfterUpdateSuccess(collections.Bookmarks).BindFunc(func(e *core.RecordEvent) error {
-		bookmark := e.Record
-		userId := bookmark.GetString("user")
-		label, data := getBookmarkLabelAndData(bookmark)
-		if err := updateNodeData(app, bookmark.Id, userId, NodeTypeBookmark, label, data); err != nil {
-			e.App.Logger().Error("Failed to update node data for bookmark:", "error", err)
-		}
-		return e.Next()
-	})
-}
-
-func registerNotesHooks(app *pocketbase.PocketBase) {
-	app.OnRecordAfterCreateSuccess(collections.Notes).BindFunc(func(e *core.RecordEvent) error {
-		note := e.Record
-		userId := note.GetString("user")
-		uploadId := note.GetString("upload")
-		tags := note.GetStringSlice("tags")
-
-		label, data := getNoteLabelAndData(note)
-		noteNodeId, err := createNode(app, note.Id, NodeTypeNote, userId, label, data)
-		if err != nil {
-			e.App.Logger().Error("Failed to create node for note:", "error", err)
-			return e.Next()
-		}
-
-		if uploadId != "" {
-			uploadNode, _ := findNodeByRecord(app, uploadId, userId, NodeTypeUpload)
-			if uploadNode != nil {
-				createEdge(app, uploadNode.Id, noteNodeId, EdgeTypeNoteOf, userId)
-			}
-		}
-
-		for _, tagId := range tags {
-			tagNode, _ := findNodeByRecord(app, tagId, userId, NodeTypeTag)
-			if tagNode != nil {
-				createEdge(app, tagNode.Id, noteNodeId, EdgeTypeTaggedWith, userId)
-			}
-		}
-
-		return e.Next()
-	})
-
-	app.OnRecordAfterDeleteSuccess(collections.Notes).BindFunc(func(e *core.RecordEvent) error {
-		if err := deleteNodeAndEdges(app, e.Record.Id, e.Record.GetString("user"), NodeTypeNote); err != nil {
-			e.App.Logger().Error("Failed to delete node and edges for note:", "error", err)
-		}
-		return e.Next()
-	})
-
-	app.OnRecordAfterUpdateSuccess(collections.Notes).BindFunc(func(e *core.RecordEvent) error {
-		note := e.Record
-		userId := note.GetString("user")
-		label, data := getNoteLabelAndData(note)
-		if err := updateNodeData(app, note.Id, userId, NodeTypeNote, label, data); err != nil {
-			e.App.Logger().Error("Failed to update node data for note:", "error", err)
-		}
 		return e.Next()
 	})
 }

@@ -15,26 +15,20 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/lsherman98/libgraph/pocketbase/collections"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 )
 
-// func buildUrl(statement *core.Record, token string) string {
-// 	return fmt.Sprintf(
-// 		"test",
-// 		collections.Uploads,
-// 		statement.Id,
-// 		statement.GetString("file"),
-// 		token,
-// 	)
-// }
-
-// var url string
-// 			if dev == "true" {
-// 				url = buildS3Url(statement.Collection().Id, statement.Id, statement.GetString("file"))
-// 			} else {
-// 				url = buildUrl(statement, token)
-// 			}
+func buildProdUrl(record *core.Record, token string) string {
+	return fmt.Sprintf(
+		"test.com/%s/%s/%s?token=%s",
+		collections.Uploads,
+		record.Id,
+		record.GetString("file"),
+		token,
+	)
+}
 
 func buildS3Url(collectionId, recordId, filename string) string {
 	return fmt.Sprintf(
@@ -44,6 +38,23 @@ func buildS3Url(collectionId, recordId, filename string) string {
 		recordId,
 		filename,
 	)
+}
+
+func buildUrl(app *pocketbase.PocketBase, collectionId, recordId, filename, token string) string {
+	dev := os.Getenv("DEV")
+
+	var url string
+	if dev == "true" {
+		url = buildS3Url(collectionId, recordId, filename)
+	} else {
+		record, err := app.FindRecordById(collections.Uploads, recordId)
+		if err != nil {
+			return ""
+		}
+
+		url = buildProdUrl(record, token)
+	}
+	return url
 }
 
 const (
@@ -97,12 +108,12 @@ func New(app *pocketbase.PocketBase) (*LlamaClient, error) {
 	}, nil
 }
 
-func (c *LlamaClient) Parse(upload *core.Record) (*ParseResponse, error) {
+func (c *LlamaClient) Parse(upload *core.Record, token string) (*ParseResponse, error) {
 	params := url.Values{}
 	params.Add("project_id", c.ProjectID)
 	params.Add("organization_id", c.OrganizationID)
 
-	url := buildS3Url(upload.Collection().Id, upload.Id, upload.GetString("file"))
+	url := buildUrl(c.App, upload.Collection().Id, upload.Id, upload.GetString("file"), token)
 
 	var response ParseResponse
 	body := &ParseRequest{
@@ -144,8 +155,6 @@ func (c *LlamaClient) GetParseJob(jobId string) (*ParseJobResponse, error) {
 	return &response, nil
 }
 
-// UploadFileContent uploads raw file content (e.g. a transcript markdown) to LlamaIndex Cloud
-// using multipart form upload. Returns the file ID for pipeline indexing.
 func (c *LlamaClient) UploadFileContent(name string, content []byte, externalFileID string) (*UploadFileContentResponse, error) {
 	params := url.Values{}
 	params.Add("project_id", c.ProjectID)
@@ -159,7 +168,6 @@ func (c *LlamaClient) UploadFileContent(name string, content []byte, externalFil
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 
-	// Add file field
 	part, err := writer.CreateFormFile("upload_file", name)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create form file: %w", err)
@@ -168,7 +176,6 @@ func (c *LlamaClient) UploadFileContent(name string, content []byte, externalFil
 		return nil, fmt.Errorf("failed to write content: %w", err)
 	}
 
-	// Add external_file_id if provided
 	if externalFileID != "" {
 		if err := writer.WriteField("external_file_id", externalFileID); err != nil {
 			return nil, fmt.Errorf("failed to write external_file_id: %w", err)
@@ -207,11 +214,11 @@ func (c *LlamaClient) UploadFileContent(name string, content []byte, externalFil
 	return &response, nil
 }
 
-func (c *LlamaClient) UploadFileFromURL(upload *core.Record) (*UploadFileFromURLResponse, error) {
+func (c *LlamaClient) UploadFileFromURL(upload *core.Record, token string) (*UploadFileFromURLResponse, error) {
 	params := url.Values{}
 	params.Add("project_id", c.ProjectID)
 
-	url := buildS3Url(upload.Collection().Id, upload.Id, upload.GetString("file"))
+	url := buildUrl(c.App, upload.Collection().Id, upload.Id, upload.GetString("file"), token)
 
 	body := &UploadFileFromURLRequest{
 		Url:             url,
@@ -270,7 +277,6 @@ func (c *LlamaClient) Chat(req *ChatRequestBody) (*ChatResponse, error) {
 
 	endpoint := fmt.Sprintf("/api/v1/pipelines/%s/chat", c.PipelineID)
 
-	// Make the request directly to capture raw response
 	fullURL, err := c.BaseURL.Parse(path.Join(c.BaseURL.Path, endpoint))
 	if err != nil {
 		return nil, err
@@ -305,15 +311,8 @@ func (c *LlamaClient) Chat(req *ChatRequestBody) (*ChatResponse, error) {
 		return nil, fmt.Errorf("LlamaIndex: API request failed with status: %s, body: %s", resp.Status, string(respBody))
 	}
 
-	// Parse the streaming response format
-	// Format: 0:"text" for content, 8:[...] for sources
 	response := &ChatResponse{}
-
 	bodyStr := string(respBody)
-
-	// Debug: log the full raw response from LlamaIndex
-	c.App.Logger().Info("LlamaIndex Chat raw response", "body", bodyStr)
-
 	lines := strings.Split(bodyStr, "\n")
 
 	var textParts []string
@@ -326,9 +325,7 @@ func (c *LlamaClient) Chat(req *ChatRequestBody) (*ChatResponse, error) {
 			continue
 		}
 
-		// Check for text content (0:"...")
 		if matches := textRegex.FindStringSubmatch(line); len(matches) > 1 {
-			// Unescape the JSON string
 			var unescaped string
 			if err := json.Unmarshal([]byte(`"`+matches[1]+`"`), &unescaped); err == nil {
 				textParts = append(textParts, unescaped)
@@ -337,16 +334,15 @@ func (c *LlamaClient) Chat(req *ChatRequestBody) (*ChatResponse, error) {
 			}
 		}
 
-		// Check for sources data (8:[...])
 		if matches := sourcesRegex.FindStringSubmatch(line); len(matches) > 1 {
 			var sourcesData []struct {
 				Type string `json:"type"`
 				Data struct {
 					Nodes []struct {
-						ID       string                 `json:"id"`
-						Text     string                 `json:"text"`
-						Score    float64                `json:"score"`
-						Metadata map[string]interface{} `json:"metadata"`
+						ID       string        `json:"id"`
+						Text     string        `json:"text"`
+						Score    float64       `json:"score"`
+						Metadata *NodeMetadata `json:"metadata"`
 					} `json:"nodes"`
 				} `json:"data"`
 			}
@@ -369,10 +365,6 @@ func (c *LlamaClient) Chat(req *ChatRequestBody) (*ChatResponse, error) {
 	}
 
 	response.Response = strings.Join(textParts, "")
-
-	// Debug: log the parsed response
-	parsedJSON, _ := json.MarshalIndent(response, "", "  ")
-	c.App.Logger().Info("LlamaIndex Chat parsed response", "parsed", string(parsedJSON))
 
 	return response, nil
 }
@@ -422,24 +414,21 @@ func (c *LlamaClient) Retrieve(req *RetrieveRequestBody) (*RetrieveResponse, err
 		return nil, fmt.Errorf("LlamaIndex: API request failed with status: %s, body: %s", resp.Status, string(respBody))
 	}
 
-	// Log the full raw response from LlamaIndex
-	c.App.Logger().Info("LlamaIndex Retrieve raw response", "body", string(respBody))
-
-	var response RetrieveResponse
-	if err := json.Unmarshal(respBody, &response); err != nil {
+	var raw retrieveRawResponse
+	if err := json.Unmarshal(respBody, &raw); err != nil {
 		return nil, fmt.Errorf("failed to parse retrieve response: %w", err)
 	}
 
-	// Log parsed nodes with their metadata
-	for i, node := range response.Nodes {
-		metaJSON, _ := json.MarshalIndent(node.Node.Metadata, "", "  ")
-		c.App.Logger().Info("LlamaIndex Retrieve node",
-			"index", i,
-			"node_id", node.Node.ID_,
-			"score", node.Score,
-			"text_length", len(node.Node.Text),
-			"metadata", string(metaJSON),
-		)
+	response := RetrieveResponse{
+		Nodes: make([]NodeInfo, len(raw.Nodes)),
+	}
+	for i, n := range raw.Nodes {
+		response.Nodes[i] = NodeInfo{
+			ID:       n.Node.ID_,
+			Text:     n.Node.Text,
+			Metadata: n.Node.Metadata,
+			Score:    n.Score,
+		}
 	}
 
 	return &response, nil
