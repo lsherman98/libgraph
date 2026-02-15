@@ -58,7 +58,7 @@ interface LocalMessage extends ChatMessage {
 
 function ChatPage() {
   const [activeChatId, setActiveChatId] = useState<string>();
-  const [localMessages, setLocalMessages] = useState<LocalMessage[]>([]);
+  const [pendingMessages, setPendingMessages] = useState<LocalMessage[]>([]);
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"chat" | "search">("chat");
   const [filters, setFilters] = useState<ChatFilters>({});
@@ -94,18 +94,18 @@ function ChatPage() {
 
   const { data: dbMessages, isLoading: isLoadingMessages } = useMessages(activeChatId);
 
-  // Convert DB messages to local format when they load
-  useEffect(() => {
-    if (dbMessages && activeChatId) {
-      const converted: LocalMessage[] = (dbMessages as MessagesResponse<ChatSource[]>[]).map((m) => ({
+  const displayMessages: LocalMessage[] = useMemo(() => {
+    if (activeChatId && dbMessages) {
+      return (dbMessages as MessagesResponse<ChatSource[]>[]).map((m) => ({
         id: m.id,
         role: m.role as "user" | "assistant",
         content: m.content || "",
         sources: m.sources || undefined,
+        isLoading: (m as any).isLoading,
       }));
-      setLocalMessages(converted);
     }
-  }, [dbMessages, activeChatId]);
+    return pendingMessages;
+  }, [activeChatId, dbMessages, pendingMessages]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -113,9 +113,14 @@ function ChatPage() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [localMessages]);
+  }, [displayMessages]);
 
-  // Auto-resize textarea
+  useEffect(() => {
+    if (activeChatId) {
+      setPendingMessages([]);
+    }
+  }, [activeChatId]);
+
   const adjustTextareaHeight = useCallback(() => {
     const textarea = textareaRef.current;
     if (textarea) {
@@ -133,30 +138,48 @@ function ChatPage() {
     filters,
     llmParams,
     retrievalParams,
-    localMessages,
     activeChatId,
     setActiveChatId,
-    setLocalMessages,
     setInput,
   });
+
+  const handleMutate = (message: string) => {
+    if (!activeChatId) {
+      setPendingMessages((prev) => [
+        ...prev,
+        {
+          id: "pending-user-" + Date.now(),
+          role: "user" as const,
+          content: message,
+        },
+        {
+          id: "pending-loading-" + Date.now(),
+          role: "assistant" as const,
+          content: "",
+          isLoading: true,
+        },
+      ]);
+    }
+    chatMutation.mutate(message);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || chatMutation.isPending) return;
-    chatMutation.mutate(input.trim());
+    handleMutate(input.trim());
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (input.trim() && !chatMutation.isPending) {
-        chatMutation.mutate(input.trim());
+        handleMutate(input.trim());
       }
     }
   };
 
   const handleFilterChange = (key: keyof ChatFilters, value: string) => {
-    if (key === "condition") return; // condition is handled separately
+    if (key === "condition") return;
     if (value === "all") {
       setFilters((prev) => {
         const newFilters = { ...prev };
@@ -176,7 +199,7 @@ function ChatPage() {
   };
 
   const hasActiveFilters = Object.values(filters).some((val) => {
-    if (typeof val === "string") return false; // skip condition
+    if (typeof val === "string") return false;
     return Array.isArray(val) && val.length > 0;
   });
   const activeFilterCount = Object.entries(filters).reduce((count, [key, val]) => {
@@ -191,24 +214,27 @@ function ChatPage() {
 
   const handleNewChat = () => {
     setActiveChatId(undefined);
-    setLocalMessages([]);
+    setPendingMessages([]);
     setInput("");
   };
 
   const handleSelectChat = (chatId: string) => {
     setActiveChatId(chatId);
-    setLocalMessages([]);
+    setPendingMessages([]);
     setInput("");
   };
 
   return (
     <div className="flex h-full w-full">
-      {/* Chat History Sidebar */}
       {isSidebarOpen && (
-        <ChatHistorySidebar activeChatId={activeChatId} onSelectChat={handleSelectChat} onNewChat={handleNewChat} />
+        <ChatHistorySidebar
+          activeChatId={activeChatId}
+          onSelectChat={handleSelectChat}
+          onNewChat={handleNewChat}
+          mode={mode}
+        />
       )}
 
-      {/* Filter Panel */}
       {isFiltersPanelOpen && (
         <div className="w-64 shrink-0 border-r border-border bg-muted/30 flex flex-col">
           <div className="p-4 flex items-center justify-between">
@@ -228,7 +254,6 @@ function ChatPage() {
           <Separator />
           <ScrollArea className="flex-1">
             <div className="p-4 space-y-5">
-              {/* Filter Condition Toggle */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Match Mode</label>
                 <div className="flex items-center gap-1 rounded-lg border border-border bg-background p-1">
@@ -264,7 +289,6 @@ function ChatPage() {
                 </p>
               </div>
 
-              {/* Collection Filter */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Collection</label>
                 <Select
@@ -306,7 +330,6 @@ function ChatPage() {
                 )}
               </div>
 
-              {/* Subject Filter */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Subject</label>
                 <Select
@@ -327,7 +350,6 @@ function ChatPage() {
                 </Select>
               </div>
 
-              {/* Publication Filter */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Publication
@@ -350,7 +372,6 @@ function ChatPage() {
                 </Select>
               </div>
 
-              {/* Topic Filter */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Topic</label>
                 <Select
@@ -371,7 +392,6 @@ function ChatPage() {
                 </Select>
               </div>
 
-              {/* Tag Filter */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Tag</label>
                 <Select value={filters.tags?.[0] || "all"} onValueChange={(value) => handleFilterChange("tags", value)}>
@@ -389,7 +409,6 @@ function ChatPage() {
                 </Select>
               </div>
 
-              {/* Type Filter */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</label>
                 <Select
@@ -410,7 +429,6 @@ function ChatPage() {
                 </Select>
               </div>
 
-              {/* Document Filter */}
               <div className="space-y-1.5">
                 <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Document</label>
                 <Select
@@ -451,7 +469,6 @@ function ChatPage() {
         </div>
       )}
 
-      {/* Settings Panel */}
       {isSettingsPanelOpen && (
         <div className="w-72 shrink-0 border-r border-border bg-muted/30 flex flex-col">
           <div className="p-4 flex items-center justify-between">
@@ -466,14 +483,12 @@ function ChatPage() {
           <Separator />
           <ScrollArea className="flex-1">
             <div className="p-4 space-y-6">
-              {/* LLM Parameters — only shown in chat mode */}
               {mode === "chat" && (
                 <div className="space-y-4">
                   <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     LLM Parameters
                   </h4>
 
-                  {/* Model */}
                   <div className="space-y-1.5">
                     <Label className="text-xs">Model</Label>
                     <Select
@@ -492,7 +507,6 @@ function ChatPage() {
                     </Select>
                   </div>
 
-                  {/* Temperature */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <Label className="text-xs">Temperature</Label>
@@ -510,7 +524,6 @@ function ChatPage() {
                     />
                   </div>
 
-                  {/* System Prompt */}
                   <div className="space-y-1.5">
                     <Label className="text-xs">System Prompt</Label>
                     <Textarea
@@ -522,7 +535,6 @@ function ChatPage() {
                     />
                   </div>
 
-                  {/* Use Citation */}
                   <div className="flex items-center justify-between">
                     <Label className="text-xs">Use Citations</Label>
                     <Switch
@@ -531,7 +543,6 @@ function ChatPage() {
                     />
                   </div>
 
-                  {/* Chain of Thought */}
                   <div className="flex items-center justify-between">
                     <Label className="text-xs">Chain of Thought</Label>
                     <Switch
@@ -544,13 +555,11 @@ function ChatPage() {
 
               {mode === "chat" && <Separator />}
 
-              {/* Retrieval Parameters */}
               <div className="space-y-4">
                 <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Retrieval Parameters
                 </h4>
 
-                {/* Retrieval Mode */}
                 <div className="space-y-1.5">
                   <Label className="text-xs">Retrieval Mode</Label>
                   <Select
@@ -569,7 +578,6 @@ function ChatPage() {
                   </Select>
                 </div>
 
-                {/* Dense Similarity Top K */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs">Dense Similarity Top K</Label>
@@ -587,7 +595,6 @@ function ChatPage() {
                   />
                 </div>
 
-                {/* Dense Similarity Cutoff */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs">Dense Similarity Cutoff</Label>
@@ -605,7 +612,6 @@ function ChatPage() {
                   />
                 </div>
 
-                {/* Sparse Similarity Top K */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs">Sparse Similarity Top K</Label>
@@ -623,7 +629,6 @@ function ChatPage() {
                   />
                 </div>
 
-                {/* Alpha (hybrid search balance) */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs">Alpha (hybrid balance)</Label>
@@ -641,7 +646,6 @@ function ChatPage() {
                   />
                 </div>
 
-                {/* Files Top K */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs">Files Top K</Label>
@@ -659,7 +663,6 @@ function ChatPage() {
                   />
                 </div>
 
-                {/* Enable Reranking */}
                 <div className="flex items-center justify-between">
                   <Label className="text-xs">Enable Reranking</Label>
                   <Switch
@@ -668,7 +671,6 @@ function ChatPage() {
                   />
                 </div>
 
-                {/* Rerank Top N */}
                 {retrievalParams.enable_reranking && (
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
@@ -688,7 +690,6 @@ function ChatPage() {
                   </div>
                 )}
 
-                {/* Retrieve Page Figure Nodes */}
                 <div className="flex items-center justify-between">
                   <Label className="text-xs">Page Figure Nodes</Label>
                   <Switch
@@ -697,7 +698,6 @@ function ChatPage() {
                   />
                 </div>
 
-                {/* Retrieve Page Screenshot Nodes */}
                 <div className="flex items-center justify-between">
                   <Label className="text-xs">Page Screenshot Nodes</Label>
                   <Switch
@@ -711,9 +711,7 @@ function ChatPage() {
         </div>
       )}
 
-      {/* Main Chat Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Chat Header Bar */}
         <div className="h-12 shrink-0 border-b border-border flex items-center justify-between px-4">
           <div className="flex items-center gap-2">
             <TooltipProvider>
@@ -776,7 +774,15 @@ function ChatPage() {
               <Library className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Library</span>
               <Separator orientation="vertical" className="h-4 mx-1" />
-              <Tabs value={mode} onValueChange={(v) => setMode(v as "chat" | "search")} className="h-8">
+              <Tabs
+                value={mode}
+                onValueChange={(v) => {
+                  setMode(v as "chat" | "search");
+                  setActiveChatId(undefined);
+                  setPendingMessages([]);
+                }}
+                className="h-8"
+              >
                 <TabsList className="h-8 bg-transparent p-0 gap-1">
                   <TabsTrigger
                     value="chat"
@@ -796,7 +802,7 @@ function ChatPage() {
               </Tabs>
             </div>
           </div>
-          {localMessages.length > 0 && (
+          {displayMessages.length > 0 && (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -811,7 +817,6 @@ function ChatPage() {
           )}
         </div>
 
-        {/* Messages Area */}
         <div className="flex-1 overflow-y-auto">
           {isLoadingMessages && activeChatId ? (
             <div className="max-w-3xl mx-auto py-6 px-4">
@@ -827,7 +832,7 @@ function ChatPage() {
                 ))}
               </div>
             </div>
-          ) : localMessages.length === 0 ? (
+          ) : displayMessages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full px-4 text-center">
               <div className="max-w-lg w-full space-y-6">
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-linear-to-br from-primary/10 to-primary/5 border border-primary/10">
@@ -879,7 +884,7 @@ function ChatPage() {
           ) : (
             <div className="max-w-3xl mx-auto py-6 px-4">
               <div className="space-y-6">
-                {localMessages.map((message) => (
+                {displayMessages.map((message) => (
                   <MessageBubble key={message.id} message={message} onSourceClick={handleSourceClick} />
                 ))}
                 <div ref={messagesEndRef} />
@@ -888,7 +893,6 @@ function ChatPage() {
           )}
         </div>
 
-        {/* Input Area */}
         <div className="shrink-0 border-t border-border bg-background">
           <div className="max-w-3xl mx-auto px-4 py-4">
             <form onSubmit={handleSubmit} className="relative">
@@ -926,13 +930,11 @@ function ChatPage() {
         </div>
       </div>
 
-      {/* Source Preview Dialog */}
       <SourcePreviewDialog source={previewSource} open={isPreviewOpen} onOpenChange={setIsPreviewOpen} />
     </div>
   );
 }
 
-/** Build a map from node_id → numbered citation index (1-based), deduped in order of appearance in the text */
 function buildCitationMap(content: string, sources: ChatSource[]): Map<string, number> {
   const map = new Map<string, number>();
   const regex = /\[citation:([a-f0-9-]+)\]/g;
@@ -944,16 +946,16 @@ function buildCitationMap(content: string, sources: ChatSource[]): Map<string, n
       map.set(nodeId, idx++);
     }
   }
-  // Also assign numbers to any sources not cited inline (appended at the end)
+
   for (const s of sources) {
     if (s.node_id && !map.has(s.node_id)) {
       map.set(s.node_id, idx++);
     }
   }
+
   return map;
 }
 
-/** Render message content with inline citation markers replaced by clickable superscript badges */
 function CitationContent({
   content,
   sources,
@@ -1094,7 +1096,6 @@ function MessageBubble({
       <div className="flex-1 min-w-0 space-y-3 pt-1">
         <div className="text-sm font-medium text-muted-foreground">{isUser ? "You" : "Assistant"}</div>
 
-        {/* Message content — with or without inline citations */}
         <div className="text-sm leading-relaxed">
           {hasCitations && message.sources ? (
             <CitationContent
@@ -1108,7 +1109,6 @@ function MessageBubble({
           )}
         </div>
 
-        {/* Source cards — numbered to match inline citations */}
         {!isUser && message.sources && message.sources.length > 0 && (
           <div className="space-y-2 pt-2">
             <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Sources</p>

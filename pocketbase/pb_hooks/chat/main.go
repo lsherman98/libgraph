@@ -1,9 +1,11 @@
 package chat
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/lsherman98/libgraph/pocketbase/llama"
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
@@ -21,6 +23,12 @@ func Init(app *pocketbase.PocketBase) error {
 				return e.BadRequestError("message is required", nil)
 			}
 
+			userID := e.Auth.Id
+
+			if body.Mode == "" {
+				body.Mode = "chat"
+			}
+
 			llamaClient, err := llama.New(app)
 			if err != nil {
 				return e.InternalServerError("failed to initialize client", err)
@@ -31,23 +39,41 @@ func Init(app *pocketbase.PocketBase) error {
 				searchFilters = buildSearchFilters(app, body.Filters)
 			}
 
-			if body.Mode == "search" {
-				retrievalParams := buildRetrievalParams(body.RetrievalParameters, searchFilters)
-				retrieveReq := retrieveRequestFromParams(body.Message, retrievalParams)
-
-				resp, err := llamaClient.Retrieve(retrieveReq)
-				if err != nil {
-					app.Logger().Error("retrieve request failed:", "error", err)
-					return e.InternalServerError("search request failed", err)
+			chatID := body.ChatID
+			if chatID == "" {
+				title := body.Message
+				if len(title) > 80 {
+					title = title[:80] + "…"
 				}
 
-				return e.JSON(http.StatusOK, ChatResponse{
-					Sources: sourcesFromNodes(resp.Nodes),
-				})
+				if body.Mode == "search" {
+					title = "Search: " + title
+				}
+
+				chatsCollection, err := app.FindCollectionByNameOrId("chats")
+				if err != nil {
+					return e.InternalServerError("failed to find chats collection", err)
+				}
+
+				chatRecord := core.NewRecord(chatsCollection)
+				chatRecord.Set("title", title)
+				chatRecord.Set("user", userID)
+				chatRecord.Set("type", body.Mode)
+				if err := app.Save(chatRecord); err != nil {
+					return e.InternalServerError("failed to create chat", err)
+				}
+
+				chatID = chatRecord.Id
 			}
 
-			messages := make([]llama.Message, 0, len(body.History)+1)
-			for _, msg := range body.History {
+			history, err := loadChatHistory(app, chatID)
+			if err != nil {
+				app.Logger().Error("failed to load chat history", "error", err)
+				history = nil
+			}
+
+			messages := make([]llama.Message, 0, len(history)+1)
+			for _, msg := range history {
 				messages = append(messages, llama.Message{
 					ClassName: "base_component",
 					Role:      msg.Role,
@@ -60,6 +86,36 @@ func Init(app *pocketbase.PocketBase) error {
 				Role:      "user",
 				Content:   body.Message,
 			})
+
+			userMsgID, err := saveMessage(app, chatID, userID, "user", body.Message, nil)
+			if err != nil {
+				return e.InternalServerError("failed to save user message", err)
+			}
+
+			if body.Mode == "search" {
+				retrievalParams := buildRetrievalParams(body.RetrievalParameters, searchFilters)
+				retrieveReq := retrieveRequestFromParams(body.Message, retrievalParams)
+
+				resp, err := llamaClient.Retrieve(retrieveReq)
+				if err != nil {
+					app.Logger().Error("retrieve request failed:", "error", err)
+					return e.InternalServerError("search request failed", err)
+				}
+
+				sources := sourcesFromNodes(resp.Nodes)
+
+				assistantMsgID, err := saveMessage(app, chatID, userID, "assistant", "", sources)
+				if err != nil {
+					return e.InternalServerError("failed to save assistant message", err)
+				}
+
+				return e.JSON(http.StatusOK, ChatResponse{
+					ChatID:             chatID,
+					Sources:            sources,
+					UserMessageID:      userMsgID,
+					AssistantMessageID: assistantMsgID,
+				})
+			}
 
 			modelName := "GPT_4O_MINI"
 			temperature := 0.1
@@ -108,8 +164,19 @@ func Init(app *pocketbase.PocketBase) error {
 				return e.InternalServerError("chat request failed", err)
 			}
 
+			sources := sourcesFromNodes(resp.Nodes)
+
+			assistantMsgID, err := saveMessage(app, chatID, userID, "assistant", resp.Response, sources)
+			if err != nil {
+				return e.InternalServerError("failed to save assistant message", err)
+			}
+
 			return e.JSON(http.StatusOK, ChatResponse{
-				Sources: sourcesFromNodes(resp.Nodes),
+				ChatID:             chatID,
+				Message:            resp.Response,
+				Sources:            sources,
+				UserMessageID:      userMsgID,
+				AssistantMessageID: assistantMsgID,
 			})
 		}).Bind(apis.RequireAuth())
 
@@ -117,6 +184,56 @@ func Init(app *pocketbase.PocketBase) error {
 	})
 
 	return nil
+}
+
+func loadChatHistory(app *pocketbase.PocketBase, chatID string) ([]ChatMessage, error) {
+	records, err := app.FindRecordsByFilter(
+		"messages",
+		"chat = {:chatId}",
+		"created",
+		0,
+		0,
+		dbx.Params{"chatId": chatID},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	messages := make([]ChatMessage, 0, len(records))
+	for _, r := range records {
+		messages = append(messages, ChatMessage{
+			Role:    r.GetString("role"),
+			Content: r.GetString("content"),
+		})
+	}
+	return messages, nil
+}
+
+func saveMessage(app *pocketbase.PocketBase, chatID, userID, role, content string, sources []ChatSource) (string, error) {
+	messagesCollection, err := app.FindCollectionByNameOrId("messages")
+	if err != nil {
+		return "", err
+	}
+
+	record := core.NewRecord(messagesCollection)
+	record.Set("chat", chatID)
+	record.Set("user", userID)
+	record.Set("role", role)
+	record.Set("content", content)
+
+	if sources != nil {
+		sourcesJSON, err := json.Marshal(sources)
+		if err != nil {
+			return "", err
+		}
+		record.Set("sources", string(sourcesJSON))
+	}
+
+	if err := app.Save(record); err != nil {
+		return "", err
+	}
+
+	return record.Id, nil
 }
 
 func buildRetrievalParams(rp *RetrievalParamsInput, searchFilters *llama.SearchFilters) llama.RetrievalParameters {

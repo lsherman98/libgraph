@@ -1,6 +1,6 @@
 import { pb } from "../pocketbase"
 import { Collections, NodesTypeOptions, type Create, type EdgesResponse, type Update } from "../pocketbase-types"
-import type { ChatFilters, ChatMessage, ChatResponseData, EnrichedNodesResponse, FTSSearchResult, LLMParameters, RetrievalParameters } from "../types"
+import type { ChatFilters, ChatResponseData, EnrichedNodesResponse, FTSSearchResult, LLMParameters, RetrievalParameters } from "../types"
 
 export async function getPageUrl(id?: string) {
     if (!id) return null;
@@ -285,9 +285,10 @@ export const deleteCollection = async (id: string) => {
     return await pb.collection(Collections.Collections).delete(id);
 }
 
-export const getChats = async () => {
+export const getChats = async (type?: "chat" | "search") => {
     return await pb.collection(Collections.Chats).getFullList({
-        sort: '-updated'
+        sort: '-updated',
+        ...(type ? { filter: `type = "${type}"` } : {}),
     });
 }
 
@@ -322,8 +323,8 @@ export const createMessage = async (data: Create<Collections.Messages>) => {
 export const sendChatMessage = async (
     message: string,
     mode: "chat" | "search" = "chat",
+    chatId?: string,
     filters?: ChatFilters,
-    history?: ChatMessage[],
     llmParameters?: LLMParameters,
     retrievalParameters?: RetrievalParameters,
 ) => {
@@ -336,8 +337,8 @@ export const sendChatMessage = async (
         body: JSON.stringify({
             message,
             mode,
+            chat_id: chatId,
             filters,
-            history,
             llm_parameters: llmParameters,
             retrieval_parameters: retrievalParameters,
         }),

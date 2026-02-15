@@ -19,10 +19,11 @@ interface ChatHistorySidebarProps {
   activeChatId?: string;
   onSelectChat: (chatId: string) => void;
   onNewChat: () => void;
+  mode?: "chat" | "search";
 }
 
-export function ChatHistorySidebar({ activeChatId, onSelectChat, onNewChat }: ChatHistorySidebarProps) {
-  const { data: chats, isLoading } = useChats();
+export function ChatHistorySidebar({ activeChatId, onSelectChat, onNewChat, mode }: ChatHistorySidebarProps) {
+  const { data: chats, isLoading } = useChats(mode);
   const deleteChat = useDeleteChat();
   const updateChat = useUpdateChat();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -60,7 +61,7 @@ export function ChatHistorySidebar({ activeChatId, onSelectChat, onNewChat }: Ch
         </Button>
       </div>
       <Separator />
-      <ScrollArea className="flex-1 [&_[data-slot=scroll-area-viewport]]:!overflow-x-hidden">
+      <ScrollArea className="flex-1 **:data-[slot=scroll-area-viewport]:overflow-x-hidden!">
         <div className="p-2 space-y-4 max-w-full overflow-hidden">
           {isLoading && <div className="px-2 py-4 text-xs text-muted-foreground text-center">Loading chats...</div>}
           {!isLoading && (!chats || chats.length === 0) && (

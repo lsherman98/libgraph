@@ -226,10 +226,10 @@ export function useCollection(id: string) {
     });
 }
 
-export function useChats() {
+export function useChats(type?: "chat" | "search") {
     return useQuery({
-        queryKey: ["chats"],
-        queryFn: getChats,
+        queryKey: ["chats", type],
+        queryFn: () => getChats(type),
         placeholderData: keepPreviousData
     });
 }

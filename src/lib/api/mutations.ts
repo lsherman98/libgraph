@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createWritingProject, updateWritingProject, deleteWritingProject, createChat, updateChat, deleteChat, createMessage, updateUpload, deleteUpload, createCollection, updateCollection, deleteCollection, sendChatMessage } from "./api";
-import { getUserRecord, handleError } from "../utils";
-import { Collections, MessagesRoleOptions, type Update } from "../pocketbase-types";
-import type { ChatFilters, ChatMessage, ChatSource, LLMParameters, RetrievalParameters } from "../types";
+import { handleError } from "../utils";
+import { Collections, type Update } from "../pocketbase-types";
+import type { ChatFilters, LLMParameters, RetrievalParameters } from "../types";
 
 export function useUpload() {
     const queryClient = useQueryClient();
@@ -356,10 +356,8 @@ interface SendChatMessageOptions {
     filters: ChatFilters;
     llmParams: LLMParameters;
     retrievalParams: RetrievalParameters;
-    localMessages: ChatMessage[];
     activeChatId: string | undefined;
     setActiveChatId: (id: string) => void;
-    setLocalMessages: React.Dispatch<React.SetStateAction<Array<ChatMessage & { id: string; sources?: ChatSource[]; isLoading?: boolean }>>>;
     setInput: (value: string) => void;
 }
 
@@ -368,103 +366,63 @@ export function useSendChatMessage({
     filters,
     llmParams,
     retrievalParams,
-    localMessages,
     activeChatId,
     setActiveChatId,
-    setLocalMessages,
     setInput,
 }: SendChatMessageOptions) {
     const queryClient = useQueryClient();
-    const createChatMutation = useCreateChat();
-    const createMessageMutation = useCreateMessage();
 
     return useMutation({
         mutationFn: async (message: string) => {
-            const history = localMessages
-                .filter((m) => !(m as any).isLoading)
-                .map((m) => ({ role: m.role, content: m.content }));
             return sendChatMessage(
                 message,
                 mode,
+                activeChatId,
                 filters,
-                history,
                 mode === "chat" ? llmParams : undefined,
                 retrievalParams,
             );
         },
-        onMutate: (message) => {
-            const userMessage = {
-                id: crypto.randomUUID(),
-                role: "user" as const,
-                content: message,
-            };
-            const loadingMessage = {
-                id: crypto.randomUUID(),
-                role: "assistant" as const,
-                content: "",
-                isLoading: true,
-            };
-            setLocalMessages((prev) => [...prev, userMessage, loadingMessage]);
+        onMutate: async (message) => {
             setInput("");
-        },
-        onSuccess: async (data, message) => {
-            let chatId = activeChatId;
-            if (!chatId) {
-                let title = message.length > 80 ? message.slice(0, 80) + "…" : message;
-                if (mode === "search") {
-                    title = `Search: ${title}`;
-                }
-                const chat = await createChatMutation.mutateAsync({
-                    title,
-                    user: getUserRecord()?.id,
-                });
-                chatId = chat.id;
-                setActiveChatId(chatId);
+
+            if (activeChatId) {
+                await queryClient.cancelQueries({ queryKey: ["messages", activeChatId] });
+                const previousMessages = queryClient.getQueryData(["messages", activeChatId]);
+                queryClient.setQueryData(["messages", activeChatId], (old: any[] | null) => [
+                    ...(old || []),
+                    {
+                        id: "optimistic-user-" + Date.now(),
+                        role: "user",
+                        content: message,
+                        created: new Date().toISOString(),
+                    },
+                    {
+                        id: "optimistic-loading-" + Date.now(),
+                        role: "assistant",
+                        content: "",
+                        isLoading: true,
+                        created: new Date().toISOString(),
+                    },
+                ]);
+
+                return { previousMessages, chatId: activeChatId };
             }
 
-            await createMessageMutation.mutateAsync({
-                chat: chatId,
-                role: MessagesRoleOptions.user,
-                content: message,
-                user: getUserRecord().id,
-            });
-
-            await createMessageMutation.mutateAsync({
-                chat: chatId,
-                role: MessagesRoleOptions.assistant,
-                content: data.message,
-                sources: data.sources || null,
-                user: getUserRecord().id,
-            });
-
-            queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
-            queryClient.invalidateQueries({ queryKey: ["chats"] });
-
-            setLocalMessages((prev) => {
-                const newMessages = prev.filter((m) => !m.isLoading);
-                return [
-                    ...newMessages,
-                    {
-                        id: crypto.randomUUID(),
-                        role: "assistant" as const,
-                        content: data.message,
-                        sources: data.sources,
-                    },
-                ];
-            });
+            return { previousMessages: null, chatId: null };
         },
-        onError: (error) => {
-            setLocalMessages((prev) => {
-                const newMessages = prev.filter((m) => !m.isLoading);
-                return [
-                    ...newMessages,
-                    {
-                        id: crypto.randomUUID(),
-                        role: "assistant" as const,
-                        content: `Sorry, an error occurred: ${error.message}`,
-                    },
-                ];
-            });
+        onSuccess: (data) => {
+            if (!activeChatId) {
+                setActiveChatId(data.chat_id);
+            }
+
+            queryClient.invalidateQueries({ queryKey: ["messages", data.chat_id] });
+            queryClient.invalidateQueries({ queryKey: ["chats"] });
+        },
+        onError: (_error, _message, context) => {
+            if (context?.chatId && context?.previousMessages) {
+                queryClient.setQueryData(["messages", context.chatId], context.previousMessages);
+            }
         },
     });
 }

@@ -3,8 +3,8 @@ package chat
 type ChatRequest struct {
 	Message             string                `json:"message"`
 	Mode                string                `json:"mode,omitempty"` // "chat" or "search"
+	ChatID              string                `json:"chat_id,omitempty"`
 	Filters             *MetadataFilters      `json:"filters,omitempty"`
-	History             []ChatMessage         `json:"history,omitempty"`
 	LLMParameters       *LLMParametersInput   `json:"llm_parameters,omitempty"`
 	RetrievalParameters *RetrievalParamsInput `json:"retrieval_parameters,omitempty"`
 }
@@ -47,7 +47,11 @@ type ChatMessage struct {
 }
 
 type ChatResponse struct {
-	Sources []ChatSource `json:"sources,omitempty"`
+	ChatID             string       `json:"chat_id"`
+	Message            string       `json:"message,omitempty"`
+	Sources            []ChatSource `json:"sources,omitempty"`
+	UserMessageID      string       `json:"user_message_id"`
+	AssistantMessageID string       `json:"assistant_message_id"`
 }
 
 type ChatSource struct {

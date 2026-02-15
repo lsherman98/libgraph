@@ -121,10 +121,15 @@ export type BookmarksRecord = {
 	user: RecordIdString
 }
 
+export enum ChatsTypeOptions {
+	"search" = "search",
+	"chat" = "chat",
+}
 export type ChatsRecord = {
 	created: IsoAutoDateString
 	id: string
 	title?: string
+	type?: ChatsTypeOptions
 	updated: IsoAutoDateString
 	user: RecordIdString
 }
