@@ -172,7 +172,6 @@ export function usePageSettings(uploadId: string | undefined) {
     const setPageSettings = useCallback(
         (newSettings: Partial<PageSettings>) => {
             setPageSettingsState((prev) => {
-                // Bail out if nothing actually changed to avoid unnecessary re-renders
                 const hasChanges = Object.entries(newSettings).some(
                     ([key, value]) => prev[key as keyof PageSettings] !== value
                 );

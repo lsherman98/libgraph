@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { getPeople, getPublications, getFirstPage, getPageByNumber, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection, fullTextSearch } from "./api";
+import type { NodesTypeOptions } from "../pocketbase-types";
 
 export function usePeople() {
     return useQuery({
@@ -41,39 +42,39 @@ export function useUploads() {
     });
 }
 
-export function useUploadById(id: string | null) {
+export function useUploadById(id: string) {
     return useQuery({
         queryKey: ["upload", id],
-        queryFn: () => id ? getUpload(id) : null,
+        queryFn: () => getUpload(id),
         enabled: !!id,
         placeholderData: keepPreviousData
     });
 }
 
-export function useFirstPage(uploadId: string | null) {
+export function useFirstPage(uploadId: string) {
     return useQuery({
         queryKey: ["firstPage", uploadId],
-        queryFn: () => uploadId ? getFirstPage(uploadId) : null,
+        queryFn: () => getFirstPage(uploadId),
         enabled: !!uploadId,
         placeholderData: keepPreviousData
     });
 }
 
-export function usePageByNumber(uploadId: string | null, pageNumber: number | null) {
+export function usePageByNumber(uploadId: string, pageNumber: number) {
     return useQuery({
         queryKey: ["pageByNumber", uploadId, pageNumber],
-        queryFn: () => (uploadId && pageNumber != null) ? getPageByNumber(uploadId, pageNumber) : null,
+        queryFn: () => getPageByNumber(uploadId, pageNumber),
         enabled: !!uploadId && pageNumber != null,
         placeholderData: keepPreviousData
     });
 }
 
-export function usePageMarkdown(pageId: string | null) {
+export function usePageMarkdown(pageId?: string) {
     return useQuery({
         queryKey: ["pageMarkdown", pageId],
         queryFn: async () => {
-            if (!pageId) return null;
             const url = await getPageUrl(pageId);
+            if (!url) return null;
             const response = await fetch(url);
             return await response.text();
         },
@@ -82,77 +83,76 @@ export function usePageMarkdown(pageId: string | null) {
     });
 }
 
-export function usePages(uploadId: string | null, page: number = 1, perPage: number = 20) {
+export function usePages(uploadId?: string, page: number = 1, perPage: number = 20) {
     return useQuery({
         queryKey: ["pages", uploadId, page, perPage],
-        queryFn: () => uploadId ? getPages(uploadId, page, perPage) : null,
+        queryFn: () => getPages(uploadId, page, perPage),
         enabled: !!uploadId,
         placeholderData: keepPreviousData
     });
 }
 
-export function useInfinitePages(uploadId: string | null, perPage: number = 5, initialPage: number = 1) {
+export function useInfinitePages(uploadId?: string, perPage: number = 5, initialPage: number = 1) {
     return useInfiniteQuery({
         queryKey: ["pages-infinite", uploadId, perPage, initialPage],
-        queryFn: ({ pageParam }) => getPages(uploadId!, pageParam as number, perPage),
+        queryFn: ({ pageParam }) => getPages(uploadId, pageParam as number, perPage),
         initialPageParam: initialPage,
-        getNextPageParam: (lastPage) => lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
+        getNextPageParam: (lastPage) => lastPage && lastPage.page != null && lastPage.totalPages != null && lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
         enabled: !!uploadId
     });
 }
 
 // Highlights hooks
-export function useHighlights(uploadId: string | null) {
+export function useHighlights(uploadId?: string) {
     return useQuery({
         queryKey: ["highlights", uploadId],
-        queryFn: () => uploadId ? getHighlights(uploadId) : [],
+        queryFn: () => getHighlights(uploadId),
         enabled: !!uploadId,
         placeholderData: keepPreviousData
     });
 }
 
-export function usePageHighlights(pageId: string | null) {
+export function usePageHighlights(pageId: string) {
     return useQuery({
         queryKey: ["highlights", "page", pageId],
-        queryFn: () => pageId ? getHighlightsForPage(pageId) : [],
+        queryFn: () => getHighlightsForPage(pageId),
         enabled: !!pageId,
         placeholderData: keepPreviousData
     });
 }
 
 // Bookmarks hooks
-export function useBookmarks(uploadId: string | null) {
+export function useBookmarks(uploadId?: string) {
     return useQuery({
         queryKey: ["bookmarks", uploadId],
-        queryFn: () => uploadId ? getBookmarks(uploadId) : [],
+        queryFn: () => getBookmarks(uploadId),
         enabled: !!uploadId,
         placeholderData: keepPreviousData
     });
 }
 
 // Notes hooks
-export function useNotes(uploadId: string | null) {
+export function useNotes(uploadId?: string) {
     return useQuery({
         queryKey: ["notes", uploadId],
-        queryFn: () => uploadId ? getNotes(uploadId) : [],
+        queryFn: () => getNotes(uploadId),
         enabled: !!uploadId,
         placeholderData: keepPreviousData
     });
 }
 
-// Nodes hooks
-export function useNodes(filters?: { type?: string; userId?: string }) {
+export function useNodes(type?: NodesTypeOptions) {
     return useQuery({
-        queryKey: ["nodes", filters],
-        queryFn: () => getNodes(filters),
+        queryKey: ["nodes", type],
+        queryFn: () => getNodes(type),
         placeholderData: keepPreviousData
     });
 }
 
-export function useNode(id: string | null) {
+export function useNode(id: string) {
     return useQuery({
         queryKey: ["node", id],
-        queryFn: () => id ? getNodeById(id) : null,
+        queryFn: () => getNodeById(id),
         enabled: !!id,
         placeholderData: keepPreviousData
     });
@@ -167,16 +167,15 @@ export function useEdges(filters?: { sourceId?: string; targetId?: string; type?
     });
 }
 
-export function useEdge(id: string | null) {
+export function useEdge(id: string) {
     return useQuery({
         queryKey: ["edge", id],
-        queryFn: () => id ? getEdgeById(id) : null,
+        queryFn: () => getEdgeById(id),
         enabled: !!id,
         placeholderData: keepPreviousData
     });
 }
 
-// Graph data hook - returns all nodes and edges for visualization
 export function useGraphData() {
     return useQuery({
         queryKey: ["graph"],
@@ -185,7 +184,6 @@ export function useGraphData() {
     });
 }
 
-// Writing Projects hooks
 export function useWritingProjects() {
     return useQuery({
         queryKey: ["writingProjects"],
@@ -194,16 +192,15 @@ export function useWritingProjects() {
     });
 }
 
-export function useWritingProject(id: string | null) {
+export function useWritingProject(id?: string) {
     return useQuery({
         queryKey: ["writingProject", id],
-        queryFn: () => id ? getWritingProject(id) : null,
+        queryFn: () => getWritingProject(id),
         enabled: !!id,
         placeholderData: keepPreviousData
     });
 }
 
-// Workspace materials hook - returns all uploads, highlights, bookmarks, notes for the writer workspace
 export function useWorkspaceMaterials() {
     return useQuery({
         queryKey: ["workspaceMaterials"],
@@ -212,7 +209,6 @@ export function useWorkspaceMaterials() {
     });
 }
 
-// Collections hooks
 export function useCollections() {
     return useQuery({
         queryKey: ["collections"],
@@ -221,16 +217,15 @@ export function useCollections() {
     });
 }
 
-export function useCollection(id: string | null) {
+export function useCollection(id: string) {
     return useQuery({
         queryKey: ["collection", id],
-        queryFn: () => id ? getCollection(id) : null,
+        queryFn: () => getCollection(id),
         enabled: !!id,
         placeholderData: keepPreviousData
     });
 }
 
-// Chat hooks
 export function useChats() {
     return useQuery({
         queryKey: ["chats"],
@@ -239,28 +234,28 @@ export function useChats() {
     });
 }
 
-export function useChat(id: string | null) {
+export function useChat(id: string) {
     return useQuery({
         queryKey: ["chat", id],
-        queryFn: () => id ? getChat(id) : null,
+        queryFn: () => getChat(id),
         enabled: !!id,
         placeholderData: keepPreviousData
     });
 }
 
-export function useMessages(chatId: string | null) {
+export function useMessages(chatId: string) {
     return useQuery({
         queryKey: ["messages", chatId],
-        queryFn: () => chatId ? getMessages(chatId) : [],
+        queryFn: () => getMessages(chatId),
         enabled: !!chatId,
         placeholderData: keepPreviousData
     });
 }
 
-export function useFullTextSearch(uploadId: string | null, query: string) {
+export function useFullTextSearch(uploadId: string, query: string) {
     return useQuery({
         queryKey: ["fts", uploadId, query],
-        queryFn: () => fullTextSearch(uploadId!, query),
+        queryFn: () => fullTextSearch(uploadId, query),
         enabled: !!uploadId && query.trim().length > 0,
         placeholderData: keepPreviousData,
     });

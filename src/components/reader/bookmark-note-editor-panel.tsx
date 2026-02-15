@@ -4,21 +4,31 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, Trash2, Bookmark, StickyNote } from "lucide-react";
 import { useTags } from "@/lib/api/queries";
-import { useCreateTag, useUpdateBookmark, useDeleteBookmark, useUpdateNote, useDeleteNote } from "@/lib/api/mutations";
+import {
+  useCreateTag,
+  useCreateBookmark,
+  useUpdateBookmark,
+  useDeleteBookmark,
+  useCreateNote,
+  useUpdateNote,
+  useDeleteNote,
+} from "@/lib/api/mutations";
 import { CreatableCombobox } from "@/components/creatable-combobox";
 import { useReaderStore } from "@/lib/stores/reader-store";
 import { AddToProjectButton } from "./add-to-project-button";
+import { getUserRecord } from "@/lib/utils";
 
 export function BookmarkEditorPanel() {
-  const pendingBookmark = useReaderStore((state) => state.pendingBookmark);
-  const editingBookmark = useReaderStore((state) => state.editingBookmark);
-  const setPendingBookmark = useReaderStore((state) => state.setPendingBookmark);
-  const setEditingBookmark = useReaderStore((state) => state.setEditingBookmark);
-  const createBookmarkFn = useReaderStore((state) => state.createBookmarkFn);
+  const editorState = useReaderStore((state) => state.editorState);
+  const setEditorState = useReaderStore((state) => state.setEditorState);
+  const currentUploadId = useReaderStore((state) => state.currentUploadId);
 
-  // Use mutations directly for updates/deletes to avoid dependency on reader-pane being mounted
+  const createBookmarkMutation = useCreateBookmark();
   const updateBookmarkMutation = useUpdateBookmark();
   const deleteBookmarkMutation = useDeleteBookmark();
+
+  const pendingBookmark = editorState?.mode === "pending-bookmark" ? editorState.data : null;
+  const editingBookmark = editorState?.mode === "editing-bookmark" ? editorState.data : null;
 
   const isEditing = !!editingBookmark;
   const bookmark = editingBookmark || pendingBookmark;
@@ -41,13 +51,11 @@ export function BookmarkEditorPanel() {
   }, [editingBookmark, pendingBookmark]);
 
   const handleClose = () => {
-    setPendingBookmark(null);
-    setEditingBookmark(null);
+    setEditorState(null);
   };
 
   const handleSave = () => {
     if (isEditing && editingBookmark) {
-      // Use mutation directly for editing
       updateBookmarkMutation.mutate({
         id: editingBookmark.id,
         data: {
@@ -55,12 +63,15 @@ export function BookmarkEditorPanel() {
           tags: selectedTags.length > 0 ? selectedTags : undefined,
         },
       });
-    } else if (pendingBookmark && createBookmarkFn) {
-      createBookmarkFn({
+    } else if (pendingBookmark && currentUploadId) {
+      createBookmarkMutation.mutate({
+        upload: currentUploadId,
+        page: pendingBookmark.pageId,
+        page_number: pendingBookmark.pageNumber,
         block_id: pendingBookmark.blockId,
         comment: comment || "",
         tags: selectedTags.length > 0 ? selectedTags : undefined,
-        preview_text: pendingBookmark.previewText,
+        user: getUserRecord().id,
       });
     }
     handleClose();
@@ -79,7 +90,7 @@ export function BookmarkEditorPanel() {
 
   const handleTagCreate = (title: string) => {
     createTagMutation.mutate(
-      { title },
+      { title, user: getUserRecord().id },
       {
         onSuccess: (newTag) => {
           setSelectedTags((prev) => [...prev, newTag.id]);
@@ -175,15 +186,16 @@ export function BookmarkEditorPanel() {
 }
 
 export function NoteEditorPanel() {
-  const pendingNote = useReaderStore((state) => state.pendingNote);
-  const editingNote = useReaderStore((state) => state.editingNote);
-  const setPendingNote = useReaderStore((state) => state.setPendingNote);
-  const setEditingNote = useReaderStore((state) => state.setEditingNote);
-  const createNoteFn = useReaderStore((state) => state.createNoteFn);
+  const editorState = useReaderStore((state) => state.editorState);
+  const setEditorState = useReaderStore((state) => state.setEditorState);
+  const currentUploadId = useReaderStore((state) => state.currentUploadId);
 
-  // Use mutations directly for updates/deletes to avoid dependency on reader-pane being mounted
+  const createNoteMutation = useCreateNote();
   const updateNoteMutation = useUpdateNote();
   const deleteNoteMutation = useDeleteNote();
+
+  const pendingNote = editorState?.mode === "pending-note" ? editorState.data : null;
+  const editingNote = editorState?.mode === "editing-note" ? editorState.data : null;
 
   const isEditing = !!editingNote;
   const note = editingNote || pendingNote;
@@ -206,8 +218,7 @@ export function NoteEditorPanel() {
   }, [editingNote, pendingNote]);
 
   const handleClose = () => {
-    setPendingNote(null);
-    setEditingNote(null);
+    setEditorState(null);
   };
 
   const handleSave = () => {
@@ -221,11 +232,15 @@ export function NoteEditorPanel() {
           tags: selectedTags.length > 0 ? selectedTags : undefined,
         },
       });
-    } else if (pendingNote && createNoteFn) {
-      createNoteFn({
+    } else if (pendingNote && currentUploadId) {
+      createNoteMutation.mutate({
+        upload: currentUploadId,
+        page: pendingNote.pageId,
+        page_number: pendingNote.pageNumber,
         block_id: pendingNote.blockId,
         content: content.trim(),
         tags: selectedTags.length > 0 ? selectedTags : undefined,
+        user: getUserRecord().id,
       });
     }
     handleClose();
@@ -244,7 +259,7 @@ export function NoteEditorPanel() {
 
   const handleTagCreate = (title: string) => {
     createTagMutation.mutate(
-      { title },
+      { title, user: getUserRecord().id },
       {
         onSuccess: (newTag) => {
           setSelectedTags((prev) => [...prev, newTag.id]);

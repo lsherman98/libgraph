@@ -1,13 +1,13 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createNode, updateNode, deleteNode, createEdge, updateEdge, deleteEdge, createWritingProject, updateWritingProject, deleteWritingProject, createChat, updateChat, deleteChat, createMessage, updateUpload, deleteUpload, createCollection, updateCollection, deleteCollection } from "./api";
+import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createWritingProject, updateWritingProject, deleteWritingProject, createChat, updateChat, deleteChat, createMessage, updateUpload, deleteUpload, createCollection, updateCollection, deleteCollection } from "./api";
 import { handleError } from "../utils";
-import { Collections, type Create } from "../pocketbase-types";
+import { Collections, type Create, type Update } from "../pocketbase-types";
 
 export function useUpload() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (record: Create<Collections.Uploads>) => upload(record),
+        mutationFn: upload,
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["uploads"] });
@@ -19,7 +19,7 @@ export function useUpdateUpload() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.Uploads>> }) =>
+        mutationFn: ({ id, data }: { id: string; data: Update<Collections.Uploads> }) =>
             updateUpload(id, data),
         onError: handleError,
         onSuccess: (_, variables) => {
@@ -34,7 +34,7 @@ export function useDeleteUpload() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (id: string) => deleteUpload(id),
+        mutationFn: deleteUpload,
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["uploads"] });
@@ -48,7 +48,7 @@ export function useCreatePerson() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (record: Create<Collections.People>) => createPerson(record),
+        mutationFn: createPerson,
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["people"] });
@@ -60,7 +60,7 @@ export function useCreatePublication() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (record: Create<Collections.Publications>) => createPublication(record),
+        mutationFn: createPublication,
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["publications"] });
@@ -72,7 +72,7 @@ export function useCreateTag() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (record: Create<Collections.Tags>) => createTag(record),
+        mutationFn: createTag,
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["tags"] });
@@ -84,7 +84,7 @@ export function useCreateTopic() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (record: Create<Collections.Topics>) => createTopic(record),
+        mutationFn: createTopic,
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["topics"] });
@@ -92,20 +92,15 @@ export function useCreateTopic() {
     })
 }
 
-// Highlights mutations
 export function useCreateHighlight() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (record: Create<Collections.Highlights>) => createHighlight(record),
+        mutationFn: createHighlight,
         onMutate: async (newHighlight) => {
-            // Cancel any outgoing refetches
             await queryClient.cancelQueries({ queryKey: ["highlights", "page", newHighlight.page] });
-
-            // Snapshot the previous value
             const previousHighlights = queryClient.getQueryData(["highlights", "page", newHighlight.page]);
 
-            // Optimistically update to the new value
             queryClient.setQueryData(["highlights", "page", newHighlight.page], (old: any[]) => {
                 const optimisticHighlight = {
                     collectionId: 'highlights',
@@ -118,12 +113,10 @@ export function useCreateHighlight() {
                 return old ? [...old, optimisticHighlight] : [optimisticHighlight];
             });
 
-            // Return a context object with the snapshotted value
             return { previousHighlights };
         },
         onError: (err, newHighlight, context) => {
             handleError(err);
-            // If the mutation fails, use the context returned from onMutate to roll back
             if (context?.previousHighlights) {
                 queryClient.setQueryData(["highlights", "page", newHighlight.page], context.previousHighlights);
             }
@@ -139,7 +132,7 @@ export function useUpdateHighlight() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.Highlights>> }) =>
+        mutationFn: ({ id, data }: { id: string; data: Update<Collections.Highlights> }) =>
             updateHighlight(id, data),
         onError: handleError,
         onSuccess: () => {
@@ -152,7 +145,7 @@ export function useDeleteHighlight() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (id: string) => deleteHighlight(id),
+        mutationFn: deleteHighlight,
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["highlights"] });
@@ -160,12 +153,11 @@ export function useDeleteHighlight() {
     });
 }
 
-// Bookmarks mutations
 export function useCreateBookmark() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (record: Create<Collections.Bookmarks>) => createBookmark(record),
+        mutationFn: createBookmark,
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
@@ -177,7 +169,7 @@ export function useUpdateBookmark() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.Bookmarks>> }) =>
+        mutationFn: ({ id, data }: { id: string; data: Update<Collections.Bookmarks> }) =>
             updateBookmark(id, data),
         onError: handleError,
         onSuccess: () => {
@@ -190,7 +182,7 @@ export function useDeleteBookmark() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (id: string) => deleteBookmark(id),
+        mutationFn: deleteBookmark,
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
@@ -198,12 +190,11 @@ export function useDeleteBookmark() {
     });
 }
 
-// Notes mutations
 export function useCreateNote() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (record: Create<Collections.Notes>) => createNote(record),
+        mutationFn: createNote,
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["notes"] });
@@ -215,7 +206,7 @@ export function useUpdateNote() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.Notes>> }) =>
+        mutationFn: ({ id, data }: { id: string; data: Update<Collections.Notes> }) =>
             updateNote(id, data),
         onError: handleError,
         onSuccess: () => {
@@ -228,7 +219,7 @@ export function useDeleteNote() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (id: string) => deleteNote(id),
+        mutationFn: deleteNote,
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["notes"] });
@@ -236,95 +227,11 @@ export function useDeleteNote() {
     });
 }
 
-// Nodes mutations
-export function useCreateNode() {
-    const queryClient = useQueryClient();
-
-    return useMutation({
-        mutationFn: (record: Create<Collections.Nodes>) => createNode(record),
-        onError: handleError,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["nodes"] });
-            queryClient.invalidateQueries({ queryKey: ["graph"] });
-        },
-    });
-}
-
-export function useUpdateNode() {
-    const queryClient = useQueryClient();
-
-    return useMutation({
-        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.Nodes>> }) =>
-            updateNode(id, data),
-        onError: handleError,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["nodes"] });
-            queryClient.invalidateQueries({ queryKey: ["graph"] });
-        },
-    });
-}
-
-export function useDeleteNode() {
-    const queryClient = useQueryClient();
-
-    return useMutation({
-        mutationFn: (id: string) => deleteNode(id),
-        onError: handleError,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["nodes"] });
-            queryClient.invalidateQueries({ queryKey: ["edges"] });
-            queryClient.invalidateQueries({ queryKey: ["graph"] });
-        },
-    });
-}
-
-// Edges mutations
-export function useCreateEdge() {
-    const queryClient = useQueryClient();
-
-    return useMutation({
-        mutationFn: (record: Create<Collections.Edges>) => createEdge(record),
-        onError: handleError,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["edges"] });
-            queryClient.invalidateQueries({ queryKey: ["graph"] });
-        },
-    });
-}
-
-export function useUpdateEdge() {
-    const queryClient = useQueryClient();
-
-    return useMutation({
-        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.Edges>> }) =>
-            updateEdge(id, data),
-        onError: handleError,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["edges"] });
-            queryClient.invalidateQueries({ queryKey: ["graph"] });
-        },
-    });
-}
-
-export function useDeleteEdge() {
-    const queryClient = useQueryClient();
-
-    return useMutation({
-        mutationFn: (id: string) => deleteEdge(id),
-        onError: handleError,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["edges"] });
-            queryClient.invalidateQueries({ queryKey: ["graph"] });
-        },
-    });
-}
-
-// Writing Projects mutations
 export function useCreateWritingProject() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (record: Create<Collections.WritingProjects>) => createWritingProject(record),
+        mutationFn: createWritingProject,
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["writingProjects"] });
@@ -336,12 +243,11 @@ export function useUpdateWritingProject() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.WritingProjects>> }) =>
+        mutationFn: ({ id, data }: { id: string; data: Update<Collections.WritingProjects> }) =>
             updateWritingProject(id, data),
         onError: handleError,
-        onSuccess: (_, variables) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["writingProjects"] });
-            queryClient.invalidateQueries({ queryKey: ["writingProject", variables.id] });
         },
     });
 }
@@ -350,7 +256,7 @@ export function useDeleteWritingProject() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (id: string) => deleteWritingProject(id),
+        mutationFn: deleteWritingProject,
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["writingProjects"] });
@@ -358,12 +264,11 @@ export function useDeleteWritingProject() {
     });
 }
 
-// Collections mutations
 export function useCreateCollection() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (record: Create<Collections.Collections>) => createCollection(record),
+        mutationFn: createCollection,
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["collections"] });
@@ -375,12 +280,11 @@ export function useUpdateCollection() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.Collections>> }) =>
+        mutationFn: ({ id, data }: { id: string; data: Update<Collections.Collections> }) =>
             updateCollection(id, data),
         onError: handleError,
-        onSuccess: (_, variables) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["collections"] });
-            queryClient.invalidateQueries({ queryKey: ["collection", variables.id] });
         },
     });
 }
@@ -389,7 +293,7 @@ export function useDeleteCollection() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (id: string) => deleteCollection(id),
+        mutationFn: deleteCollection,
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["collections"] });
@@ -397,12 +301,11 @@ export function useDeleteCollection() {
     });
 }
 
-// Chat mutations
 export function useCreateChat() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (record: Create<Collections.Chats>) => createChat(record),
+        mutationFn: createChat,
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["chats"] });
@@ -414,12 +317,11 @@ export function useUpdateChat() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: ({ id, data }: { id: string; data: Partial<Create<Collections.Chats>> }) =>
+        mutationFn: ({ id, data }: { id: string; data: Update<Collections.Chats> }) =>
             updateChat(id, data),
         onError: handleError,
-        onSuccess: (_, variables) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["chats"] });
-            queryClient.invalidateQueries({ queryKey: ["chat", variables.id] });
         },
     });
 }
@@ -428,7 +330,7 @@ export function useDeleteChat() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (id: string) => deleteChat(id),
+        mutationFn: deleteChat,
         onError: handleError,
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ["chats"] });
@@ -436,12 +338,11 @@ export function useDeleteChat() {
     });
 }
 
-// Message mutations
 export function useCreateMessage() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (record: Create<Collections.Messages>) => createMessage(record),
+        mutationFn: createMessage,
         onError: handleError,
         onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: ["messages", data.chat] });

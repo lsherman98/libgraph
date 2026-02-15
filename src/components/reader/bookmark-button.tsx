@@ -35,10 +35,7 @@ export function BlockActions({
   noteTags,
   className,
 }: BlockActionsProps) {
-  const setPendingBookmark = useReaderStore((state) => state.setPendingBookmark);
-  const setEditingBookmark = useReaderStore((state) => state.setEditingBookmark);
-  const setPendingNote = useReaderStore((state) => state.setPendingNote);
-  const setEditingNote = useReaderStore((state) => state.setEditingNote);
+  const setEditorState = useReaderStore((state) => state.setEditorState);
   const { setOpenRight } = useSidebar();
 
   const openSidebar = () => {
@@ -48,22 +45,28 @@ export function BlockActions({
   const handleBookmarkClick = () => {
     if (isBookmarked && bookmarkId) {
       // Edit existing bookmark
-      setEditingBookmark({
-        id: bookmarkId,
-        blockId,
-        previewText: previewText.slice(0, 150),
-        comment: bookmarkComment,
-        tags: bookmarkTags,
-        pageId,
-        pageNumber,
+      setEditorState({
+        mode: "editing-bookmark",
+        data: {
+          id: bookmarkId,
+          blockId,
+          previewText: previewText.slice(0, 150),
+          comment: bookmarkComment,
+          tags: bookmarkTags,
+          pageId,
+          pageNumber,
+        },
       });
     } else {
       // Create new bookmark
-      setPendingBookmark({
-        blockId,
-        previewText: previewText.slice(0, 150),
-        pageId,
-        pageNumber,
+      setEditorState({
+        mode: "pending-bookmark",
+        data: {
+          blockId,
+          previewText: previewText.slice(0, 150),
+          pageId,
+          pageNumber,
+        },
       });
     }
     openSidebar();
@@ -72,22 +75,28 @@ export function BlockActions({
   const handleNoteClick = () => {
     if (hasNote && noteId) {
       // Edit existing note
-      setEditingNote({
-        id: noteId,
-        blockId,
-        previewText: previewText.slice(0, 150),
-        content: noteContent,
-        tags: noteTags,
-        pageId,
-        pageNumber,
+      setEditorState({
+        mode: "editing-note",
+        data: {
+          id: noteId,
+          blockId,
+          previewText: previewText.slice(0, 150),
+          content: noteContent,
+          tags: noteTags,
+          pageId,
+          pageNumber,
+        },
       });
     } else {
       // Create new note
-      setPendingNote({
-        blockId,
-        previewText: previewText.slice(0, 150),
-        pageId,
-        pageNumber,
+      setEditorState({
+        mode: "pending-note",
+        data: {
+          blockId,
+          previewText: previewText.slice(0, 150),
+          pageId,
+          pageNumber,
+        },
       });
     }
     openSidebar();

@@ -12,7 +12,6 @@ import type {
     NodesTypeOptions,
 } from "./pocketbase-types";
 
-// Type for the record data that can be attached to a node
 export type NodeRecordData =
     | UploadsResponse
     | HighlightsResponse
@@ -24,11 +23,9 @@ export type NodeRecordData =
     | PagesResponse
     | NotesResponse;
 
-// Typed node data stored in the JSON `data` field per node type
 export interface UploadNodeData {
     title?: string;
     type?: string;
-    status?: string;
     num_pages?: number;
 }
 
@@ -78,12 +75,10 @@ export type NodeData =
     | BookmarkNodeData
     | NoteNodeData;
 
-// Extended node response that includes the enriched record data from the backend hook
 export type EnrichedNodesResponse<Texpand = unknown> = NodesResponse<NodeData> & {
     record_data?: NodeRecordData;
 } & (Texpand extends unknown ? {} : { expand: Texpand });
 
-// Helper type to get the correct record data type based on node type
 export type NodeRecordDataByType<T extends NodesTypeOptions> = T extends "upload"
     ? UploadsResponse
     : T extends "highlight"
@@ -102,3 +97,63 @@ export type NodeRecordDataByType<T extends NodesTypeOptions> = T extends "upload
     ? PagesResponse
     : never;
 
+export interface FTSSearchResult {
+    id: string;
+    content: string;
+    upload: string;
+    page_number: string;
+    chunk_index: string;
+}
+
+export interface ChatResponseData {
+    sources?: ChatSource[];
+}
+
+export interface RetrievalParameters {
+    alpha?: number;
+    dense_similarity_cutoff?: number;
+    dense_similarity_top_k?: number;
+    enable_reranking?: boolean;
+    files_top_k?: number;
+    rerank_top_n?: number;
+    retrieval_mode?: 'chunks' | 'files';
+    retrieve_page_figure_nodes?: boolean;
+    retrieve_page_screenshot_nodes?: boolean;
+    sparse_similarity_top_k?: number;
+}
+
+export interface LLMParameters {
+    model_name?: string;
+    system_prompt?: string;
+    temperature?: number;
+    use_chain_of_thought_reasoning?: boolean;
+    use_citation?: boolean;
+}
+
+export interface ChatSource {
+    upload_id?: string;
+    external_file_id?: string;
+    node_id?: string;
+    title?: string;
+    score?: number;
+    text?: string;
+    page_number?: number;
+    start_char_idx?: number;
+    end_char_idx?: number;
+}
+
+export interface ChatFilters {
+    condition?: 'and' | 'or';
+    tags?: string[];
+    subjects?: string[];
+    publications?: string[];
+    types?: string[];
+    topics?: string[];
+    uploads?: string[];
+    collections?: string[];
+}
+
+export interface ChatMessage {
+    role: 'user' | 'assistant';
+    content: string;
+}

@@ -233,20 +233,6 @@ func deleteNodeAndEdges(app *pocketbase.PocketBase, recordId string, userId stri
 		return err
 	}
 
-	edges, err := app.FindRecordsByFilter(
-		collections.Edges,
-		"(source = {:nodeId} || target = {:nodeId}) && user = {:userId}",
-		"",
-		0,
-		0,
-		dbx.Params{"nodeId": node.Id, "userId": userId},
-	)
-	if err == nil {
-		for _, edge := range edges {
-			app.Delete(edge)
-		}
-	}
-
 	return app.Delete(node)
 }
 

@@ -109,16 +109,16 @@ export type SuperusersRecord = {
 }
 
 export type BookmarksRecord = {
-	block_id?: string
+	block_id: string
 	comment?: string
 	created: IsoAutoDateString
 	id: string
-	page?: RecordIdString
-	page_number?: number
+	page: RecordIdString
+	page_number: number
 	tags?: RecordIdString[]
 	updated: IsoAutoDateString
-	upload?: RecordIdString
-	user?: RecordIdString
+	upload: RecordIdString
+	user: RecordIdString
 }
 
 export type ChatsRecord = {
@@ -126,7 +126,7 @@ export type ChatsRecord = {
 	id: string
 	title?: string
 	updated: IsoAutoDateString
-	user?: RecordIdString
+	user: RecordIdString
 }
 
 export type CollectionsRecord = {
@@ -136,19 +136,19 @@ export type CollectionsRecord = {
 	name?: string
 	updated: IsoAutoDateString
 	uploads?: RecordIdString[]
-	user?: RecordIdString
+	user: RecordIdString
 }
 
 export type DocumentChunksRecord = {
-	chunk_index?: number
-	content?: string
+	chunk_index: number
+	content: string
 	created: IsoAutoDateString
 	id: string
-	page?: RecordIdString
-	page_number?: number
+	page: RecordIdString
+	page_number: number
 	updated: IsoAutoDateString
-	upload?: RecordIdString
-	user?: RecordIdString
+	upload: RecordIdString
+	user: RecordIdString
 }
 
 export enum EdgesTypeOptions {
@@ -165,11 +165,11 @@ export enum EdgesTypeOptions {
 export type EdgesRecord = {
 	created: IsoAutoDateString
 	id: string
-	source?: RecordIdString
-	target?: RecordIdString
-	type?: EdgesTypeOptions
+	source: RecordIdString
+	target: RecordIdString
+	type: EdgesTypeOptions
 	updated: IsoAutoDateString
-	user?: RecordIdString
+	user: RecordIdString
 }
 
 export enum HighlightsColorOptions {
@@ -180,18 +180,18 @@ export enum HighlightsColorOptions {
 	"purple" = "purple",
 }
 export type HighlightsRecord = {
-	color?: HighlightsColorOptions
+	color: HighlightsColorOptions
 	comment?: string
 	created: IsoAutoDateString
-	end_offset?: number
+	end_offset: number
 	id: string
-	page?: RecordIdString
-	start_offset?: number
+	page: RecordIdString
+	start_offset: number
 	tags?: RecordIdString[]
 	text?: string
 	updated: IsoAutoDateString
-	upload?: RecordIdString
-	user?: RecordIdString
+	upload: RecordIdString
+	user: RecordIdString
 }
 
 export enum MessagesRoleOptions {
@@ -203,9 +203,10 @@ export type MessagesRecord<Tsources = unknown> = {
 	content?: string
 	created: IsoAutoDateString
 	id: string
-	role?: MessagesRoleOptions
+	role: MessagesRoleOptions
 	sources?: null | Tsources
 	updated: IsoAutoDateString
+	user: RecordIdString
 }
 
 export enum NodesTypeOptions {
@@ -222,32 +223,33 @@ export type NodesRecord<Tdata = unknown> = {
 	data?: null | Tdata
 	id: string
 	label?: string
-	record_id?: string
-	type?: NodesTypeOptions
+	record_id: string
+	type: NodesTypeOptions
 	updated: IsoAutoDateString
-	user?: RecordIdString
+	user: RecordIdString
 }
 
 export type NotesRecord = {
-	block_id?: string
+	block_id: string
 	content?: string
 	created: IsoAutoDateString
 	id: string
-	page?: RecordIdString
-	page_number?: number
+	page: RecordIdString
+	page_number: number
 	tags?: RecordIdString[]
 	updated: IsoAutoDateString
-	upload?: RecordIdString
-	user?: RecordIdString
+	upload: RecordIdString
+	user: RecordIdString
 }
 
 export type PagesRecord = {
 	created: IsoAutoDateString
 	id: string
-	markdown?: FileNameString
-	page?: number
+	markdown: FileNameString
+	page: number
 	updated: IsoAutoDateString
-	upload?: RecordIdString
+	upload: RecordIdString
+	user: RecordIdString
 }
 
 export enum PeopleTypeOptions {
@@ -261,9 +263,9 @@ export type PeopleRecord = {
 	id: string
 	name?: string
 	source?: string
-	type?: PeopleTypeOptions
+	type: PeopleTypeOptions
 	updated: IsoAutoDateString
-	user?: RecordIdString
+	user: RecordIdString
 }
 
 export enum PublicationsTypeOptions {
@@ -279,7 +281,7 @@ export type PublicationsRecord = {
 	type?: PublicationsTypeOptions
 	updated: IsoAutoDateString
 	url?: string
-	user?: RecordIdString
+	user: RecordIdString
 }
 
 export type TagsRecord = {
@@ -287,7 +289,7 @@ export type TagsRecord = {
 	id: string
 	title?: string
 	updated: IsoAutoDateString
-	user?: RecordIdString
+	user: RecordIdString
 }
 
 export type TopicsRecord = {
@@ -295,7 +297,7 @@ export type TopicsRecord = {
 	id: string
 	title?: string
 	updated: IsoAutoDateString
-	user?: RecordIdString
+	user: RecordIdString
 }
 
 export enum UploadsTypeOptions {
@@ -315,7 +317,7 @@ export enum UploadsStatusOptions {
 }
 export type UploadsRecord = {
 	created: IsoAutoDateString
-	file?: FileNameString
+	file: FileNameString
 	id: string
 	llama_file_id?: string
 	num_pages?: number
@@ -325,10 +327,10 @@ export type UploadsRecord = {
 	tags?: RecordIdString[]
 	title?: string
 	topic?: RecordIdString[]
-	type?: UploadsTypeOptions
+	type: UploadsTypeOptions
 	updated: IsoAutoDateString
-	upload?: RecordIdString[]
-	user?: RecordIdString
+	uploads?: RecordIdString[]
+	user: RecordIdString
 }
 
 export type UsersRecord = {
@@ -362,7 +364,7 @@ export type WritingProjectsRecord = {
 	topics?: RecordIdString[]
 	updated: IsoAutoDateString
 	uploads?: RecordIdString[]
-	user?: RecordIdString
+	user: RecordIdString
 }
 
 // Response types include system fields and match responses from the PocketBase API

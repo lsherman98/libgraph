@@ -1,39 +1,13 @@
 import { type HighlightsResponse, HighlightsColorOptions } from "@/lib/pocketbase-types";
 
-/**
- * Represents a highlight range in the markdown source
- */
-export interface HighlightRange {
-    id: string;
-    startOffset: number;
-    endOffset: number;
-    color: HighlightsColorOptions;
-    note?: string;
-    tags?: string[];
-    text: string;
-    isPending?: boolean; // For temp highlights being edited in sidebar
-}
+export type HighlightInput = Pick<
+    HighlightsResponse,
+    'id' | 'start_offset' | 'end_offset' | 'color' | 'text' | 'comment' | 'tags'
+> & {
+    isPending?: boolean;
+};
 
-/**
- * Convert API highlights to HighlightRange format
- */
-export function toHighlightRanges(highlights: HighlightsResponse[]): HighlightRange[] {
-    return highlights.map((h) => ({
-        id: h.id,
-        startOffset: h.start_offset,
-        endOffset: h.end_offset,
-        color: h.color,
-        note: h.comment || undefined,
-        tags: h.tags || [],
-        text: h.text,
-    }));
-}
-
-/**
- * Get highlight color class for Tailwind
- */
 export function getHighlightBgClass(color: HighlightsColorOptions, isPending?: boolean): string {
-    // Pending highlights show as gray
     if (isPending) {
         return "highlight-pending";
     }
@@ -54,38 +28,28 @@ export function getHighlightBgClass(color: HighlightsColorOptions, isPending?: b
     }
 }
 
-/**
- * Inject highlight markers into markdown content.
- * Returns the modified markdown string with <mark> tags inserted.
- * 
- * Note: This approach works best with plain text content.
- * For complex markdown with nested formatting, consider using rehype plugins.
- */
 export function injectHighlightsIntoMarkdown(
     markdown: string,
-    highlights: HighlightRange[]
+    highlights: HighlightInput[]
 ): string {
     if (!highlights.length) return markdown;
 
-    // Sort highlights by start offset descending (so we don't shift indices)
-    const sorted = [...highlights].sort((a, b) => b.startOffset - a.startOffset);
+    const sorted = [...highlights].sort((a, b) => b.start_offset - a.start_offset);
 
     let result = markdown;
 
     for (const highlight of sorted) {
-        const { startOffset, endOffset, id, color, isPending } = highlight;
+        const { start_offset, end_offset, id, color, isPending } = highlight;
 
-        // Validate offsets
-        if (startOffset < 0 || endOffset > result.length || startOffset >= endOffset) {
-            console.warn(`Invalid highlight offsets: ${startOffset}-${endOffset} for text length ${result.length}`);
+        if (start_offset < 0 || end_offset > result.length || start_offset >= end_offset) {
+            console.warn(`Invalid highlight offsets: ${start_offset}-${end_offset} for text length ${result.length}`);
             continue;
         }
 
-        const before = result.slice(0, startOffset);
-        const highlightedText = result.slice(startOffset, endOffset);
-        const after = result.slice(endOffset);
+        const before = result.slice(0, start_offset);
+        const highlightedText = result.slice(start_offset, end_offset);
+        const after = result.slice(end_offset);
 
-        // Use grey color for temp selection or pending highlights, otherwise use the highlight color
         let colorClass: string;
         if (id === 'temp-selection' || isPending) {
             colorClass = 'highlight-pending';
@@ -98,10 +62,6 @@ export function injectHighlightsIntoMarkdown(
     return result;
 }
 
-/**
- * Find the offset of selected text within the source markdown.
- * Uses fuzzy matching to handle minor differences.
- */
 export function findTextOffset(
     markdown: string,
     selectedText: string,
@@ -109,21 +69,16 @@ export function findTextOffset(
 ): { start: number; end: number } | null {
     if (!selectedText || !markdown) return null;
 
-    // Normalize whitespace for comparison
     const normalizedSelected = selectedText.trim();
 
-    // Try exact match first
     let index = markdown.indexOf(normalizedSelected);
 
     if (index === -1) {
-        // Try with normalized whitespace
         const normalizedMarkdown = markdown.replace(/\s+/g, " ");
         const normalizedSearch = normalizedSelected.replace(/\s+/g, " ");
         index = normalizedMarkdown.indexOf(normalizedSearch);
 
         if (index !== -1) {
-            // Map back to original markdown position
-            // This is approximate - for complex cases, we'd need character mapping
             let originalIndex = 0;
             let normalizedIndex = 0;
             while (normalizedIndex < index && originalIndex < markdown.length) {
@@ -142,7 +97,6 @@ export function findTextOffset(
     }
 
     if (index === -1) {
-        // If still not found, try fuzzy search near approximate position
         if (approximatePosition !== undefined) {
             const searchWindow = 200;
             const windowStart = Math.max(0, approximatePosition - searchWindow);
@@ -164,18 +118,12 @@ export function findTextOffset(
     };
 }
 
-/**
- * Selection info from DOM
- */
 export interface SelectionInfo {
     text: string;
     position: { x: number; y: number };
     range: Range;
 }
 
-/**
- * Get selection info from the current DOM selection
- */
 export function getSelectionInfo(): SelectionInfo | null {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !selection.rangeCount) {
@@ -192,15 +140,12 @@ export function getSelectionInfo(): SelectionInfo | null {
         text,
         position: {
             x: rect.left + rect.width / 2,
-            y: rect.top - 10, // Position above the selection
+            y: rect.top - 10,
         },
         range,
     };
 }
 
-/**
- * Check if an element or its parent is a highlight
- */
 export function findHighlightElement(element: HTMLElement | null): HTMLElement | null {
     while (element) {
         if (element.tagName === "MARK" && element.dataset.highlightId) {
@@ -211,40 +156,20 @@ export function findHighlightElement(element: HTMLElement | null): HTMLElement |
     return null;
 }
 
-/**
- * Extract text content from a node for block preview
- */
 export function getBlockPreviewText(element: HTMLElement): string {
     const text = element.textContent || "";
     return text.slice(0, 150).trim();
 }
 
-// --- Large markdown chunking utilities ---
-
-/**
- * Maximum characters per chunk before we split a page into sub-pages.
- * 5 MB of markdown — only extremely large files will be chunked.
- */
 export const MAX_CHUNK_SIZE = 50_000;
 
-/**
- * A chunk of markdown content and its byte-offset range in the original source.
- */
 export interface MarkdownChunk {
-    /** The markdown text for this chunk */
     content: string;
-    /** Start character offset in the original full markdown */
     startOffset: number;
-    /** End character offset (exclusive) in the original full markdown */
     endOffset: number;
-    /** 0-based chunk index */
     index: number;
 }
 
-/**
- * Split large markdown content into smaller chunks at paragraph boundaries (\n\n).
- * If the content is under maxSize it is returned as a single chunk.
- */
 export function splitMarkdownIntoChunks(
     markdown: string,
     maxSize: number = MAX_CHUNK_SIZE,
@@ -260,7 +185,6 @@ export function splitMarkdownIntoChunks(
         let end = cursor + maxSize;
 
         if (end >= markdown.length) {
-            // Last chunk – take everything remaining
             chunks.push({
                 content: markdown.slice(cursor),
                 startOffset: cursor,
@@ -270,22 +194,17 @@ export function splitMarkdownIntoChunks(
             break;
         }
 
-        // Try to find a paragraph boundary (\n\n) to split on, searching backwards
-        // from the max position. Look within the last 20% of the chunk to avoid
-        // chunks that are too small.
         const searchStart = cursor + Math.floor(maxSize * 0.8);
         const searchRegion = markdown.slice(searchStart, end);
         const lastBreak = searchRegion.lastIndexOf("\n\n");
 
         if (lastBreak !== -1) {
-            end = searchStart + lastBreak + 2; // include the \n\n in the current chunk
+            end = searchStart + lastBreak + 2;
         } else {
-            // No paragraph break found – try a single newline
             const lastNewline = searchRegion.lastIndexOf("\n");
             if (lastNewline !== -1) {
                 end = searchStart + lastNewline + 1;
             }
-            // else: hard-cut at maxSize (very long paragraph)
         }
 
         chunks.push({
@@ -301,30 +220,24 @@ export function splitMarkdownIntoChunks(
     return chunks;
 }
 
-/**
- * Map page-level highlights to chunk-local highlights by adjusting offsets.
- * Only highlights that overlap with the chunk's range are returned.
- */
 export function highlightsForChunk(
-    highlights: HighlightRange[],
+    highlights: HighlightInput[],
     chunk: MarkdownChunk,
-): HighlightRange[] {
-    const result: HighlightRange[] = [];
+): HighlightInput[] {
+    const result: HighlightInput[] = [];
 
     for (const h of highlights) {
-        // Check for overlap
-        if (h.endOffset <= chunk.startOffset || h.startOffset >= chunk.endOffset) {
-            continue; // no overlap
+        if (h.end_offset <= chunk.startOffset || h.start_offset >= chunk.endOffset) {
+            continue;
         }
 
-        // Clamp + adjust offsets to chunk-local coordinates
-        const localStart = Math.max(0, h.startOffset - chunk.startOffset);
-        const localEnd = Math.min(chunk.content.length, h.endOffset - chunk.startOffset);
+        const localStart = Math.max(0, h.start_offset - chunk.startOffset);
+        const localEnd = Math.min(chunk.content.length, h.end_offset - chunk.startOffset);
 
         result.push({
             ...h,
-            startOffset: localStart,
-            endOffset: localEnd,
+            start_offset: localStart,
+            end_offset: localEnd,
         });
     }
 

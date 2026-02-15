@@ -83,6 +83,7 @@ func handleAudioUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent, u
 		newPage := core.NewRecord(pagesCollection)
 		newPage.Set("upload", upload.Id)
 		newPage.Set("page", 1)
+		newPage.Set("user", upload.GetString("user"))
 
 		f, err := filesystem.NewFileFromBytes([]byte(markdown), fmt.Sprintf("%s_transcript.md", title))
 		if err != nil {
@@ -218,6 +219,7 @@ func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent
 			newPage := core.NewRecord(pagesCollection)
 			newPage.Set("upload", upload.Id)
 			newPage.Set("page", page.PageNumber)
+			newPage.Set("user", upload.GetString("user"))
 
 			f, err := filesystem.NewFileFromBytes([]byte(page.Markdown), fmt.Sprintf("%s_page_%d.md", title, page.PageNumber))
 			if err != nil {

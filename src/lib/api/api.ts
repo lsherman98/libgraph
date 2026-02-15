@@ -1,8 +1,9 @@
 import { pb } from "../pocketbase"
-import { Collections, type Create, type EdgesResponse } from "../pocketbase-types"
-import type { EnrichedNodesResponse } from "../types"
+import { Collections, NodesTypeOptions, type Create, type EdgesResponse, type Update } from "../pocketbase-types"
+import type { ChatFilters, ChatMessage, ChatResponseData, EnrichedNodesResponse, FTSSearchResult, LLMParameters, RetrievalParameters } from "../types"
 
-export async function getPageUrl(id: string) {
+export async function getPageUrl(id?: string) {
+    if (!id) return null;
     const [record, token] = await Promise.all([
         pb.collection(Collections.Pages).getOne(id),
         pb.files.getToken()
@@ -17,11 +18,11 @@ export const upload = async (upload: Create<Collections.Uploads>) => {
 
 export const getUpload = async (id: string) => {
     return await pb.collection(Collections.Uploads).getOne(id, {
-        expand: 'subjects,publication,topic,tags,upload'
+        expand: 'people,publication,topic,tags,uploads'
     })
 }
 
-export const updateUpload = async (id: string, data: Partial<Create<Collections.Uploads>>) => {
+export const updateUpload = async (id: string, data: Update<Collections.Uploads>) => {
     return await pb.collection(Collections.Uploads).update(id, data)
 }
 
@@ -64,60 +65,46 @@ export const createTopic = async (data: Create<Collections.Topics>) => {
 export const getUploads = async () => {
     return await pb.collection(Collections.Uploads).getFullList({
         sort: '-created',
-        expand: 'subjects,publication,topic,tags,upload'
+        expand: 'people,publication,topic,tags,uploads'
     })
 }
 
 export const getFirstPage = async (uploadId: string) => {
-    const pages = await pb.collection(Collections.Pages).getList(1, 1, {
-        filter: `upload = "${uploadId}" && page = 1`
-    });
-    return pages.items[0] || null;
+    return await pb.collection(Collections.Pages).getFirstListItem(`upload = "${uploadId}" && page = 1`);
 }
 
 export const getPageByNumber = async (uploadId: string, pageNumber: number) => {
-    const pages = await pb.collection(Collections.Pages).getList(1, 1, {
-        filter: `upload = "${uploadId}" && page = ${pageNumber}`
-    });
-    return pages.items[0] || null;
+    return await pb.collection(Collections.Pages).getFirstListItem(`upload = "${uploadId}" && page = ${pageNumber}`);
 }
 
-export const getPages = async (uploadId: string, page = 1, perPage = 5) => {
+export const getPages = async (uploadId?: string, page = 1, perPage = 10) => {
+    if (!uploadId) return null;
     return await pb.collection(Collections.Pages).getList(page, perPage, {
         filter: `upload = "${uploadId}"`,
         sort: 'page'
     });
 }
 
-// Highlights API
-export const getHighlights = async (uploadId: string) => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) return [];
+export const getHighlights = async (uploadId?: string) => {
+    if (!uploadId) return null;
     return await pb.collection(Collections.Highlights).getFullList({
-        filter: `upload = "${uploadId}" && user = "${userId}"`,
+        filter: `upload = "${uploadId}"`,
         sort: 'created'
     });
 }
 
 export const getHighlightsForPage = async (pageId: string) => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) return [];
     return await pb.collection(Collections.Highlights).getFullList({
-        filter: `page = "${pageId}" && user = "${userId}"`,
+        filter: `page = "${pageId}"`,
         sort: 'start_offset'
     });
 }
 
 export const createHighlight = async (data: Create<Collections.Highlights>) => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) throw new Error("User not authenticated");
-    return await pb.collection(Collections.Highlights).create({
-        ...data,
-        user: userId
-    });
+    return await pb.collection(Collections.Highlights).create(data);
 }
 
-export const updateHighlight = async (id: string, data: Partial<Create<Collections.Highlights>>) => {
+export const updateHighlight = async (id: string, data: Update<Collections.Highlights>) => {
     return await pb.collection(Collections.Highlights).update(id, data);
 }
 
@@ -125,26 +112,19 @@ export const deleteHighlight = async (id: string) => {
     return await pb.collection(Collections.Highlights).delete(id);
 }
 
-// Bookmarks API
-export const getBookmarks = async (uploadId: string) => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) return [];
+export const getBookmarks = async (uploadId?: string) => {
+    if (!uploadId) return null;
     return await pb.collection(Collections.Bookmarks).getFullList({
-        filter: `upload = "${uploadId}" && user = "${userId}"`,
+        filter: `upload = "${uploadId}"`,
         sort: 'page_number'
     });
 }
 
 export const createBookmark = async (data: Create<Collections.Bookmarks>) => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) throw new Error("User not authenticated");
-    return await pb.collection(Collections.Bookmarks).create({
-        ...data,
-        user: userId
-    });
+    return await pb.collection(Collections.Bookmarks).create(data);
 }
 
-export const updateBookmark = async (id: string, data: Partial<Create<Collections.Bookmarks>>) => {
+export const updateBookmark = async (id: string, data: Update<Collections.Bookmarks>) => {
     return await pb.collection(Collections.Bookmarks).update(id, data);
 }
 
@@ -152,26 +132,19 @@ export const deleteBookmark = async (id: string) => {
     return await pb.collection(Collections.Bookmarks).delete(id);
 }
 
-// Notes API
-export const getNotes = async (uploadId: string) => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) return [];
+export const getNotes = async (uploadId?: string) => {
+    if (!uploadId) return null;
     return await pb.collection(Collections.Notes).getFullList({
-        filter: `upload = "${uploadId}" && user = "${userId}"`,
+        filter: `upload = "${uploadId}"`,
         sort: 'page_number'
     });
 }
 
 export const createNote = async (data: Create<Collections.Notes>) => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) throw new Error("User not authenticated");
-    return await pb.collection(Collections.Notes).create({
-        ...data,
-        user: userId
-    });
+    return await pb.collection(Collections.Notes).create(data);
 }
 
-export const updateNote = async (id: string, data: Partial<Create<Collections.Notes>>) => {
+export const updateNote = async (id: string, data: Update<Collections.Notes>) => {
     return await pb.collection(Collections.Notes).update(id, data);
 }
 
@@ -179,14 +152,10 @@ export const deleteNote = async (id: string) => {
     return await pb.collection(Collections.Notes).delete(id);
 }
 
-// Nodes API
-export const getNodes = async (filters?: { type?: string; userId?: string }) => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) return [];
-
-    let filterStr = `user=${userId}`;
-    if (filters?.type) {
-        filterStr += ` && type=${filters.type}`;
+export const getNodes = async (type?: NodesTypeOptions) => {
+    let filterStr = '';
+    if (type) {
+        filterStr = `type = "${type}"`;
     }
 
     return await pb.collection(Collections.Nodes).getFullList({
@@ -199,48 +168,12 @@ export const getNodeById = async (id: string) => {
     return await pb.collection(Collections.Nodes).getOne(id);
 }
 
-export const getNodeByRecord = async (recordId: string, type: string) => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) return null;
-
-    const nodes = await pb.collection(Collections.Nodes).getList(1, 1, {
-        filter: `record = "${recordId}" && type = "${type}" && user = "${userId}"`
-    });
-    return nodes.items[0] || null;
+export const getNodeByRecord = async (recordId: string, type: NodesTypeOptions) => {
+    return await pb.collection(Collections.Nodes).getFirstListItem(`record = "${recordId}" && type = "${type}"`);
 }
 
-export const createNode = async (data: Create<Collections.Nodes>) => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) throw new Error("User not authenticated");
-    return await pb.collection(Collections.Nodes).create({
-        ...data,
-        user: userId
-    });
-}
-
-export const updateNode = async (id: string, data: Partial<Create<Collections.Nodes>>) => {
-    return await pb.collection(Collections.Nodes).update(id, data);
-}
-
-export const deleteNode = async (id: string) => {
-    // First delete all edges connected to this node
-    const edges = await pb.collection(Collections.Edges).getFullList({
-        filter: `source = "${id}" || target = "${id}"`
-    });
-
-    for (const edge of edges) {
-        await pb.collection(Collections.Edges).delete(edge.id);
-    }
-
-    return await pb.collection(Collections.Nodes).delete(id);
-}
-
-// Edges API
 export const getEdges = async (filters?: { sourceId?: string; targetId?: string; type?: string }) => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) return [];
-
-    let filterStr = `user=${userId}`;
+    let filterStr = '';
     if (filters?.sourceId) {
         filterStr += ` && source=${filters.sourceId}`;
     }
@@ -264,73 +197,39 @@ export const getEdgeById = async (id: string) => {
     });
 }
 
-export const createEdge = async (data: Create<Collections.Edges>) => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) throw new Error("User not authenticated");
-    return await pb.collection(Collections.Edges).create({
-        ...data,
-        user: userId
-    });
-}
-
-export const updateEdge = async (id: string, data: Partial<Create<Collections.Edges>>) => {
-    return await pb.collection(Collections.Edges).update(id, data);
-}
-
-export const deleteEdge = async (id: string) => {
-    return await pb.collection(Collections.Edges).delete(id);
-}
-
-// Graph data for visualization - returns all nodes and edges for the current user
-// The backend enriches each node with record_data based on its type and record id
 export const getGraphData = async (): Promise<{ nodes: EnrichedNodesResponse[]; edges: EdgesResponse[] }> => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) return { nodes: [], edges: [] };
-
     const [nodes, edges] = await Promise.all([
         pb.collection(Collections.Nodes).getFullList({
-            filter: `user = "${userId}"`,
             sort: '-created'
         }),
         pb.collection(Collections.Edges).getFullList({
-            filter: `user = "${userId}"`,
             sort: '-created',
             expand: 'source,target'
         })
     ]);
 
-    // The PocketBase OnRecordEnrich hook automatically adds record_data to each node
-    // by fetching the related record from the appropriate collection based on node.type
     return { nodes: nodes as EnrichedNodesResponse[], edges: edges as EdgesResponse[] };
 }
 
-// Writing Projects API
 export const getWritingProjects = async () => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) return [];
     return await pb.collection(Collections.WritingProjects).getFullList({
-        filter: `user = "${userId}"`,
         sort: '-updated',
         expand: 'tags,topics'
     });
 }
 
-export const getWritingProject = async (id: string) => {
+export const getWritingProject = async (id?: string) => {
+    if (!id) return null;
     return await pb.collection(Collections.WritingProjects).getOne(id, {
         expand: 'tags,topics,linked_uploads,linked_highlights,linked_bookmarks,linked_notes'
     });
 }
 
 export const createWritingProject = async (data: Create<Collections.WritingProjects>) => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) throw new Error("User not authenticated");
-    return await pb.collection(Collections.WritingProjects).create({
-        ...data,
-        user: userId
-    });
+    return await pb.collection(Collections.WritingProjects).create(data);
 }
 
-export const updateWritingProject = async (id: string, data: Partial<Create<Collections.WritingProjects>>) => {
+export const updateWritingProject = async (id: string, data: Update<Collections.WritingProjects>) => {
     return await pb.collection(Collections.WritingProjects).update(id, data);
 }
 
@@ -338,29 +237,21 @@ export const deleteWritingProject = async (id: string) => {
     return await pb.collection(Collections.WritingProjects).delete(id);
 }
 
-// Get all user's research materials for the workspace
 export const getWorkspaceMaterials = async () => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) return { uploads: [], highlights: [], bookmarks: [], notes: [] };
-
     const [uploads, highlights, bookmarks, notes] = await Promise.all([
         pb.collection(Collections.Uploads).getFullList({
-            filter: `user = "${userId}"`,
             sort: '-created',
             expand: 'subjects,publication,tags'
         }),
         pb.collection(Collections.Highlights).getFullList({
-            filter: `user = "${userId}"`,
             sort: '-created',
             expand: 'upload,tags'
         }),
         pb.collection(Collections.Bookmarks).getFullList({
-            filter: `user = "${userId}"`,
             sort: '-created',
             expand: 'upload,tags'
         }),
         pb.collection(Collections.Notes).getFullList({
-            filter: `user = "${userId}"`,
             sort: '-created',
             expand: 'upload,tags'
         })
@@ -369,12 +260,8 @@ export const getWorkspaceMaterials = async () => {
     return { uploads, highlights, bookmarks, notes };
 }
 
-// Collections API
 export const getCollections = async () => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) return [];
     return await pb.collection(Collections.Collections).getFullList({
-        filter: `user = "${userId}"`,
         sort: '-updated',
         expand: 'uploads'
     });
@@ -387,15 +274,10 @@ export const getCollection = async (id: string) => {
 }
 
 export const createCollection = async (data: Create<Collections.Collections>) => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) throw new Error("User not authenticated");
-    return await pb.collection(Collections.Collections).create({
-        ...data,
-        user: userId
-    });
+    return await pb.collection(Collections.Collections).create(data);
 }
 
-export const updateCollection = async (id: string, data: Partial<Create<Collections.Collections>>) => {
+export const updateCollection = async (id: string, data: Update<Collections.Collections>) => {
     return await pb.collection(Collections.Collections).update(id, data);
 }
 
@@ -403,12 +285,8 @@ export const deleteCollection = async (id: string) => {
     return await pb.collection(Collections.Collections).delete(id);
 }
 
-// Chats API
 export const getChats = async () => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) return [];
     return await pb.collection(Collections.Chats).getFullList({
-        filter: `user = "${userId}"`,
         sort: '-updated'
     });
 }
@@ -418,15 +296,10 @@ export const getChat = async (id: string) => {
 }
 
 export const createChat = async (data: Create<Collections.Chats>) => {
-    const userId = pb.authStore.record?.id;
-    if (!userId) throw new Error("User not authenticated");
-    return await pb.collection(Collections.Chats).create({
-        ...data,
-        user: userId
-    });
+    return await pb.collection(Collections.Chats).create(data);
 }
 
-export const updateChat = async (id: string, data: Partial<Create<Collections.Chats>>) => {
+export const updateChat = async (id: string, data: Update<Collections.Chats>) => {
     return await pb.collection(Collections.Chats).update(id, data);
 }
 
@@ -434,7 +307,6 @@ export const deleteChat = async (id: string) => {
     return await pb.collection(Collections.Chats).delete(id);
 }
 
-// Messages API
 export const getMessages = async (chatId: string) => {
     return await pb.collection(Collections.Messages).getFullList({
         filter: `chat = "${chatId}"`,
@@ -446,61 +318,6 @@ export const createMessage = async (data: Create<Collections.Messages>) => {
     return await pb.collection(Collections.Messages).create(data);
 }
 
-// Chat API
-export interface ChatMessage {
-    role: 'user' | 'assistant';
-    content: string;
-}
-
-export interface ChatFilters {
-    condition?: 'and' | 'or';
-    tags?: string[];
-    subjects?: string[];
-    publications?: string[];
-    types?: string[];
-    topics?: string[];
-    uploads?: string[];
-    collections?: string[];
-}
-
-export interface ChatSource {
-    upload_id?: string;
-    external_file_id?: string;
-    node_id?: string;
-    title?: string;
-    score?: number;
-    text?: string;
-    page_number?: number;
-    start_char_idx?: number;
-    end_char_idx?: number;
-}
-
-export interface LLMParameters {
-    model_name?: string;
-    system_prompt?: string;
-    temperature?: number;
-    use_chain_of_thought_reasoning?: boolean;
-    use_citation?: boolean;
-}
-
-export interface RetrievalParameters {
-    alpha?: number;
-    dense_similarity_cutoff?: number;
-    dense_similarity_top_k?: number;
-    enable_reranking?: boolean;
-    files_top_k?: number;
-    rerank_top_n?: number;
-    retrieval_mode?: 'chunks' | 'files';
-    retrieve_page_figure_nodes?: boolean;
-    retrieve_page_screenshot_nodes?: boolean;
-    sparse_similarity_top_k?: number;
-}
-
-export interface ChatResponseData {
-    message: string;
-    sources?: ChatSource[];
-}
-
 export const sendChatMessage = async (
     message: string,
     mode: "chat" | "search" = "chat",
@@ -509,8 +326,7 @@ export const sendChatMessage = async (
     llmParameters?: LLMParameters,
     retrievalParameters?: RetrievalParameters,
 ): Promise<ChatResponseData> => {
-    const baseUrl = pb.baseURL.endsWith('/') ? pb.baseURL.slice(0, -1) : pb.baseURL;
-    const response = await fetch(`${baseUrl}/api/chat`, {
+    const response = await pb.send(`/api/chat`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -534,25 +350,18 @@ export const sendChatMessage = async (
     return response.json();
 }
 
-// Full-text search for document chunks
-export interface FtsSearchResult {
-    id: string;
-    content: string;
-    upload: string;
-    page_number: string;
-    chunk_index: string;
-}
-
-export const fullTextSearch = async (uploadId: string, query: string): Promise<FtsSearchResult[]> => {
+export const fullTextSearch = async (uploadId: string, query: string): Promise<FTSSearchResult[]> => {
     if (!query.trim()) return [];
 
-    const base = pb.baseURL.replace(/\/+$/, '');
-    const response = await fetch(
-        `${base}/api/collections/document_chunks/records/full-text-search?search=${encodeURIComponent(query)}`,
+    const params = new URLSearchParams({
+        search: query,
+        upload: uploadId,
+    });
+
+    const response = await pb.send(
+        `/api/collections/document_chunks/records/full-text-search?${params.toString()}`,
         {
-            headers: {
-                Authorization: pb.authStore.token,
-            },
+            method: 'GET',
         }
     );
 
@@ -561,8 +370,5 @@ export const fullTextSearch = async (uploadId: string, query: string): Promise<F
         throw new Error("Full-text search failed");
     }
 
-    const results: FtsSearchResult[] = await response.json();
-
-    // Filter to only results belonging to this upload
-    return results.filter((r) => r.upload === uploadId);
+    return await response.json();
 }

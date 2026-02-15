@@ -243,7 +243,7 @@ interface PreviewDialogProps {
 }
 
 function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate }: PreviewDialogProps) {
-  const pageId = item?.page ?? null;
+  const pageId = item?.page;
   const { data: markdown, isLoading } = usePageMarkdown(pageId);
 
   if (!item) return null;
@@ -389,10 +389,10 @@ export function AnnotationsPanel({
   const [previewItem, setPreviewItem] = useState<HighlightsRecord | BookmarksRecord | NotesRecord | null>(null);
   const [previewPageNumber, setPreviewPageNumber] = useState<number | undefined>();
 
-  const { data: allHighlights = [] } = useHighlights(uploadId);
-  const { data: allBookmarks = [] } = useBookmarks(uploadId);
-  const { data: allNotes = [] } = useNotes(uploadId);
-  const { data: pagesData } = usePages(uploadId, 1, 1000); // Get all pages to map page IDs to numbers
+  const { data: allHighlights = [] } = useHighlights(uploadId || undefined);
+  const { data: allBookmarks = [] } = useBookmarks(uploadId || undefined);
+  const { data: allNotes = [] } = useNotes(uploadId || undefined);
+  const { data: pagesData } = usePages(uploadId || undefined, 1, 1000); // Get all pages to map page IDs to numbers
 
   // Create a map of page ID to page number
   const pageIdToNumber = useMemo(() => {
@@ -407,7 +407,7 @@ export function AnnotationsPanel({
   const groupedHighlights = useMemo(() => {
     const grouped = new Map<number, HighlightsRecord[]>();
 
-    allHighlights.forEach((highlight) => {
+    allHighlights?.forEach((highlight) => {
       const pageNum = highlight.page ? pageIdToNumber.get(highlight.page) : undefined;
       const displayPageNum = pageNum ?? 0; // 0 for unknown/no page
 
@@ -426,7 +426,7 @@ export function AnnotationsPanel({
   const groupedBookmarks = useMemo(() => {
     const grouped = new Map<number, BookmarksRecord[]>();
 
-    allBookmarks.forEach((bookmark) => {
+    allBookmarks?.forEach((bookmark) => {
       const displayPageNum = bookmark.page_number ?? 0;
 
       if (!grouped.has(displayPageNum)) {
@@ -444,7 +444,7 @@ export function AnnotationsPanel({
   const groupedNotes = useMemo(() => {
     const grouped = new Map<number, NotesRecord[]>();
 
-    allNotes.forEach((note) => {
+    allNotes?.forEach((note) => {
       const displayPageNum = note.page_number ?? 0;
 
       if (!grouped.has(displayPageNum)) {
@@ -481,42 +481,49 @@ export function AnnotationsPanel({
   };
 
   // Edit handlers - use the store to open editors
-  const setEditingHighlight = useReaderStore((state) => state.setEditingHighlight);
-  const setEditingBookmark = useReaderStore((state) => state.setEditingBookmark);
-  const setEditingNote = useReaderStore((state) => state.setEditingNote);
+  const setEditorState = useReaderStore((state) => state.setEditorState);
 
   const handleHighlightEdit = (highlight: HighlightsRecord) => {
-    setEditingHighlight({
-      id: highlight.id,
-      text: highlight.text || "",
-      color: highlight.color || HighlightsColorOptions.yellow,
-      note: highlight.comment || undefined,
-      tags: highlight.tags || undefined,
-      pageId: highlight.page || "",
+    setEditorState({
+      mode: "editing-highlight",
+      data: {
+        id: highlight.id,
+        text: highlight.text || "",
+        color: highlight.color || HighlightsColorOptions.yellow,
+        note: highlight.comment || undefined,
+        tags: highlight.tags || undefined,
+        pageId: highlight.page || "",
+      },
     });
   };
 
   const handleBookmarkEdit = (bookmark: BookmarksRecord) => {
-    setEditingBookmark({
-      id: bookmark.id,
-      blockId: bookmark.block_id || "",
-      previewText: "",
-      comment: bookmark.comment || undefined,
-      tags: bookmark.tags || undefined,
-      pageId: bookmark.page || "",
-      pageNumber: bookmark.page_number || 0,
+    setEditorState({
+      mode: "editing-bookmark",
+      data: {
+        id: bookmark.id,
+        blockId: bookmark.block_id || "",
+        previewText: "",
+        comment: bookmark.comment || undefined,
+        tags: bookmark.tags || undefined,
+        pageId: bookmark.page || "",
+        pageNumber: bookmark.page_number || 0,
+      },
     });
   };
 
   const handleNoteEdit = (note: NotesRecord) => {
-    setEditingNote({
-      id: note.id,
-      blockId: note.block_id || "",
-      previewText: undefined,
-      content: note.content || undefined,
-      tags: note.tags || undefined,
-      pageId: note.page || "",
-      pageNumber: note.page_number || 0,
+    setEditorState({
+      mode: "editing-note",
+      data: {
+        id: note.id,
+        blockId: note.block_id || "",
+        previewText: undefined,
+        content: note.content || undefined,
+        tags: note.tags || undefined,
+        pageId: note.page || "",
+        pageNumber: note.page_number || 0,
+      },
     });
   };
 
@@ -557,7 +564,7 @@ export function AnnotationsPanel({
           <TabsTrigger value="highlights" className="flex-1 gap-1.5">
             <Highlighter className="h-3.5 w-3.5" />
             Highlights
-            {allHighlights.length > 0 && (
+            {allHighlights && allHighlights.length > 0 && (
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
                 {allHighlights.length}
               </Badge>
@@ -566,7 +573,7 @@ export function AnnotationsPanel({
           <TabsTrigger value="bookmarks" className="flex-1 gap-1.5">
             <BookMarked className="h-3.5 w-3.5" />
             Bookmarks
-            {allBookmarks.length > 0 && (
+            {allBookmarks && allBookmarks.length > 0 && (
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
                 {allBookmarks.length}
               </Badge>
@@ -575,7 +582,7 @@ export function AnnotationsPanel({
           <TabsTrigger value="notes" className="flex-1 gap-1.5">
             <Pencil className="h-3.5 w-3.5" />
             Notes
-            {allNotes.length > 0 && (
+            {allNotes && allNotes.length > 0 && (
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
                 {allNotes.length}
               </Badge>

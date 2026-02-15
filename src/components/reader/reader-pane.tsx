@@ -7,17 +7,7 @@ import {
   useBookmarks,
   useNotes,
 } from "@/lib/api/queries";
-import {
-  useCreateHighlight,
-  useUpdateHighlight,
-  useDeleteHighlight,
-  useCreateBookmark,
-  useUpdateBookmark,
-  useDeleteBookmark,
-  useCreateNote,
-  useUpdateNote,
-  useDeleteNote,
-} from "@/lib/api/mutations";
+import { useCreateHighlight, useUpdateHighlight, useDeleteHighlight } from "@/lib/api/mutations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -37,7 +27,7 @@ import { Label } from "@/components/ui/label";
 import { useReaderSettings, usePageSettings, FONT_FAMILIES } from "@/lib/hooks/use-reader-settings";
 import { ReaderSettingsPanel, QuickFontSizeControl } from "@/components/reader/reader-settings-panel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn, useDebouncedCallback } from "@/lib/utils";
+import { cn, getUserRecord, useDebouncedCallback } from "@/lib/utils";
 import { useSidebar } from "@/components/ui/sidebar";
 import { useReaderStore } from "@/lib/stores/reader-store";
 import Markdown from "react-markdown";
@@ -47,14 +37,13 @@ import { BlockActions } from "@/components/reader/bookmark-button";
 import { DocumentSearchBar } from "@/components/reader/document-search-bar";
 import {
   injectHighlightsIntoMarkdown,
-  toHighlightRanges,
   findTextOffset,
   getSelectionInfo,
   findHighlightElement,
   splitMarkdownIntoChunks,
   highlightsForChunk,
   type SelectionInfo,
-  type HighlightRange,
+  type HighlightInput,
   type MarkdownChunk,
 } from "@/lib/highlight-utils";
 
@@ -84,7 +73,7 @@ function MarkdownContent({
   isLoading: boolean;
   pageId?: string;
   pageNumber?: number;
-  highlights?: HighlightRange[];
+  highlights?: HighlightInput[];
   bookmarks?: { id: string; block_id: string; label?: string; tags?: string[] }[];
   notes?: { id: string; block_id: string; content?: string; tags?: string[] }[];
   onCreateHighlight?: (data: {
@@ -99,10 +88,10 @@ function MarkdownContent({
   onDeleteHighlight?: (id: string) => void;
 }) {
   const [selection, setSelection] = useState<SelectionInfo | null>(null);
-  const [activeHighlight, setActiveHighlight] = useState<{ element: HTMLElement; highlight: HighlightRange } | null>(
+  const [activeHighlight, setActiveHighlight] = useState<{ element: HTMLElement; highlight: HighlightInput } | null>(
     null,
   );
-  const [tempHighlight, setTempHighlight] = useState<HighlightRange | null>(null);
+  const [tempHighlight, setTempHighlight] = useState<HighlightInput | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
@@ -120,43 +109,12 @@ function MarkdownContent({
   const chunkContent = currentChunk?.content ?? content;
   const chunkStartOffset = currentChunk?.startOffset ?? 0;
 
-  // Store callback refs to avoid stale closures
-  const onCreateHighlightRef = useRef(onCreateHighlight);
-  const onUpdateHighlightRef = useRef(onUpdateHighlight);
-  const onDeleteHighlightRef = useRef(onDeleteHighlight);
-
-  // Keep refs updated
-  onCreateHighlightRef.current = onCreateHighlight;
-  onUpdateHighlightRef.current = onUpdateHighlight;
-  onDeleteHighlightRef.current = onDeleteHighlight;
-
   // Reader store for opening highlight editor in sidebar
-  const pendingHighlight = useReaderStore((state) => state.pendingHighlight);
-  const setPendingHighlight = useReaderStore((state) => state.setPendingHighlight);
-  const setEditingHighlight = useReaderStore((state) => state.setEditingHighlight);
-  const setCreateHighlightFn = useReaderStore((state) => state.setCreateHighlightFn);
-  const setUpdateHighlightFn = useReaderStore((state) => state.setUpdateHighlightFn);
-  const setDeleteHighlightFn = useReaderStore((state) => state.setDeleteHighlightFn);
+  const editorState = useReaderStore((state) => state.editorState);
+  const setEditorState = useReaderStore((state) => state.setEditorState);
   const { toggleSidebar, open: sidebarOpen } = useSidebar();
 
-  // Set up stable wrapper functions that use refs - only run once on mount
-  useEffect(() => {
-    setCreateHighlightFn((data) => {
-      onCreateHighlightRef.current?.(data);
-    });
-    setUpdateHighlightFn((id, data) => {
-      onUpdateHighlightRef.current?.(id, data);
-    });
-    setDeleteHighlightFn((id) => {
-      onDeleteHighlightRef.current?.(id);
-    });
-
-    return () => {
-      setCreateHighlightFn(null);
-      setUpdateHighlightFn(null);
-      setDeleteHighlightFn(null);
-    };
-  }, [setCreateHighlightFn, setUpdateHighlightFn, setDeleteHighlightFn]);
+  const pendingHighlight = editorState?.mode === "pending-highlight" ? editorState.data : null;
 
   useEffect(() => {
     if (tempHighlight) {
@@ -199,8 +157,10 @@ function MarkdownContent({
                 id: "temp-selection",
                 text: selectionInfo.text,
                 color: HighlightsColorOptions.yellow,
-                startOffset: offsets.start + chunkStartOffset,
-                endOffset: offsets.end + chunkStartOffset,
+                start_offset: offsets.start + chunkStartOffset,
+                end_offset: offsets.end + chunkStartOffset,
+                comment: "",
+                tags: [],
               });
             } else {
               setTempHighlight(null);
@@ -222,8 +182,8 @@ function MarkdownContent({
       let startOffset, endOffset;
       if (tempHighlight && tempHighlight.text === selection.text) {
         // tempHighlight already has page-level offsets
-        startOffset = tempHighlight.startOffset;
-        endOffset = tempHighlight.endOffset;
+        startOffset = tempHighlight.start_offset;
+        endOffset = tempHighlight.end_offset;
       } else {
         const offsets = findTextOffset(chunkContent, selection.text);
         if (!offsets) {
@@ -270,12 +230,15 @@ function MarkdownContent({
     if (!selection || !tempHighlight || !pageId) return;
 
     // Set up the pending highlight with all necessary data
-    setPendingHighlight({
-      text: selection.text,
-      color: HighlightsColorOptions.yellow,
-      pageId,
-      startOffset: tempHighlight.startOffset,
-      endOffset: tempHighlight.endOffset,
+    setEditorState({
+      mode: "pending-highlight",
+      data: {
+        text: selection.text,
+        color: HighlightsColorOptions.yellow,
+        pageId,
+        startOffset: tempHighlight.start_offset,
+        endOffset: tempHighlight.end_offset,
+      },
     });
 
     // Open the right sidebar if not already open
@@ -287,7 +250,7 @@ function MarkdownContent({
     setSelection(null);
     setTempHighlight(null);
     window.getSelection()?.removeAllRanges();
-  }, [selection, tempHighlight, pageId, setPendingHighlight, sidebarOpen, toggleSidebar]);
+  }, [selection, tempHighlight, pageId, setEditorState, sidebarOpen, toggleSidebar]);
 
   // Handler to open existing highlight in sidebar editor
   const handleOpenExistingHighlightEditor = useCallback(() => {
@@ -296,13 +259,16 @@ function MarkdownContent({
     const highlight = activeHighlight.highlight;
 
     // Set the editing highlight with all necessary data
-    setEditingHighlight({
-      id: highlight.id,
-      text: highlight.text,
-      color: highlight.color,
-      note: highlight.note,
-      tags: highlight.tags,
-      pageId,
+    setEditorState({
+      mode: "editing-highlight",
+      data: {
+        id: highlight.id,
+        text: highlight.text,
+        color: highlight.color,
+        note: highlight.comment,
+        tags: highlight.tags,
+        pageId,
+      },
     });
 
     // Open the right sidebar if not already open
@@ -312,7 +278,7 @@ function MarkdownContent({
 
     // Clear the active highlight state
     setActiveHighlight(null);
-  }, [activeHighlight, pageId, setEditingHighlight, sidebarOpen, toggleSidebar]);
+  }, [activeHighlight, pageId, setEditorState, sidebarOpen, toggleSidebar]);
 
   const getBlockId = useCallback(
     (node: any) => {
@@ -383,8 +349,10 @@ function MarkdownContent({
       id: "pending-highlight",
       text: pendingHighlight.text,
       color: HighlightsColorOptions.yellow, // Will be styled with gray
-      startOffset: pendingHighlight.startOffset,
-      endOffset: pendingHighlight.endOffset,
+      start_offset: pendingHighlight.startOffset,
+      end_offset: pendingHighlight.endOffset,
+      comment: "",
+      tags: [],
       isPending: true, // Mark as pending for special styling
     });
   }
@@ -536,7 +504,7 @@ function MarkdownContent({
               <HighlightMark
                 highlightId={highlightId}
                 className={className}
-                note={highlight?.note}
+                note={highlight?.comment}
                 tags={highlight?.tags}
               >
                 {children}
@@ -597,7 +565,7 @@ function MarkdownContent({
           <ExistingHighlightPopover
             highlightId={activeHighlight.highlight.id}
             color={activeHighlight.highlight.color}
-            note={activeHighlight.highlight.note}
+            note={activeHighlight.highlight.comment}
             tags={activeHighlight.highlight.tags}
             text={activeHighlight.highlight.text}
             position={{
@@ -652,7 +620,7 @@ function ScrollPageRenderer({
   const ref = useRef<HTMLDivElement>(null);
   const hasReportedRef = useRef(false);
 
-  const highlightRanges = toHighlightRanges(pageHighlights);
+  const highlightRanges = pageHighlights;
   const pageBookmarks = bookmarks.filter((b) => b.block_id?.startsWith(page.id));
   const pageNotes = notes.filter((n) => n.block_id?.startsWith(page.id));
 
@@ -738,7 +706,7 @@ function ScrollReader({
   const observerTarget = useRef<HTMLDivElement>(null);
   const currentVisiblePageRef = useRef(startPage);
 
-  const allPages = data?.pages.flatMap((p) => p.items) || [];
+  const allPages = data?.pages.flatMap((p) => p?.items) || [];
 
   const debouncedPageChange = useDebouncedCallback((page: number) => {
     if (page !== currentVisiblePageRef.current) {
@@ -806,7 +774,7 @@ function ScrollReader({
     <div className="space-y-8">
       {allPages.map((page) => (
         <ScrollPageRenderer
-          key={page.id}
+          key={page?.id}
           page={page}
           onInView={debouncedPageChange}
           bookmarks={bookmarks}
@@ -868,7 +836,7 @@ function PaginatedPageContent({
   const { data: markdown, isLoading } = usePageMarkdown(pageId);
   const { data: pageHighlights = [] } = usePageHighlights(pageId);
 
-  const highlightRanges = toHighlightRanges(pageHighlights);
+  const highlightRanges = pageHighlights;
   const pageBookmarks = bookmarks.filter((b) => b.block_id?.startsWith(pageId));
   const pageNotes = notes.filter((n) => n.block_id?.startsWith(pageId));
 
@@ -996,19 +964,8 @@ export function ReaderPane({
   const [upload, setUpload] = useState<any>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const {
-    isReadingMode,
-    setReadingMode,
-    setCurrentPageState,
-    setCurrentUploadId,
-    setNavigateToPage,
-    setCreateBookmarkFn,
-    setUpdateBookmarkFn,
-    setDeleteBookmarkFn,
-    setCreateNoteFn,
-    setUpdateNoteFn,
-    setDeleteNoteFn,
-  } = useReaderStore();
+  const { isReadingMode, setReadingMode, setCurrentPageState, setCurrentUploadId, setNavigateToPage } =
+    useReaderStore();
   const readerContainerRef = useRef<HTMLDivElement>(null);
   const { setOpen, setOpenRight, open: leftSidebarOpen, openRight: rightSidebarOpen } = useSidebar();
   const previousSidebarState = useRef({ left: true, right: true });
@@ -1059,21 +1016,15 @@ export function ReaderPane({
   const createHighlightMutation = useCreateHighlight();
   const updateHighlightMutation = useUpdateHighlight();
   const deleteHighlightMutation = useDeleteHighlight();
-  const createBookmarkMutation = useCreateBookmark();
-  const updateBookmarkMutation = useUpdateBookmark();
-  const deleteBookmarkMutation = useDeleteBookmark();
-  const createNoteMutation = useCreateNote();
-  const updateNoteMutation = useUpdateNote();
-  const deleteNoteMutation = useDeleteNote();
 
-  const bookmarks = bookmarksData.map((b) => ({
+  const bookmarks = bookmarksData?.map((b) => ({
     id: b.id,
     block_id: b.block_id || "",
     comment: b.comment || "",
     tags: b.tags || [],
   }));
 
-  const notes = notesData.map((n) => ({
+  const notes = notesData?.map((n) => ({
     id: n.id,
     block_id: n.block_id || "",
     content: n.content || "",
@@ -1103,6 +1054,7 @@ export function ReaderPane({
         tags: data.tags,
         start_offset: data.start_offset,
         end_offset: data.end_offset,
+        user: getUserRecord().id,
       });
     },
     [uploadId, createHighlightMutation],
@@ -1121,114 +1073,6 @@ export function ReaderPane({
     },
     [deleteHighlightMutation],
   );
-
-  // Bookmark handlers (now used via store for sidebar editor)
-  const handleCreateBookmark = useCallback(
-    (data: { block_id: string; comment: string; tags?: string[]; preview_text: string }) => {
-      if (!uploadId || !currentPageId) return;
-      createBookmarkMutation.mutate({
-        upload: uploadId,
-        page: currentPageId,
-        page_number: pageSettings.currentPage,
-        block_id: data.block_id,
-        comment: data.comment,
-        tags: data.tags,
-      });
-    },
-    [uploadId, currentPageId, pageSettings.currentPage, createBookmarkMutation],
-  );
-
-  const handleUpdateBookmark = useCallback(
-    (id: string, data: { comment?: string; tags?: string[] }) => {
-      // Map comment to label field in DB
-      updateBookmarkMutation.mutate({
-        id,
-        data: {
-          comment: data.comment,
-          tags: data.tags,
-        },
-      });
-    },
-    [updateBookmarkMutation],
-  );
-
-  const handleDeleteBookmark = useCallback(
-    (id: string) => {
-      deleteBookmarkMutation.mutate(id);
-    },
-    [deleteBookmarkMutation],
-  );
-
-  // Note handlers (now used via store for sidebar editor)
-  const handleCreateNote = useCallback(
-    (data: { block_id: string; content: string; tags?: string[] }) => {
-      if (!uploadId || !currentPageId) return;
-      createNoteMutation.mutate({
-        upload: uploadId,
-        page: currentPageId,
-        page_number: pageSettings.currentPage,
-        block_id: data.block_id,
-        content: data.content,
-        tags: data.tags,
-      });
-    },
-    [uploadId, currentPageId, pageSettings.currentPage, createNoteMutation],
-  );
-
-  const handleUpdateNote = useCallback(
-    (id: string, data: { content?: string; tags?: string[] }) => {
-      updateNoteMutation.mutate({ id, data });
-    },
-    [updateNoteMutation],
-  );
-
-  const handleDeleteNote = useCallback(
-    (id: string) => {
-      deleteNoteMutation.mutate(id);
-    },
-    [deleteNoteMutation],
-  );
-
-  // Store refs for callbacks to avoid stale closures
-  const handleCreateBookmarkRef = useRef(handleCreateBookmark);
-  const handleUpdateBookmarkRef = useRef(handleUpdateBookmark);
-  const handleDeleteBookmarkRef = useRef(handleDeleteBookmark);
-  const handleCreateNoteRef = useRef(handleCreateNote);
-  const handleUpdateNoteRef = useRef(handleUpdateNote);
-  const handleDeleteNoteRef = useRef(handleDeleteNote);
-
-  handleCreateBookmarkRef.current = handleCreateBookmark;
-  handleUpdateBookmarkRef.current = handleUpdateBookmark;
-  handleDeleteBookmarkRef.current = handleDeleteBookmark;
-  handleCreateNoteRef.current = handleCreateNote;
-  handleUpdateNoteRef.current = handleUpdateNote;
-  handleDeleteNoteRef.current = handleDeleteNote;
-
-  // Wire up store functions for bookmark/note operations
-  useEffect(() => {
-    setCreateBookmarkFn((data) => handleCreateBookmarkRef.current(data));
-    setUpdateBookmarkFn((id, data) => handleUpdateBookmarkRef.current(id, data));
-    setDeleteBookmarkFn((id) => handleDeleteBookmarkRef.current(id));
-    setCreateNoteFn((data) => handleCreateNoteRef.current(data));
-    setUpdateNoteFn((id, data) => handleUpdateNoteRef.current(id, data));
-    setDeleteNoteFn((id) => handleDeleteNoteRef.current(id));
-
-    return () => {
-      setCreateBookmarkFn(null);
-      setUpdateBookmarkFn(null);
-      setDeleteBookmarkFn(null);
-      setCreateNoteFn(null);
-      setUpdateNoteFn(null);
-      setDeleteNoteFn(null);
-    };
-  }, [
-    setCreateBookmarkFn,
-    setUpdateBookmarkFn,
-    setDeleteBookmarkFn,
-    setCreateNoteFn,
-    setUpdateNoteFn,
-    setDeleteNoteFn,
-  ]);
 
   const onTitleLoadRef = useRef(onTitleLoad);
   onTitleLoadRef.current = onTitleLoad;
@@ -1528,8 +1372,8 @@ export function ReaderPane({
                   uploadId={uploadId}
                   startPage={pageSettings.currentPage}
                   onPageChange={handlePageChange}
-                  bookmarks={bookmarks}
-                  notes={notes}
+                  bookmarks={bookmarks || []}
+                  notes={notes || []}
                   onCreateHighlight={handleCreateHighlight}
                   onUpdateHighlight={handleUpdateHighlight}
                   onDeleteHighlight={handleDeleteHighlight}
@@ -1540,8 +1384,8 @@ export function ReaderPane({
                   currentPage={pageSettings.currentPage}
                   onPageChange={handlePageChange}
                   totalPages={totalPages}
-                  bookmarks={bookmarks}
-                  notes={notes}
+                  bookmarks={bookmarks || []}
+                  notes={notes || []}
                   onCreateHighlight={handleCreateHighlight}
                   onUpdateHighlight={handleUpdateHighlight}
                   onDeleteHighlight={handleDeleteHighlight}

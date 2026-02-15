@@ -34,7 +34,7 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
   const location = useLocation();
   const { setOpenRight } = useSidebar();
 
-  const { data: project } = useWritingProject(writerTab?.projectId ?? null);
+  const { data: project } = useWritingProject(writerTab?.projectId);
   const updateProject = useUpdateWritingProject();
 
   // Only show sidebar content when on the workspace route
@@ -114,16 +114,11 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
     );
   }
 
-  const pendingHighlight = useReaderStore((state) => state.pendingHighlight);
-  const editingHighlight = useReaderStore((state) => state.editingHighlight);
-  const pendingBookmark = useReaderStore((state) => state.pendingBookmark);
-  const editingBookmark = useReaderStore((state) => state.editingBookmark);
-  const pendingNote = useReaderStore((state) => state.pendingNote);
-  const editingNote = useReaderStore((state) => state.editingNote);
+  const editorState = useReaderStore((state) => state.editorState);
 
-  const isHighlightEditorOpen = !!pendingHighlight || !!editingHighlight;
-  const isBookmarkEditorOpen = !!pendingBookmark || !!editingBookmark;
-  const isNoteEditorOpen = !!pendingNote || !!editingNote;
+  const isHighlightEditorOpen = editorState?.mode === "pending-highlight" || editorState?.mode === "editing-highlight";
+  const isBookmarkEditorOpen = editorState?.mode === "pending-bookmark" || editorState?.mode === "editing-bookmark";
+  const isNoteEditorOpen = editorState?.mode === "pending-note" || editorState?.mode === "editing-note";
 
   // Get the upload ID from the active reader tab
   const readerTab = activeTab?.type === "reader" ? (activeTab as ReaderTab) : null;
@@ -133,10 +128,10 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
 
   // Reset to annotations tab when an editor panel opens
   useEffect(() => {
-    if (isHighlightEditorOpen || isBookmarkEditorOpen || isNoteEditorOpen) {
+    if (editorState) {
       setSidebarTab("annotations");
     }
-  }, [isHighlightEditorOpen, isBookmarkEditorOpen, isNoteEditorOpen]);
+  }, [editorState]);
 
   // Determine which header to show
   const getHeaderContent = () => {
@@ -144,7 +139,9 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
       return (
         <>
           <PenLine className="h-4 w-4" />
-          <span className="font-semibold text-sm">{editingHighlight ? "Edit Highlight" : "New Highlight"}</span>
+          <span className="font-semibold text-sm">
+            {editorState?.mode === "editing-highlight" ? "Edit Highlight" : "New Highlight"}
+          </span>
         </>
       );
     }
@@ -152,7 +149,9 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
       return (
         <>
           <Bookmark className="h-4 w-4 text-amber-500" />
-          <span className="font-semibold text-sm">{editingBookmark ? "Edit Bookmark" : "New Bookmark"}</span>
+          <span className="font-semibold text-sm">
+            {editorState?.mode === "editing-bookmark" ? "Edit Bookmark" : "New Bookmark"}
+          </span>
         </>
       );
     }
@@ -160,7 +159,9 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
       return (
         <>
           <StickyNote className="h-4 w-4 text-blue-500" />
-          <span className="font-semibold text-sm">{editingNote ? "Edit Note" : "New Note"}</span>
+          <span className="font-semibold text-sm">
+            {editorState?.mode === "editing-note" ? "Edit Note" : "New Note"}
+          </span>
         </>
       );
     }

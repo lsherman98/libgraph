@@ -3,10 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, Trash2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, getUserRecord } from "@/lib/utils";
 import { HighlightsColorOptions } from "@/lib/pocketbase-types";
 import { useTags } from "@/lib/api/queries";
-import { useCreateTag } from "@/lib/api/mutations";
+import { useCreateTag, useCreateHighlight, useUpdateHighlight, useDeleteHighlight } from "@/lib/api/mutations";
 import { CreatableCombobox } from "@/components/creatable-combobox";
 import { useReaderStore } from "@/lib/stores/reader-store";
 import { AddToProjectButton } from "./add-to-project-button";
@@ -50,14 +50,16 @@ const HIGHLIGHT_COLORS: { value: HighlightsColorOptions; bg: string; border: str
 ];
 
 export function HighlightEditorPanel() {
-  const pendingHighlight = useReaderStore((state) => state.pendingHighlight);
-  const editingHighlight = useReaderStore((state) => state.editingHighlight);
-  const setPendingHighlight = useReaderStore((state) => state.setPendingHighlight);
-  const setEditingHighlight = useReaderStore((state) => state.setEditingHighlight);
-  const createHighlightFn = useReaderStore((state) => state.createHighlightFn);
-  const updateHighlightFn = useReaderStore((state) => state.updateHighlightFn);
-  const deleteHighlightFn = useReaderStore((state) => state.deleteHighlightFn);
+  const editorState = useReaderStore((state) => state.editorState);
+  const setEditorState = useReaderStore((state) => state.setEditorState);
+  const currentUploadId = useReaderStore((state) => state.currentUploadId);
 
+  const createHighlightMutation = useCreateHighlight();
+  const updateHighlightMutation = useUpdateHighlight();
+  const deleteHighlightMutation = useDeleteHighlight();
+
+  const pendingHighlight = editorState?.mode === "pending-highlight" ? editorState.data : null;
+  const editingHighlight = editorState?.mode === "editing-highlight" ? editorState.data : null;
   const isEditing = !!editingHighlight;
   const highlight = editingHighlight || pendingHighlight;
 
@@ -84,33 +86,38 @@ export function HighlightEditorPanel() {
   }, [editingHighlight, pendingHighlight]);
 
   const handleClose = () => {
-    setPendingHighlight(null);
-    setEditingHighlight(null);
+    setEditorState(null);
   };
 
   const handleSave = () => {
-    if (isEditing && editingHighlight && updateHighlightFn) {
-      updateHighlightFn(editingHighlight.id, {
-        color: selectedColor,
-        note: note || undefined,
-        tags: selectedTags.length > 0 ? selectedTags : undefined,
+    if (isEditing && editingHighlight) {
+      updateHighlightMutation.mutate({
+        id: editingHighlight.id,
+        data: {
+          color: selectedColor,
+          comment: note || undefined,
+          tags: selectedTags.length > 0 ? selectedTags : undefined,
+        },
       });
-    } else if (pendingHighlight && createHighlightFn) {
-      createHighlightFn({
+    } else if (pendingHighlight && currentUploadId) {
+      createHighlightMutation.mutate({
+        upload: currentUploadId,
+        page: pendingHighlight.pageId,
         color: selectedColor,
         text: pendingHighlight.text,
-        note: note || undefined,
+        comment: note || undefined,
         tags: selectedTags.length > 0 ? selectedTags : undefined,
         start_offset: pendingHighlight.startOffset,
         end_offset: pendingHighlight.endOffset,
+        user: getUserRecord().id,
       });
     }
     handleClose();
   };
 
   const handleDelete = () => {
-    if (isEditing && editingHighlight && deleteHighlightFn) {
-      deleteHighlightFn(editingHighlight.id);
+    if (isEditing && editingHighlight) {
+      deleteHighlightMutation.mutate(editingHighlight.id);
     }
     handleClose();
   };
@@ -121,7 +128,7 @@ export function HighlightEditorPanel() {
 
   const handleTagCreate = (title: string) => {
     createTagMutation.mutate(
-      { title },
+      { title, user: getUserRecord().id },
       {
         onSuccess: (newTag) => {
           setSelectedTags((prev) => [...prev, newTag.id]);

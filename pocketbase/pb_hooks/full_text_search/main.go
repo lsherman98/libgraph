@@ -79,18 +79,25 @@ func Init(app *pocketbase.PocketBase, collections ...string) error {
 				return e.NoContent(204)
 			}
 
+			uploadFilter := e.Request.URL.Query().Get("upload")
+
 			processedQuery := processSearchQuery(q)
 
 			var query strings.Builder
+			params := dbx.Params{"q": processedQuery}
 			query.WriteString("SELECT * ")
 			query.WriteString("FROM " + tbl + "_fts ")
 			query.WriteString("WHERE " + tbl + "_fts MATCH {:q} ")
+			if uploadFilter != "" {
+				query.WriteString("AND upload = {:upload} ")
+				params["upload"] = uploadFilter
+			}
 			query.WriteString("ORDER BY rank;")
 
 			results := []dbx.NullStringMap{}
 			err := app.DB().
 				NewQuery(query.String()).
-				Bind(dbx.Params{"q": processedQuery}).
+				Bind(params).
 				All(&results)
 			if err != nil {
 				app.Logger().Error(fmt.Sprint(err))
@@ -100,7 +107,7 @@ func Init(app *pocketbase.PocketBase, collections ...string) error {
 			e.Response.Header().Set("Content-Type", "application/json")
 			items := []map[string]any{}
 			for _, result := range results {
-				m := make(map[string]interface{})
+				m := make(map[string]any)
 				for key := range result {
 					val := result[key]
 					value, err := val.Value()
