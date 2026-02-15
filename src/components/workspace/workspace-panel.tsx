@@ -365,7 +365,7 @@ interface PreviewDialogProps {
 }
 
 function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate }: PreviewDialogProps) {
-  const pageId = item?.page ?? null;
+  const pageId = item?.page;
   const { data: markdown, isLoading } = usePageMarkdown(pageId);
 
   if (!item) return null;

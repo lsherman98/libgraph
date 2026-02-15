@@ -6,10 +6,10 @@ import {
   type WorkspaceTab,
 } from "@/lib/stores/workspace-tabs-store";
 import { ReaderPane } from "@/components/reader/reader-pane";
-import { WriterEditorPane } from "@/components/writer";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { useWritingProject } from "@/lib/api/queries";
 import { cn } from "@/lib/utils";
+import { WriterEditorPane } from "./editor-pane";
 
 interface SplitWorkspaceViewProps {
   className?: string;
@@ -44,7 +44,7 @@ export function SplitWorkspaceView({
   // For split tab that's a writer, we need separate local content
   const [splitLocalContent, setSplitLocalContent] = useState<string>("");
   const { data: splitProject } = useWritingProject(
-    splitTab?.type === "writer" ? (splitTab as WriterTab).projectId : null,
+    splitTab?.type === "writer" ? (splitTab as WriterTab).projectId : undefined,
   );
 
   // Sync split project content

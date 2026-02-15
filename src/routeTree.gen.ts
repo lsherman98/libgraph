@@ -14,8 +14,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as AppWorkspaceIndexRouteImport } from './routes/_app/workspace/index'
 import { Route as AppUploadIndexRouteImport } from './routes/_app/upload/index'
+import { Route as AppLibraryIndexRouteImport } from './routes/_app/library/index'
 import { Route as AppGraphIndexRouteImport } from './routes/_app/graph/index'
-import { Route as AppDocumentsIndexRouteImport } from './routes/_app/documents/index'
 import { Route as AppChatIndexRouteImport } from './routes/_app/chat/index'
 
 const SigninLazyRouteImport = createFileRoute('/signin')()
@@ -39,14 +39,14 @@ const AppUploadIndexRoute = AppUploadIndexRouteImport.update({
   path: '/upload/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppLibraryIndexRoute = AppLibraryIndexRouteImport.update({
+  id: '/library/',
+  path: '/library/',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppGraphIndexRoute = AppGraphIndexRouteImport.update({
   id: '/graph/',
   path: '/graph/',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDocumentsIndexRoute = AppDocumentsIndexRouteImport.update({
-  id: '/documents/',
-  path: '/documents/',
   getParentRoute: () => AppRoute,
 } as any)
 const AppChatIndexRoute = AppChatIndexRouteImport.update({
@@ -59,8 +59,8 @@ export interface FileRoutesByFullPath {
   '/': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
   '/chat/': typeof AppChatIndexRoute
-  '/documents/': typeof AppDocumentsIndexRoute
   '/graph/': typeof AppGraphIndexRoute
+  '/library/': typeof AppLibraryIndexRoute
   '/upload/': typeof AppUploadIndexRoute
   '/workspace/': typeof AppWorkspaceIndexRoute
 }
@@ -68,8 +68,8 @@ export interface FileRoutesByTo {
   '/': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
   '/chat': typeof AppChatIndexRoute
-  '/documents': typeof AppDocumentsIndexRoute
   '/graph': typeof AppGraphIndexRoute
+  '/library': typeof AppLibraryIndexRoute
   '/upload': typeof AppUploadIndexRoute
   '/workspace': typeof AppWorkspaceIndexRoute
 }
@@ -78,8 +78,8 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
   '/_app/chat/': typeof AppChatIndexRoute
-  '/_app/documents/': typeof AppDocumentsIndexRoute
   '/_app/graph/': typeof AppGraphIndexRoute
+  '/_app/library/': typeof AppLibraryIndexRoute
   '/_app/upload/': typeof AppUploadIndexRoute
   '/_app/workspace/': typeof AppWorkspaceIndexRoute
 }
@@ -89,8 +89,8 @@ export interface FileRouteTypes {
     | '/'
     | '/signin'
     | '/chat/'
-    | '/documents/'
     | '/graph/'
+    | '/library/'
     | '/upload/'
     | '/workspace/'
   fileRoutesByTo: FileRoutesByTo
@@ -98,8 +98,8 @@ export interface FileRouteTypes {
     | '/'
     | '/signin'
     | '/chat'
-    | '/documents'
     | '/graph'
+    | '/library'
     | '/upload'
     | '/workspace'
   id:
@@ -107,8 +107,8 @@ export interface FileRouteTypes {
     | '/_app'
     | '/signin'
     | '/_app/chat/'
-    | '/_app/documents/'
     | '/_app/graph/'
+    | '/_app/library/'
     | '/_app/upload/'
     | '/_app/workspace/'
   fileRoutesById: FileRoutesById
@@ -148,18 +148,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppUploadIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/library/': {
+      id: '/_app/library/'
+      path: '/library'
+      fullPath: '/library/'
+      preLoaderRoute: typeof AppLibraryIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/graph/': {
       id: '/_app/graph/'
       path: '/graph'
       fullPath: '/graph/'
       preLoaderRoute: typeof AppGraphIndexRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/documents/': {
-      id: '/_app/documents/'
-      path: '/documents'
-      fullPath: '/documents/'
-      preLoaderRoute: typeof AppDocumentsIndexRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/chat/': {
@@ -174,16 +174,16 @@ declare module '@tanstack/react-router' {
 
 interface AppRouteChildren {
   AppChatIndexRoute: typeof AppChatIndexRoute
-  AppDocumentsIndexRoute: typeof AppDocumentsIndexRoute
   AppGraphIndexRoute: typeof AppGraphIndexRoute
+  AppLibraryIndexRoute: typeof AppLibraryIndexRoute
   AppUploadIndexRoute: typeof AppUploadIndexRoute
   AppWorkspaceIndexRoute: typeof AppWorkspaceIndexRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppChatIndexRoute: AppChatIndexRoute,
-  AppDocumentsIndexRoute: AppDocumentsIndexRoute,
   AppGraphIndexRoute: AppGraphIndexRoute,
+  AppLibraryIndexRoute: AppLibraryIndexRoute,
   AppUploadIndexRoute: AppUploadIndexRoute,
   AppWorkspaceIndexRoute: AppWorkspaceIndexRoute,
 }

@@ -287,20 +287,27 @@ func collectionFields(collection *core.Collection, id string, collectionName str
 		fields = append(fields, id)
 	}
 
-	if collectionName == "document_chunks" {
-		allowedFields := map[string]bool{
+	allowedFieldsMap := map[string]map[string]bool{
+		"document_chunks": {
 			"content":     true,
 			"upload":      true,
 			"page_number": true,
 			"chunk_index": true,
-		}
+		},
+		"uploads": {
+			"title": true,
+			"file":  true,
+			"type":  true,
+		},
+	}
 
+	if allowed, ok := allowedFieldsMap[collectionName]; ok {
 		for _, field := range collection.Fields {
 			name := field.GetName()
 			if name == id {
 				continue
 			}
-			if allowedFields[name] {
+			if allowed[name] {
 				fields = append(fields, name)
 			}
 		}

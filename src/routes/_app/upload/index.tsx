@@ -106,7 +106,6 @@ function RouteComponent() {
     const isBulk = selectedIds.has(id) && selectedIds.size > 1;
     if (isBulk) {
       const { name, ...bulkUpdates } = updates;
-      // Name changes only apply to the individual file
       if (name !== undefined) {
         setFiles((prev) =>
           prev.map((f) => {
@@ -125,7 +124,6 @@ function RouteComponent() {
 
   const handleUploadAll = async () => {
     const pendingFiles = files.filter((f) => f.status === "PENDING" || f.status === "ERROR");
-
     if (pendingFiles.length === 0) return;
 
     for (const fileData of pendingFiles) {
@@ -144,25 +142,22 @@ function RouteComponent() {
         });
         updateFile(fileData.id, { status: "SUCCESS" });
       } catch (error) {
-        console.error(error);
         updateFile(fileData.id, { status: "ERROR" });
       }
     }
   };
 
-  const authorOptions = (peopleQuery.data || [])
-    .filter((p: PeopleResponse) => !p.type || p.type === PeopleTypeOptions.author)
-    .map((p: PeopleResponse) => ({
-      label: p.name || "Unknown",
-      value: p.id,
-    }));
-  const publicationOptions = (publicationsQuery.data || []).map((p: PublicationsResponse) => ({
-    label: p.name || "Unknown",
+  const authorOptions = peopleQuery.data?.map((p: PeopleResponse) => ({
+    label: p.name,
     value: p.id,
   }));
-  const tagOptions = (tagsQuery.data || []).map((t: TagsResponse) => ({ label: t.title || t.id, value: t.id }));
-  const topicOptions = (topicsQuery.data || []).map((t: TopicsResponse) => ({
-    label: t.title || "Untitled",
+  const publicationOptions = publicationsQuery.data?.map((p: PublicationsResponse) => ({
+    label: p.name,
+    value: p.id,
+  }));
+  const tagOptions = tagsQuery.data?.map((t: TagsResponse) => ({ label: t.title, value: t.id }));
+  const topicOptions = topicsQuery.data?.map((t: TopicsResponse) => ({
+    label: t.title,
     value: t.id,
   }));
 
@@ -200,7 +195,7 @@ function RouteComponent() {
           <div className="flex flex-col items-center gap-2">
             <Upload className="h-10 w-10 text-muted-foreground" />
             <p className="text-lg font-medium">Drop files here or click to select</p>
-            <p className="text-sm text-muted-foreground">Support for PDF, EPUB, MP3, MP4</p>
+            <p className="text-sm text-muted-foreground">Supports Text, PDFs, Markdown, eBooks, and audio files.</p>
           </div>
         </div>
       )}
@@ -221,7 +216,6 @@ function RouteComponent() {
             <div className="divide-y max-h-[70vh] overflow-y-auto">
               {files.map((file) => (
                 <div key={file.id} className={`p-4 space-y-3 ${selectedIds.has(file.id) ? "bg-accent/40" : ""}`}>
-                  {/* Row 1: Checkbox, file info, title, type, and status */}
                   <div className="flex items-center gap-2">
                     {file.status === "PENDING" && (
                       <Checkbox
@@ -272,13 +266,11 @@ function RouteComponent() {
                       {file.status === "ERROR" && <AlertCircle className="h-5 w-5 text-red-500" />}
                     </div>
                   </div>
-
-                  {/* Row 2: Authors, Publication, Tags, Topics */}
                   <div className={`flex items-center gap-2 ${file.status === "PENDING" ? "pl-14" : "pl-9"}`}>
                     <div className="flex items-center gap-2 flex-1">
                       <span className="text-xs text-muted-foreground shrink-0">Authors</span>
                       <CreatableCombobox
-                        options={authorOptions}
+                        options={authorOptions || []}
                         value={file.subjects}
                         className="h-8 text-sm flex-1"
                         isMulti
@@ -302,7 +294,7 @@ function RouteComponent() {
                     <div className="flex items-center gap-2 flex-1">
                       <span className="text-xs text-muted-foreground shrink-0">Publication</span>
                       <CreatableCombobox
-                        options={publicationOptions}
+                        options={publicationOptions || []}
                         value={file.publication}
                         className="h-8 text-sm flex-1"
                         onSelect={(val) => updateFile(file.id, { publication: val })}
@@ -318,7 +310,7 @@ function RouteComponent() {
                     <div className="flex items-center gap-2 flex-1">
                       <span className="text-xs text-muted-foreground shrink-0">Tags</span>
                       <CreatableCombobox
-                        options={tagOptions}
+                        options={tagOptions || []}
                         value={file.tags}
                         className="h-8 text-sm flex-1"
                         isMulti
@@ -340,7 +332,7 @@ function RouteComponent() {
                     <div className="flex items-center gap-2 flex-1">
                       <span className="text-xs text-muted-foreground shrink-0">Topics</span>
                       <CreatableCombobox
-                        options={topicOptions}
+                        options={topicOptions || []}
                         value={file.topics}
                         className="h-8 text-sm flex-1"
                         isMulti
@@ -360,7 +352,6 @@ function RouteComponent() {
                       />
                     </div>
                   </div>
-
                   <div
                     className={`text-xs text-muted-foreground truncate ${file.status === "PENDING" ? "pl-14" : "pl-9"}`}
                     title={file.file.name}

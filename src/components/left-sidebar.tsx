@@ -15,7 +15,7 @@ export function LeftSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) 
       },
       {
         title: "Library",
-        url: "/documents",
+        url: "/library",
         icon: Files,
       },
       {

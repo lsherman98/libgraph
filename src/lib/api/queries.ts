@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { getPeople, getPublications, getFirstPage, getPageByNumber, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection, fullTextSearch } from "./api";
+import type { UploadFilters } from "./api";
 import type { NodesTypeOptions } from "../pocketbase-types";
 
 export function usePeople() {
@@ -34,10 +35,10 @@ export function useTopics() {
     });
 }
 
-export function useUploads() {
+export function useUploads(filters?: UploadFilters) {
     return useQuery({
-        queryKey: ["uploads"],
-        queryFn: getUploads,
+        queryKey: ["uploads", filters],
+        queryFn: () => getUploads(filters),
         placeholderData: keepPreviousData
     });
 }

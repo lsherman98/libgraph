@@ -62,11 +62,74 @@ export const createTopic = async (data: Create<Collections.Topics>) => {
     return await pb.collection(Collections.Topics).create(data)
 }
 
-export const getUploads = async () => {
+export interface UploadFilters {
+    search?: string;
+    type?: string[];
+    status?: string[];
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+    tags?: string[];
+    topics?: string[];
+    people?: string[];
+    publication?: string;
+}
+
+export const getUploads = async (filters?: UploadFilters) => {
+    const filterParts: string[] = [];
+
+    if (filters?.type && filters.type.length > 0) {
+        const typeFilters = filters.type.map(t => `type = "${t}"`).join(' || ');
+        filterParts.push(`(${typeFilters})`);
+    }
+
+    if (filters?.status && filters.status.length > 0) {
+        const statusFilters = filters.status.map(s => `status = "${s}"`).join(' || ');
+        filterParts.push(`(${statusFilters})`);
+    }
+
+    if (filters?.tags && filters.tags.length > 0) {
+        const tagFilters = filters.tags.map(t => `tags ?~ "${t}"`).join(' || ');
+        filterParts.push(`(${tagFilters})`);
+    }
+
+    if (filters?.topics && filters.topics.length > 0) {
+        const topicFilters = filters.topics.map(t => `topic ?~ "${t}"`).join(' || ');
+        filterParts.push(`(${topicFilters})`);
+    }
+
+    if (filters?.people && filters.people.length > 0) {
+        const peopleFilters = filters.people.map(p => `people ?~ "${p}"`).join(' || ');
+        filterParts.push(`(${peopleFilters})`);
+    }
+
+    if (filters?.publication) {
+        filterParts.push(`publication = "${filters.publication}"`);
+    }
+
+    if (filters?.search && filters.search.trim()) {
+        filterParts.push(`(title ~ "${filters.search.trim()}" || file ~ "${filters.search.trim()}")`);
+    }
+
+    const sort = filters?.sortBy
+        ? `${filters.sortOrder === 'asc' ? '+' : '-'}${filters.sortBy}`
+        : '-created';
+
     return await pb.collection(Collections.Uploads).getFullList({
-        sort: '-created',
+        sort,
+        filter: filterParts.length > 0 ? filterParts.join(' && ') : undefined,
         expand: 'people,publication,topic,tags,uploads'
     })
+}
+
+export const searchUploadsFTS = async (query: string): Promise<any[]> => {
+    if (!query.trim()) return [];
+    const params = new URLSearchParams({ search: query });
+    const response = await pb.send(
+        `/api/collections/uploads/records/full-text-search?${params.toString()}`,
+        { method: 'GET' }
+    );
+    if (response.status === 204) return [];
+    return response;
 }
 
 export const getFirstPage = async (uploadId: string) => {

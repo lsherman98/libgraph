@@ -10,7 +10,6 @@ import { AnnotationsPanel } from "@/components/reader/annotations-panel";
 import { HighlightEditorPanel } from "@/components/reader/highlight-editor-panel";
 import { BookmarkEditorPanel, NoteEditorPanel } from "@/components/reader/bookmark-note-editor-panel";
 import { DocumentInfoPanel } from "@/components/reader/document-info-panel";
-import { WorkspacePanel } from "@/components/writer";
 import { Highlighter, Layers, PenLine, Bookmark, StickyNote, Info } from "lucide-react";
 import { useWorkspaceTabsStore, type WriterTab, type ReaderTab } from "@/lib/stores/workspace-tabs-store";
 import { useWritingProject } from "@/lib/api/queries";
@@ -19,6 +18,7 @@ import { useReaderStore } from "@/lib/stores/reader-store";
 import { useLocation } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { WorkspacePanel } from "./workspace";
 
 interface RightSidebarProps extends React.ComponentProps<typeof Sidebar> {
   currentPageId?: string;

@@ -49,7 +49,7 @@ func main() {
 		log.Fatal("Failed to initialize Chat hooks: ", err)
 	}
 
-	if err := fts.Init(app, "document_chunks"); err != nil {
+	if err := fts.Init(app, "document_chunks", "uploads"); err != nil {
 		log.Fatal("Failed to initialize Full Text Search: ", err)
 	}
 
