@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { PenLine, Plus, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { getUserRecord } from "@/lib/utils";
+import { getUserId } from "@/lib/utils";
 
 function ProjectsTableSkeleton() {
   return (
@@ -75,7 +75,7 @@ export function ProjectsTab() {
       title: newTitle || "Untitled",
       status: WritingProjectsStatusOptions.draft,
       content: "",
-      user: getUserRecord().id,
+      user: getUserId(),
     });
     setNewProjectOpen(false);
     setNewTitle("");

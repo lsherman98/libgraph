@@ -26,7 +26,7 @@ import { EditUploadDialog } from "@/components/edit-upload-dialog";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { AdvancedFilters } from "./advanced-filters";
 import { DocumentRow } from "./document-row";
-import { getUserRecord } from "@/lib/utils";
+import { getUserId } from "@/lib/utils";
 
 function DocumentsTableSkeleton() {
   return (
@@ -123,8 +123,8 @@ export function DocumentsTab() {
       {
         name: collectionName || "Untitled Collection",
         description: collectionDescription || undefined,
-        uploads: Array.from(selectedIds) as any,
-        user: getUserRecord().id,
+        uploads: Array.from(selectedIds) as string[],
+        user: getUserId(),
       },
       {
         onSuccess: () => {
@@ -290,7 +290,6 @@ export function DocumentsTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       <EditUploadDialog
         upload={editingUpload}
         open={!!editingUpload}

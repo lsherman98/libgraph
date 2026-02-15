@@ -16,7 +16,7 @@ import {
 import { CreatableCombobox } from "@/components/creatable-combobox";
 import { useReaderStore } from "@/lib/stores/reader-store";
 import { AddToProjectButton } from "./add-to-project-button";
-import { getUserRecord } from "@/lib/utils";
+import { getUserId } from "@/lib/utils";
 
 export function BookmarkEditorPanel() {
   const editorState = useReaderStore((state) => state.editorState);
@@ -71,7 +71,7 @@ export function BookmarkEditorPanel() {
         block_id: pendingBookmark.blockId,
         comment: comment || "",
         tags: selectedTags.length > 0 ? selectedTags : undefined,
-        user: getUserRecord().id,
+        user: getUserId(),
       });
     }
     handleClose();
@@ -90,7 +90,7 @@ export function BookmarkEditorPanel() {
 
   const handleTagCreate = (title: string) => {
     createTagMutation.mutate(
-      { title, user: getUserRecord().id },
+      { title, user: getUserId() },
       {
         onSuccess: (newTag) => {
           setSelectedTags((prev) => [...prev, newTag.id]);
@@ -240,7 +240,7 @@ export function NoteEditorPanel() {
         block_id: pendingNote.blockId,
         content: content.trim(),
         tags: selectedTags.length > 0 ? selectedTags : undefined,
-        user: getUserRecord().id,
+        user: getUserId(),
       });
     }
     handleClose();
@@ -259,7 +259,7 @@ export function NoteEditorPanel() {
 
   const handleTagCreate = (title: string) => {
     createTagMutation.mutate(
-      { title, user: getUserRecord().id },
+      { title, user: getUserId() },
       {
         onSuccess: (newTag) => {
           setSelectedTags((prev) => [...prev, newTag.id]);

@@ -124,12 +124,12 @@ export const getUploads = async (filters?: UploadFilters) => {
 export const searchUploadsFTS = async (query: string): Promise<any[]> => {
     if (!query.trim()) return [];
     const params = new URLSearchParams({ search: query });
-    const response = await pb.send(
+    const result = await pb.send(
         `/api/collections/uploads/records/full-text-search?${params.toString()}`,
         { method: 'GET' }
     );
-    if (response.status === 204) return [];
-    return response;
+    if (!result) return [];
+    return Array.isArray(result) ? result : [];
 }
 
 export const getFirstPage = async (uploadId: string) => {
@@ -408,7 +408,7 @@ export const sendChatMessage = async (
     });
 }
 
-export const fullTextSearch = async (uploadId: string, query: string): Promise<FTSSearchResult[]> => {
+export const fullTextSearch = async (uploadId: string, query: string, signal?: AbortSignal): Promise<FTSSearchResult[]> => {
     if (!query.trim()) return [];
 
     const params = new URLSearchParams({
@@ -416,17 +416,15 @@ export const fullTextSearch = async (uploadId: string, query: string): Promise<F
         upload: uploadId,
     });
 
-    const response = await pb.send(
+    const result = await pb.send(
         `/api/collections/document_chunks/records/full-text-search?${params.toString()}`,
         {
             method: 'GET',
+            signal,
         }
     );
 
-    if (response.status === 204) return [];
-    if (!response.ok) {
-        throw new Error("Full-text search failed");
-    }
-
-    return await response.json();
+    // pb.send() returns parsed JSON directly (or null for 204)
+    if (!result) return [];
+    return Array.isArray(result) ? result : [];
 }

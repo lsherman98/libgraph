@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, Trash2 } from "lucide-react";
-import { cn, getUserRecord } from "@/lib/utils";
+import { cn, getUserId } from "@/lib/utils";
 import { HighlightsColorOptions } from "@/lib/pocketbase-types";
 import { useTags } from "@/lib/api/queries";
 import { useCreateTag, useCreateHighlight, useUpdateHighlight, useDeleteHighlight } from "@/lib/api/mutations";
@@ -109,7 +109,7 @@ export function HighlightEditorPanel() {
         tags: selectedTags.length > 0 ? selectedTags : undefined,
         start_offset: pendingHighlight.startOffset,
         end_offset: pendingHighlight.endOffset,
-        user: getUserRecord().id,
+        user: getUserId(),
       });
     }
     handleClose();
@@ -128,7 +128,7 @@ export function HighlightEditorPanel() {
 
   const handleTagCreate = (title: string) => {
     createTagMutation.mutate(
-      { title, user: getUserRecord().id },
+      { title, user: getUserId() },
       {
         onSuccess: (newTag) => {
           setSelectedTags((prev) => [...prev, newTag.id]);

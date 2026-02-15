@@ -42,11 +42,13 @@ export function DocumentSearchBar({
   const debouncedSetQuery = useDebouncedCallback((value: string) => {
     setDebouncedQuery(value);
     setCurrentMatchIndex(0);
-  }, 300);
+  }, 400);
 
   const { data: searchResults = [], isLoading } = useFullTextSearch(uploadId, debouncedQuery);
 
   // Build ordered match list, expanding each chunk to individual term occurrences
+  // Capped at MAX_MATCHES to avoid performance issues on broad search terms
+  const MAX_MATCHES = 500;
   const matches: SearchMatch[] = useMemo(() => {
     if (!debouncedQuery.trim() || searchResults.length === 0) return [];
 
@@ -67,6 +69,7 @@ export function DocumentSearchBar({
 
     const expanded: SearchMatch[] = [];
     for (const chunk of sortedChunks) {
+      if (expanded.length >= MAX_MATCHES) break;
       regex.lastIndex = 0;
       let occIdx = 0;
       while (regex.exec(chunk.content) !== null) {
@@ -77,6 +80,7 @@ export function DocumentSearchBar({
           occurrenceIndex: occIdx,
         });
         occIdx++;
+        if (expanded.length >= MAX_MATCHES) break;
       }
       // If FTS matched but our simple regex didn't, still include one entry
       if (occIdx === 0) {
@@ -156,10 +160,12 @@ export function DocumentSearchBar({
     clearHighlights();
 
     if (debouncedQuery.trim()) {
-      // Small delay to let React finish rendering before DOM manipulation
+      // Use double-rAF to let React fully commit before DOM manipulation
       requestAnimationFrame(() => {
-        applyHighlights(debouncedQuery);
-        reconnectObserver(observerRef, observerTimerRef, debouncedQuery, activeMatchRef);
+        requestAnimationFrame(() => {
+          applyHighlights(debouncedQuery);
+          reconnectObserver(observerRef, observerTimerRef, debouncedQuery, activeMatchRef);
+        });
       });
     }
 
@@ -327,16 +333,31 @@ function getReaderContainer(): Element | null {
 
 /**
  * Clears all FTS search highlights from the document.
+ * Batches DOM reads and writes to avoid layout thrashing.
  */
 function clearHighlights() {
   const marks = document.querySelectorAll(`.${HIGHLIGHT_CLASS}`);
+  if (marks.length === 0) return;
+
+  // Collect all marks and their parents first (read phase)
+  const ops: { mark: Element; parent: Node; textNode: Text }[] = [];
   marks.forEach((mark) => {
     const parent = mark.parentNode;
     if (parent) {
-      parent.replaceChild(document.createTextNode(mark.textContent || ""), mark);
-      parent.normalize();
+      ops.push({ mark, parent, textNode: document.createTextNode(mark.textContent || "") });
     }
   });
+
+  // Perform all replacements (write phase)
+  for (const { mark, parent, textNode } of ops) {
+    parent.replaceChild(textNode, mark);
+  }
+
+  // Normalize in a separate pass to merge adjacent text nodes
+  const parents = new Set(ops.map((o) => o.parent));
+  for (const parent of parents) {
+    parent.normalize();
+  }
 }
 
 /**
@@ -509,7 +530,7 @@ function reconnectObserver(
         // Highlights exist — reset retry count
         retryCount = 0;
       }
-    }, 50);
+    }, 150);
   });
 
   observer.observe(container, { childList: true, subtree: true });

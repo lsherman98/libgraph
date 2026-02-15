@@ -15,7 +15,7 @@ import {
   useCreateTopic,
 } from "@/lib/api/mutations";
 import { usePeople, usePublications, useTags, useTopics, useUploads, useUploadById } from "@/lib/api/queries";
-import { getUserRecord } from "@/lib/utils";
+import { getUserId } from "@/lib/utils";
 import {
   UploadsTypeOptions,
   PeopleTypeOptions,
@@ -201,7 +201,7 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
                 }
                 onCreate={(name) => {
                   createPersonMutation
-                    .mutateAsync({ name, type: PeopleTypeOptions.author, user: getUserRecord().id })
+                    .mutateAsync({ name, type: PeopleTypeOptions.author, user: getUserId() })
                     .then((record) => setSubjects((prev) => [...prev, record.id]));
                 }}
                 placeholder="Select authors..."
@@ -218,7 +218,7 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
                 onSelect={(val) => setPublication(val)}
                 onCreate={(name) => {
                   createPublicationMutation
-                    .mutateAsync({ name, user: getUserRecord().id })
+                    .mutateAsync({ name, user: getUserId() })
                     .then((record) => setPublication(record.id));
                 }}
                 placeholder="Select publication..."
@@ -238,7 +238,7 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
                 }
                 onCreate={(tagTitle) => {
                   createTagMutation
-                    .mutateAsync({ title: tagTitle, user: getUserRecord().id })
+                    .mutateAsync({ title: tagTitle, user: getUserId() })
                     .then((record) => setTags((prev) => [...prev, record.id]));
                 }}
                 placeholder="Select tags..."
@@ -258,7 +258,7 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
                 }
                 onCreate={(topicTitle) => {
                   createTopicMutation
-                    .mutateAsync({ title: topicTitle, user: getUserRecord().id })
+                    .mutateAsync({ title: topicTitle, user: getUserId() })
                     .then((record) => setTopics((prev) => [...prev, record.id]));
                 }}
                 placeholder="Select topics..."

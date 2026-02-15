@@ -6,6 +6,7 @@ import {
   usePageHighlights,
   useBookmarks,
   useNotes,
+  useUploadById,
 } from "@/lib/api/queries";
 import { useCreateHighlight, useUpdateHighlight, useDeleteHighlight } from "@/lib/api/mutations";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +15,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { BookOpen, BookMarked, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from "lucide-react";
 import { pb } from "@/lib/pocketbase";
-import { Collections, HighlightsColorOptions } from "@/lib/pocketbase-types";
+import { HighlightsColorOptions } from "@/lib/pocketbase-types";
 
 const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac", ".wma", ".webm", ".mp4"]);
 
@@ -27,7 +28,7 @@ import { Label } from "@/components/ui/label";
 import { useReaderSettings, usePageSettings, FONT_FAMILIES } from "@/lib/hooks/use-reader-settings";
 import { ReaderSettingsPanel, QuickFontSizeControl } from "@/components/reader/reader-settings-panel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn, getUserRecord, useDebouncedCallback } from "@/lib/utils";
+import { cn, getUserId, useDebouncedCallback } from "@/lib/utils";
 import { useSidebar } from "@/components/ui/sidebar";
 import { useReaderStore } from "@/lib/stores/reader-store";
 import Markdown from "react-markdown";
@@ -961,7 +962,7 @@ export function ReaderPane({
   onPageChange,
   onTitleLoad,
 }: ReaderPaneProps) {
-  const [upload, setUpload] = useState<any>(null);
+  const { data: upload } = useUploadById(uploadId);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const { isReadingMode, setReadingMode, setCurrentPageState, setCurrentUploadId, setNavigateToPage } =
@@ -1054,7 +1055,7 @@ export function ReaderPane({
         tags: data.tags,
         start_offset: data.start_offset,
         end_offset: data.end_offset,
-        user: getUserRecord().id,
+        user: getUserId(),
       });
     },
     [uploadId, createHighlightMutation],
@@ -1077,30 +1078,29 @@ export function ReaderPane({
   const onTitleLoadRef = useRef(onTitleLoad);
   onTitleLoadRef.current = onTitleLoad;
 
+  // Propagate title once upload data is available
   useEffect(() => {
-    if (uploadId) {
-      pb.collection(Collections.Uploads)
-        .getOne(uploadId, {
-          expand: "subjects,publication,topic,tags",
-        })
-        .then(async (data) => {
-          setUpload(data);
-          onTitleLoadRef.current?.(data.title || "Untitled");
-
-          // Build audio URL if the file is audio
-          if (data.file && isAudioFile(data.file)) {
-            try {
-              const token = await pb.files.getToken();
-              const url = pb.files.getURL(data, data.file, { token });
-              setAudioUrl(url);
-            } catch (err) {
-              console.error("Failed to get audio file URL:", err);
-            }
-          }
-        })
-        .catch(console.error);
+    if (upload) {
+      onTitleLoadRef.current?.(upload.title || "Untitled");
     }
-  }, [uploadId]);
+  }, [upload?.id, upload?.title]);
+
+  // Build audio URL reactively when upload data is available
+  useEffect(() => {
+    if (upload?.file && isAudioFile(upload.file)) {
+      pb.files
+        .getToken()
+        .then((token) => {
+          const url = pb.files.getURL(upload, upload.file, { token });
+          setAudioUrl(url);
+        })
+        .catch((err) => {
+          console.error("Failed to get audio file URL:", err);
+        });
+    } else {
+      setAudioUrl(null);
+    }
+  }, [upload?.id, upload?.file]);
 
   const handlePageChange = useCallback(
     (page: number) => {
@@ -1238,7 +1238,7 @@ export function ReaderPane({
                         }
                       }
                     }}
-                    className="w-12 h-7 text-center text-sm"
+                    className="w-16 h-7 text-center text-sm"
                   />
                   <span className="text-sm text-muted-foreground whitespace-nowrap">/ {totalPages || "–"}</span>
                 </div>

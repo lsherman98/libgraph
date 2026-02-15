@@ -21,8 +21,12 @@ export function handleError(error: Error) {
 }
 
 export function getUserRecord(): UsersResponse {
-  pb.collection("users").authRefresh();
+  // pb.collection("users").authRefresh();
   return pb.authStore.record as UsersResponse;
+}
+
+export function getUserId(): string {
+  return pb.authStore.record?.id || "";
 }
 
 export function useDebouncedCallback<T extends (...args: any[]) => void>(callback: T, delay: number): T {

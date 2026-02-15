@@ -12,7 +12,7 @@ import { CreatableCombobox } from "@/components/creatable-combobox";
 
 import { useUpload, useCreatePerson, useCreatePublication, useCreateTag, useCreateTopic } from "@/lib/api/mutations";
 import { usePeople, usePublications, useTags, useTopics } from "@/lib/api/queries";
-import { getUserRecord } from "@/lib/utils";
+import { getUserId } from "@/lib/utils";
 import {
   UploadsStatusOptions,
   UploadsTypeOptions,
@@ -137,7 +137,7 @@ function RouteComponent() {
           publication: fileData.publication || undefined,
           tags: fileData.tags.length > 0 ? fileData.tags : undefined,
           topic: fileData.topics.length > 0 ? fileData.topics : undefined,
-          user: getUserRecord().id,
+          user: getUserId(),
           status: UploadsStatusOptions.PENDING,
         });
         updateFile(fileData.id, { status: "SUCCESS" });
@@ -282,7 +282,7 @@ function RouteComponent() {
                         }}
                         onCreate={(name) => {
                           createPersonMutation
-                            .mutateAsync({ name, type: PeopleTypeOptions.author, user: getUserRecord().id })
+                            .mutateAsync({ name, type: PeopleTypeOptions.author, user: getUserId() })
                             .then((record) => {
                               updateFile(file.id, { subjects: [...file.subjects, record.id] });
                             });
@@ -299,7 +299,7 @@ function RouteComponent() {
                         className="h-8 text-sm flex-1"
                         onSelect={(val) => updateFile(file.id, { publication: val })}
                         onCreate={(name) => {
-                          createPublicationMutation.mutateAsync({ name, user: getUserRecord().id }).then((record) => {
+                          createPublicationMutation.mutateAsync({ name, user: getUserId() }).then((record) => {
                             updateFile(file.id, { publication: record.id });
                           });
                         }}
@@ -321,7 +321,7 @@ function RouteComponent() {
                           updateFile(file.id, { tags: newTags });
                         }}
                         onCreate={(title) => {
-                          createTagMutation.mutateAsync({ title, user: getUserRecord().id }).then((record) => {
+                          createTagMutation.mutateAsync({ title, user: getUserId() }).then((record) => {
                             updateFile(file.id, { tags: [...file.tags, record.id] });
                           });
                         }}
@@ -343,7 +343,7 @@ function RouteComponent() {
                           updateFile(file.id, { topics: newTopics });
                         }}
                         onCreate={(title) => {
-                          createTopicMutation.mutateAsync({ title, user: getUserRecord().id }).then((record) => {
+                          createTopicMutation.mutateAsync({ title, user: getUserId() }).then((record) => {
                             updateFile(file.id, { topics: [...file.topics, record.id] });
                           });
                         }}

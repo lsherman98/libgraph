@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { FileText, Plus, Trash2, Pencil, Library, Search } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import { getUserRecord } from "@/lib/utils";
+import { getUserId } from "@/lib/utils";
 
 function CollectionsGridSkeleton() {
   return (
@@ -81,9 +81,7 @@ function UploadPicker({
   search: string;
   onSearchChange: (value: string) => void;
 }) {
-  const filtered = uploads.filter(
-    (u) => !search || (u.title || "").toLowerCase().includes(search.toLowerCase()),
-  );
+  const filtered = uploads.filter((u) => !search || (u.title || "").toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="grid gap-2">
@@ -104,10 +102,7 @@ function UploadPicker({
               key={upload.id}
               className="flex items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-accent cursor-pointer"
             >
-              <Checkbox
-                checked={selectedIds.includes(upload.id)}
-                onCheckedChange={() => onToggle(upload.id)}
-              />
+              <Checkbox checked={selectedIds.includes(upload.id)} onCheckedChange={() => onToggle(upload.id)} />
               <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
               <span className="truncate">{upload.title || "Untitled"}</span>
             </label>
@@ -155,7 +150,7 @@ export function CollectionsTab() {
       name: collectionName || "Untitled Collection",
       description: collectionDescription || undefined,
       uploads: collectionUploads.length > 0 ? (collectionUploads as any) : undefined,
-      user: getUserRecord().id,
+      user: getUserId(),
     });
     setNewCollectionOpen(false);
     resetForm();
@@ -268,11 +263,7 @@ export function CollectionsTab() {
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="edit-col-name">Name</Label>
-              <Input
-                id="edit-col-name"
-                value={collectionName}
-                onChange={(e) => setCollectionName(e.target.value)}
-              />
+              <Input id="edit-col-name" value={collectionName} onChange={(e) => setCollectionName(e.target.value)} />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="edit-col-desc">Description (optional)</Label>
@@ -331,9 +322,7 @@ export function CollectionsTab() {
                       <div className="min-w-0">
                         <h3 className="font-semibold truncate">{collection.name || "Untitled"}</h3>
                         {collection.description && (
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                            {collection.description}
-                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{collection.description}</p>
                         )}
                       </div>
                     </div>

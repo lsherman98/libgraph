@@ -256,8 +256,9 @@ export function useMessages(chatId?: string) {
 export function useFullTextSearch(uploadId: string, query: string) {
     return useQuery({
         queryKey: ["fts", uploadId, query],
-        queryFn: () => fullTextSearch(uploadId, query),
+        queryFn: ({ signal }) => fullTextSearch(uploadId, query, signal),
         enabled: !!uploadId && query.trim().length > 0,
         placeholderData: keepPreviousData,
+        staleTime: 60_000,
     });
 }

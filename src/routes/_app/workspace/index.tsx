@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useCallback, useState } from "react";
 import { BookOpen, BookMarked, PenLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,6 @@ export const Route = createFileRoute("/_app/workspace/")({
 });
 
 function RouteComponent() {
-  const navigate = useNavigate();
   const { id, type } = Route.useSearch();
   const { tabs, activeTabId, addReaderTab, addWriterTab, updateTabTitle, setWriterTabDirty, getTab } =
     useWorkspaceTabsStore();
@@ -36,17 +35,13 @@ function RouteComponent() {
   const [newTabOpen, setNewTabOpen] = useState(false);
   const [initialDialogTab, setInitialDialogTab] = useState<"documents" | "projects">("documents");
 
-  // Get active tab and determine its type
   const activeTab = activeTabId ? getTab(activeTabId) : null;
   const activeWriterTab = activeTab?.type === "writer" ? activeTab : null;
 
-  // Get active project for writer tabs
-  const { data: activeProject } = useWritingProject(activeWriterTab?.projectId ?? null);
+  const { data: activeProject } = useWritingProject(activeWriterTab?.projectId);
 
-  // Local content state for debounced saving (writer)
   const [localContent, setLocalContent] = useState<string>("");
 
-  // Sync URL params to tabs
   useEffect(() => {
     if (id && type === "upload") {
       addReaderTab(id, "Loading...");
@@ -56,17 +51,14 @@ function RouteComponent() {
         addWriterTab(id, project.title);
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, type, projects]);
 
-  // Sync active project content to local state
   useEffect(() => {
     if (activeProject) {
       setLocalContent(activeProject.content || "");
     }
   }, [activeProject?.id, activeProject?.content]);
 
-  // Update tab title when project loads
   useEffect(() => {
     if (activeProject && activeTabId) {
       updateTabTitle(activeTabId, activeProject.title);
@@ -105,7 +97,6 @@ function RouteComponent() {
     setWriterTabDirty(activeWriterTab.id, false);
   }, [activeWriterTab, localContent, updateProject, setWriterTabDirty]);
 
-  // Keyboard shortcut for save
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
@@ -117,7 +108,6 @@ function RouteComponent() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleSave]);
 
-  // No tabs - show empty state
   if (tabs.length === 0) {
     return (
       <div className="flex flex-1 w-full items-center justify-center">
@@ -156,7 +146,6 @@ function RouteComponent() {
     );
   }
 
-  // Has tabs - show workspace with split view support
   return (
     <TooltipProvider>
       <div className="h-full w-full flex flex-col overflow-hidden">
