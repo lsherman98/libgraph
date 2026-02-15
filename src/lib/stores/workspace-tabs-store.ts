@@ -1,44 +1,32 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-// Base tab interface with common properties
 interface BaseTab {
     id: string;
     title: string;
 }
 
-// Reader tab extends base with reader-specific properties
 export interface ReaderTab extends BaseTab {
     type: "reader";
     uploadId: string;
     currentPage: number;
 }
 
-// Writer tab extends base with writer-specific properties
 export interface WriterTab extends BaseTab {
     type: "writer";
     projectId: string;
     isDirty: boolean;
 }
 
-// Union type for all tab types
 export type WorkspaceTab = ReaderTab | WriterTab;
-
 export type SplitMode = "none" | "horizontal";
 
 interface WorkspaceTabsStore {
-    // Tab state
     tabs: WorkspaceTab[];
     activeTabId: string | null;
-
-    // Split view state
     splitMode: SplitMode;
     splitTabId: string | null;
-
-    // Panel sizes (percentages)
     panelSizes: number[];
-
-    // Tab actions
     addReaderTab: (uploadId: string, title: string) => string;
     addWriterTab: (projectId: string, title: string) => string;
     removeTab: (tabId: string) => void;
@@ -46,13 +34,9 @@ interface WorkspaceTabsStore {
     updateTabTitle: (tabId: string, title: string) => void;
     updateReaderTabPage: (tabId: string, page: number) => void;
     setWriterTabDirty: (tabId: string, isDirty: boolean) => void;
-
-    // Split view actions
     setSplitMode: (mode: SplitMode) => void;
     setPanelSizes: (sizes: number[]) => void;
     closeSplit: () => void;
-
-    // Utilities
     getTab: (tabId: string) => WorkspaceTab | undefined;
 }
 
@@ -131,7 +115,6 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
                 let newActiveTabId = state.activeTabId;
                 let newSplitTabId = state.splitTabId;
 
-                // If closing the active tab, switch to adjacent tab
                 if (state.activeTabId === tabId) {
                     if (newTabs.length > 0) {
                         const newIndex = Math.min(tabIndex, newTabs.length - 1);
@@ -141,7 +124,6 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
                     }
                 }
 
-                // If closing the split tab, close split mode
                 if (state.splitTabId === tabId) {
                     newSplitTabId = null;
                 }
@@ -191,7 +173,6 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
                 if (mode === "none") {
                     set({ splitMode: "none", splitTabId: null });
                 } else {
-                    // If enabling split mode without a split tab, use the next available tab
                     if (!state.splitTabId && state.tabs.length > 1) {
                         const otherTab = state.tabs.find((t) => t.id !== state.activeTabId);
                         set({ splitMode: mode, splitTabId: otherTab?.id ?? null });

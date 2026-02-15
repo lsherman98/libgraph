@@ -243,7 +243,7 @@ export function useChat(id: string) {
     });
 }
 
-export function useMessages(chatId: string) {
+export function useMessages(chatId?: string) {
     return useQuery({
         queryKey: ["messages", chatId],
         queryFn: () => getMessages(chatId),

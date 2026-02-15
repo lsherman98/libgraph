@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   usePeople,
   usePublications,
@@ -10,15 +9,7 @@ import {
   useMessages,
   useCollections,
 } from "@/lib/api/queries";
-import { useCreateChat, useCreateMessage } from "@/lib/api/mutations";
-import {
-  sendChatMessage,
-  type ChatMessage,
-  type ChatFilters,
-  type ChatSource,
-  type LLMParameters,
-  type RetrievalParameters,
-} from "@/lib/api/api";
+import { useSendChatMessage } from "@/lib/api/mutations";
 import { ChatHistorySidebar } from "@/components/chat/chat-history-sidebar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -51,10 +42,11 @@ import {
   Settings2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { UploadsTypeOptions, MessagesRoleOptions, type MessagesResponse } from "@/lib/pocketbase-types";
+import { UploadsTypeOptions, type MessagesResponse } from "@/lib/pocketbase-types";
 import { SourcePreviewDialog } from "@/components/chat/source-preview-dialog";
+import type { ChatFilters, ChatMessage, ChatSource, LLMParameters, RetrievalParameters } from "@/lib/types";
 
-export const Route = createFileRoute("/_app/chat")({
+export const Route = createFileRoute("/_app/chat/")({
   component: ChatPage,
 });
 
@@ -65,7 +57,7 @@ interface LocalMessage extends ChatMessage {
 }
 
 function ChatPage() {
-  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [activeChatId, setActiveChatId] = useState<string>();
   const [localMessages, setLocalMessages] = useState<LocalMessage[]>([]);
   const [input, setInput] = useState("");
   const [mode, setMode] = useState<"chat" | "search">("chat");
@@ -92,7 +84,6 @@ function ChatPage() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const queryClient = useQueryClient();
 
   const { data: people } = usePeople();
   const { data: publications } = usePublications();
@@ -102,8 +93,6 @@ function ChatPage() {
   const { data: collections } = useCollections();
 
   const { data: dbMessages, isLoading: isLoadingMessages } = useMessages(activeChatId);
-  const createChatMutation = useCreateChat();
-  const createMessageMutation = useCreateMessage();
 
   // Convert DB messages to local format when they load
   useEffect(() => {
@@ -139,86 +128,16 @@ function ChatPage() {
     adjustTextareaHeight();
   }, [input, adjustTextareaHeight]);
 
-  const chatMutation = useMutation({
-    mutationFn: async (message: string) => {
-      const history = localMessages.filter((m) => !m.isLoading).map((m) => ({ role: m.role, content: m.content }));
-      return sendChatMessage(message, mode, filters, history, mode === "chat" ? llmParams : undefined, retrievalParams);
-    },
-    onMutate: (message) => {
-      const userMessage: LocalMessage = {
-        id: crypto.randomUUID(),
-        role: "user",
-        content: message,
-      };
-      const loadingMessage: LocalMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: "",
-        isLoading: true,
-      };
-      setLocalMessages((prev) => [...prev, userMessage, loadingMessage]);
-      setInput("");
-    },
-    onSuccess: async (data, message) => {
-      // Determine or create the chat record
-      let chatId = activeChatId;
-      if (!chatId) {
-        // Create a new chat with the first message as the title
-        let title = message.length > 80 ? message.slice(0, 80) + "…" : message;
-        if (mode === "search") {
-          title = `Search: ${title}`;
-        }
-        const chat = await createChatMutation.mutateAsync({ title });
-        chatId = chat.id;
-        setActiveChatId(chatId);
-      }
-
-      // Save user message to DB
-      await createMessageMutation.mutateAsync({
-        chat: chatId,
-        role: MessagesRoleOptions.user,
-        content: message,
-      });
-
-      // Save assistant message to DB
-      await createMessageMutation.mutateAsync({
-        chat: chatId,
-        role: MessagesRoleOptions.assistant,
-        content: data.message,
-        sources: data.sources || null,
-      });
-
-      // Invalidate messages so React Query refetches
-      queryClient.invalidateQueries({ queryKey: ["messages", chatId] });
-      queryClient.invalidateQueries({ queryKey: ["chats"] });
-
-      // Update local state to remove loading message and show response
-      setLocalMessages((prev) => {
-        const newMessages = prev.filter((m) => !m.isLoading);
-        return [
-          ...newMessages,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant" as const,
-            content: data.message,
-            sources: data.sources,
-          },
-        ];
-      });
-    },
-    onError: (error) => {
-      setLocalMessages((prev) => {
-        const newMessages = prev.filter((m) => !m.isLoading);
-        return [
-          ...newMessages,
-          {
-            id: crypto.randomUUID(),
-            role: "assistant" as const,
-            content: `Sorry, an error occurred: ${error.message}`,
-          },
-        ];
-      });
-    },
+  const chatMutation = useSendChatMessage({
+    mode,
+    filters,
+    llmParams,
+    retrievalParams,
+    localMessages,
+    activeChatId,
+    setActiveChatId,
+    setLocalMessages,
+    setInput,
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -271,7 +190,7 @@ function ChatPage() {
   };
 
   const handleNewChat = () => {
-    setActiveChatId(null);
+    setActiveChatId(undefined);
     setLocalMessages([]);
     setInput("");
   };

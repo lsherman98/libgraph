@@ -12,11 +12,11 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
-import { Route as AppChatRouteImport } from './routes/_app/chat'
 import { Route as AppWorkspaceIndexRouteImport } from './routes/_app/workspace/index'
 import { Route as AppUploadIndexRouteImport } from './routes/_app/upload/index'
 import { Route as AppGraphIndexRouteImport } from './routes/_app/graph/index'
 import { Route as AppDocumentsIndexRouteImport } from './routes/_app/documents/index'
+import { Route as AppChatIndexRouteImport } from './routes/_app/chat/index'
 
 const SigninLazyRouteImport = createFileRoute('/signin')()
 
@@ -28,11 +28,6 @@ const SigninLazyRoute = SigninLazyRouteImport.update({
 const AppRoute = AppRouteImport.update({
   id: '/_app',
   getParentRoute: () => rootRouteImport,
-} as any)
-const AppChatRoute = AppChatRouteImport.update({
-  id: '/chat',
-  path: '/chat',
-  getParentRoute: () => AppRoute,
 } as any)
 const AppWorkspaceIndexRoute = AppWorkspaceIndexRouteImport.update({
   id: '/workspace/',
@@ -54,11 +49,16 @@ const AppDocumentsIndexRoute = AppDocumentsIndexRouteImport.update({
   path: '/documents/',
   getParentRoute: () => AppRoute,
 } as any)
+const AppChatIndexRoute = AppChatIndexRouteImport.update({
+  id: '/chat/',
+  path: '/chat/',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
-  '/chat': typeof AppChatRoute
+  '/chat/': typeof AppChatIndexRoute
   '/documents/': typeof AppDocumentsIndexRoute
   '/graph/': typeof AppGraphIndexRoute
   '/upload/': typeof AppUploadIndexRoute
@@ -67,7 +67,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
-  '/chat': typeof AppChatRoute
+  '/chat': typeof AppChatIndexRoute
   '/documents': typeof AppDocumentsIndexRoute
   '/graph': typeof AppGraphIndexRoute
   '/upload': typeof AppUploadIndexRoute
@@ -77,7 +77,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
-  '/_app/chat': typeof AppChatRoute
+  '/_app/chat/': typeof AppChatIndexRoute
   '/_app/documents/': typeof AppDocumentsIndexRoute
   '/_app/graph/': typeof AppGraphIndexRoute
   '/_app/upload/': typeof AppUploadIndexRoute
@@ -88,7 +88,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/signin'
-    | '/chat'
+    | '/chat/'
     | '/documents/'
     | '/graph/'
     | '/upload/'
@@ -106,7 +106,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/signin'
-    | '/_app/chat'
+    | '/_app/chat/'
     | '/_app/documents/'
     | '/_app/graph/'
     | '/_app/upload/'
@@ -133,13 +133,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
-    }
-    '/_app/chat': {
-      id: '/_app/chat'
-      path: '/chat'
-      fullPath: '/chat'
-      preLoaderRoute: typeof AppChatRouteImport
-      parentRoute: typeof AppRoute
     }
     '/_app/workspace/': {
       id: '/_app/workspace/'
@@ -169,11 +162,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDocumentsIndexRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/chat/': {
+      id: '/_app/chat/'
+      path: '/chat'
+      fullPath: '/chat/'
+      preLoaderRoute: typeof AppChatIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
 interface AppRouteChildren {
-  AppChatRoute: typeof AppChatRoute
+  AppChatIndexRoute: typeof AppChatIndexRoute
   AppDocumentsIndexRoute: typeof AppDocumentsIndexRoute
   AppGraphIndexRoute: typeof AppGraphIndexRoute
   AppUploadIndexRoute: typeof AppUploadIndexRoute
@@ -181,7 +181,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
-  AppChatRoute: AppChatRoute,
+  AppChatIndexRoute: AppChatIndexRoute,
   AppDocumentsIndexRoute: AppDocumentsIndexRoute,
   AppGraphIndexRoute: AppGraphIndexRoute,
   AppUploadIndexRoute: AppUploadIndexRoute,

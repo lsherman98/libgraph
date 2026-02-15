@@ -307,7 +307,8 @@ export const deleteChat = async (id: string) => {
     return await pb.collection(Collections.Chats).delete(id);
 }
 
-export const getMessages = async (chatId: string) => {
+export const getMessages = async (chatId?: string) => {
+    if (!chatId) return null;
     return await pb.collection(Collections.Messages).getFullList({
         filter: `chat = "${chatId}"`,
         sort: 'created'
@@ -325,8 +326,8 @@ export const sendChatMessage = async (
     history?: ChatMessage[],
     llmParameters?: LLMParameters,
     retrievalParameters?: RetrievalParameters,
-): Promise<ChatResponseData> => {
-    const response = await pb.send(`/api/chat`, {
+) => {
+    return await pb.send<ChatResponseData>(`/api/chat`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -341,13 +342,6 @@ export const sendChatMessage = async (
             retrieval_parameters: retrievalParameters,
         }),
     });
-
-    if (!response.ok) {
-        const error = await response.json().catch(() => ({}));
-        throw new Error(error.message || 'Chat request failed');
-    }
-
-    return response.json();
 }
 
 export const fullTextSearch = async (uploadId: string, query: string): Promise<FTSSearchResult[]> => {

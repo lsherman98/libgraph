@@ -106,6 +106,7 @@ export interface FTSSearchResult {
 }
 
 export interface ChatResponseData {
+    message: string;
     sources?: ChatSource[];
 }
 

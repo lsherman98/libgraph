@@ -16,7 +16,7 @@ import { useState } from "react";
 import type { ChatsResponse } from "@/lib/pocketbase-types";
 
 interface ChatHistorySidebarProps {
-  activeChatId: string | null;
+  activeChatId?: string;
   onSelectChat: (chatId: string) => void;
   onNewChat: () => void;
 }
