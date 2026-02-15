@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useCallback, useState } from "react";
+import { useEffect, useCallback, useState, useRef } from "react";
 import { BookOpen, BookMarked, PenLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -39,6 +39,7 @@ function RouteComponent() {
   const { data: activeProject } = useWritingProject(activeWriterTab?.projectId);
 
   const [localContent, setLocalContent] = useState<string>("");
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (id && type === "upload") {
@@ -58,10 +59,10 @@ function RouteComponent() {
   }, [activeProject?.id, activeProject?.content]);
 
   useEffect(() => {
-    if (activeProject && activeTabId) {
-      updateTabTitle(activeTabId, activeProject.title);
+    if (activeWriterTab && activeProject && activeProject.id === activeWriterTab.projectId) {
+      updateTabTitle(activeWriterTab.id, activeProject.title);
     }
-  }, [activeProject?.title, activeTabId, updateTabTitle]);
+  }, [activeProject?.id, activeProject?.title, activeWriterTab?.id, activeWriterTab?.projectId, updateTabTitle]);
 
   const handleReaderTitleLoad = useCallback(
     (title: string) => {
@@ -72,28 +73,54 @@ function RouteComponent() {
     [activeTabId, updateTabTitle],
   );
 
+  const saveContent = useCallback(
+    async (content: string) => {
+      if (!activeWriterTab?.projectId) return;
+
+      await updateProject.mutateAsync({
+        id: activeWriterTab.projectId,
+        data: { content },
+      });
+
+      setWriterTabDirty(activeWriterTab.id, false);
+    },
+    [activeWriterTab, updateProject, setWriterTabDirty],
+  );
+
   const handleContentChange = useCallback(
     (content: string) => {
       setLocalContent(content);
       if (activeTabId) {
         setWriterTabDirty(activeTabId, true);
       }
+
+      // Debounced auto-save
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+      autoSaveTimerRef.current = setTimeout(() => {
+        saveContent(content);
+      }, 1000);
     },
-    [activeTabId, setWriterTabDirty],
+    [activeTabId, setWriterTabDirty, saveContent],
   );
 
+  // Clean up auto-save timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Immediate save on ⌘S
   const handleSave = useCallback(async () => {
-    if (!activeWriterTab?.projectId) return;
-
-    await updateProject.mutateAsync({
-      id: activeWriterTab.projectId,
-      data: {
-        content: localContent,
-      },
-    });
-
-    setWriterTabDirty(activeWriterTab.id, false);
-  }, [activeWriterTab, localContent, updateProject, setWriterTabDirty]);
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+    }
+    await saveContent(localContent);
+  }, [saveContent, localContent]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { X, Trash2, Bookmark, StickyNote } from "lucide-react";
+import { X, Trash2, StickyNote } from "lucide-react";
 import { useTags } from "@/lib/api/queries";
 import {
   useCreateTag,
@@ -33,7 +33,12 @@ export function BookmarkEditorPanel() {
   const isEditing = !!editingBookmark;
   const bookmark = editingBookmark || pendingBookmark;
 
-  const [comment, setComment] = useState(isEditing ? editingBookmark?.comment || "" : "");
+  const getAutoComment = (text?: string) => {
+    if (!text) return "";
+    return text.split(/\s+/).slice(0, 20).join(" ");
+  };
+
+  const [comment, setComment] = useState(isEditing ? editingBookmark?.comment || "" : getAutoComment(pendingBookmark?.previewText));
   const [selectedTags, setSelectedTags] = useState<string[]>(isEditing ? editingBookmark?.tags || [] : []);
 
   const { data: tags = [] } = useTags();
@@ -44,7 +49,7 @@ export function BookmarkEditorPanel() {
       setComment(editingBookmark.comment || "");
       setSelectedTags(editingBookmark.tags || []);
     } else if (pendingBookmark) {
-      setComment("");
+      setComment(getAutoComment(pendingBookmark.previewText));
       setSelectedTags([]);
     }
   }, [editingBookmark, pendingBookmark]);
@@ -104,15 +109,6 @@ export function BookmarkEditorPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b">
-        <h3 className="font-semibold text-sm flex items-center gap-2">
-          <Bookmark className="h-4 w-4 text-amber-500" />
-          {isEditing ? "Edit Bookmark" : "New Bookmark"}
-        </h3>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleClose}>
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-5">
           <div>

@@ -3,15 +3,14 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Search, FileText, Highlighter, Bookmark, StickyNote, X, ExternalLink, ChevronDown, BookMarked, Eye } from "lucide-react";
-import { useWorkspaceMaterials, usePageMarkdown } from "@/lib/api/queries";
+import { Search, FileText, Highlighter, Bookmark, StickyNote, X, ExternalLink, ChevronDown } from "lucide-react";
+import { useWorkspaceMaterials } from "@/lib/api/queries";
 import type { UploadsResponse, HighlightsResponse, NotesResponse, HighlightsRecord, BookmarksRecord, NotesRecord } from "@/lib/pocketbase-types";
-import { HighlightsColorOptions } from "@/lib/pocketbase-types";
 import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useNavigate } from "@tanstack/react-router";
 import { useWorkspaceTabsStore } from "@/lib/stores/workspace-tabs-store";
+import { PreviewDialog } from "@/components/workspace/preview-dialog";
 
 interface WorkspacePanelProps {
   projectId: string;
@@ -25,14 +24,6 @@ interface WorkspacePanelProps {
   onUnlinkNote?: (noteId: string) => void;
   className?: string;
 }
-
-const highlightColorClasses: Record<HighlightsColorOptions, string> = {
-  [HighlightsColorOptions.yellow]: "bg-yellow-200 text-yellow-900 dark:bg-yellow-900/50 dark:text-yellow-200",
-  [HighlightsColorOptions.green]: "bg-green-200 text-green-900 dark:bg-green-900/50 dark:text-green-200",
-  [HighlightsColorOptions.blue]: "bg-blue-200 text-blue-900 dark:bg-blue-900/50 dark:text-blue-200",
-  [HighlightsColorOptions.pink]: "bg-pink-200 text-pink-900 dark:bg-pink-900/50 dark:text-pink-200",
-  [HighlightsColorOptions.purple]: "bg-purple-200 text-purple-900 dark:bg-purple-900/50 dark:text-purple-200",
-};
 
 export function WorkspacePanel({
   linkedUploads = [],
@@ -290,134 +281,10 @@ export function WorkspacePanel({
         type={previewType}
         item={previewItem}
         pageNumber={previewPageNumber}
+        uploadId={(previewItem as any)?.upload}
         onNavigate={handleNavigateFromPreview}
       />
     </div>
-  );
-}
-
-// Preview Dialog for viewing items in context
-interface PreviewDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  type: "highlight" | "bookmark" | "note";
-  item: HighlightsRecord | BookmarksRecord | NotesRecord | null;
-  pageNumber?: number;
-  onNavigate: () => void;
-}
-
-function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate }: PreviewDialogProps) {
-  const pageId = item?.page;
-  const { data: markdown, isLoading } = usePageMarkdown(pageId);
-
-  if (!item) return null;
-
-  const isHighlight = type === "highlight";
-  const isNote = type === "note";
-  const highlight = isHighlight ? (item as HighlightsRecord) : null;
-  const bookmark = type === "bookmark" ? (item as BookmarksRecord) : null;
-  const note = isNote ? (item as NotesRecord) : null;
-
-  // Render the full page content with the highlight marked
-  const renderPageContent = () => {
-    if (!markdown) return null;
-
-    if (highlight && highlight.start_offset !== undefined && highlight.end_offset !== undefined) {
-      const before = markdown.slice(0, highlight.start_offset);
-      const highlighted = markdown.slice(highlight.start_offset, highlight.end_offset);
-      const after = markdown.slice(highlight.end_offset);
-
-      return (
-        <>
-          <span>{before}</span>
-          <mark className={cn("px-0.5 rounded", highlightColorClasses[highlight.color || HighlightsColorOptions.yellow])}>{highlighted}</mark>
-          <span>{after}</span>
-        </>
-      );
-    }
-
-    return <span>{markdown}</span>;
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-        <DialogHeader className="shrink-0">
-          <DialogTitle className="flex items-center gap-2">
-            {isHighlight ? (
-              <>
-                <Highlighter className="h-5 w-5" />
-                Highlight Preview
-              </>
-            ) : isNote ? (
-              <>
-                <StickyNote className="h-5 w-5 text-blue-500" />
-                Note Preview
-              </>
-            ) : (
-              <>
-                <BookMarked className="h-5 w-5 text-amber-500" />
-                {bookmark?.comment || "Bookmark Preview"}
-              </>
-            )}
-          </DialogTitle>
-          <DialogDescription>Page {pageNumber ?? "?"} • Click "Go to page" to navigate to this location</DialogDescription>
-        </DialogHeader>
-
-        {/* Highlighted text or bookmark info - fixed at top */}
-        {isHighlight && highlight && (
-          <div className="shrink-0 mb-2">
-            <div className={cn("p-3 rounded-lg", highlightColorClasses[highlight.color || HighlightsColorOptions.yellow])}>
-              <p className="text-sm font-medium">"{highlight.text}"</p>
-            </div>
-            {highlight.comment && (
-              <div className="flex items-start gap-2 mt-3 p-3 bg-muted/50 rounded-lg">
-                <StickyNote className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">{highlight.comment}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Note content - fixed at top */}
-        {isNote && note && (
-          <div className="shrink-0 mb-2">
-            <div className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-              <p className="text-sm text-foreground whitespace-pre-wrap">{note.content}</p>
-            </div>
-          </div>
-        )}
-
-        {/* Full page content - scrollable */}
-        <div className="flex-1 min-h-0 border rounded-lg bg-card flex flex-col overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2 border-b text-xs text-muted-foreground shrink-0">
-            <FileText className="h-3.5 w-3.5" />
-            Page {pageNumber ?? "?"} content
-          </div>
-          <div className="flex-1 min-h-0 overflow-auto p-4">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              </div>
-            ) : markdown ? (
-              <div className="text-sm text-foreground/80 font-serif leading-relaxed whitespace-pre-wrap">{renderPageContent()}</div>
-            ) : (
-              <div className="text-sm text-muted-foreground italic">Could not load page content</div>
-            )}
-          </div>
-        </div>
-
-        <DialogFooter className="shrink-0">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-          <Button onClick={onNavigate} className="gap-2">
-            <ExternalLink className="h-4 w-4" />
-            Go to page
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -439,7 +306,6 @@ function UploadItem({ upload, onUnlink, onOpen }: UploadItemProps) {
             <Badge variant="outline" className="text-[10px] px-1 py-0">
               {upload.type}
             </Badge>
-            {upload.num_pages && <span className="text-[10px] text-muted-foreground">{upload.num_pages} pages</span>}
           </div>
         </div>
         <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={onOpen} title="Open document">
@@ -469,16 +335,28 @@ function HighlightItem({ highlight, onUnlink, onPreview }: HighlightItemProps) {
   };
 
   return (
-    <div className={cn("rounded-md border bg-card border-l-4 p-2", colorClasses[highlight.color || "yellow"])}>
+    <div
+      className={cn(
+        "rounded-md border bg-card border-l-4 p-2 cursor-pointer hover:bg-muted/50 transition-colors",
+        colorClasses[highlight.color || "yellow"],
+      )}
+      onClick={onPreview}
+    >
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
           <p className="text-sm leading-relaxed line-clamp-3">{highlight.text}</p>
           {highlight.comment && <p className="text-xs text-muted-foreground mt-1 pt-1 border-t italic line-clamp-2">{highlight.comment}</p>}
         </div>
-        <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={onPreview} title="View context">
-          <Eye className="h-3 w-3" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onUnlink} title="Remove from project">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            onUnlink();
+          }}
+          title="Remove from project"
+        >
           <X className="h-3 w-3" />
         </Button>
       </div>
@@ -494,18 +372,23 @@ interface BookmarkItemProps {
 
 function BookmarkItem({ bookmark, onUnlink, onPreview }: BookmarkItemProps) {
   return (
-    <div className="rounded-md border bg-card p-2">
+    <div className="rounded-md border bg-card p-2 cursor-pointer hover:bg-muted/50 transition-colors" onClick={onPreview}>
       <div className="flex items-start gap-2">
         <Bookmark className="h-4 w-4 mt-0.5 text-amber-500 shrink-0" />
         <div className="flex-1 min-w-0">
           {bookmark.comment && <p className="text-sm font-medium line-clamp-1">{bookmark.comment}</p>}
           <p className={cn("text-sm line-clamp-2", bookmark.comment && "text-muted-foreground")}>{bookmark.preview_text || "No preview"}</p>
         </div>
-        {bookmark.page_number && <span className="text-[10px] text-muted-foreground shrink-0 self-center">p.{bookmark.page_number}</span>}
-        <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={onPreview} title="View context">
-          <Eye className="h-3 w-3" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onUnlink} title="Remove from project">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            onUnlink();
+          }}
+          title="Remove from project"
+        >
           <X className="h-3 w-3" />
         </Button>
       </div>
@@ -521,17 +404,22 @@ interface NoteItemProps {
 
 function NoteItem({ note, onUnlink, onPreview }: NoteItemProps) {
   return (
-    <div className="rounded-md border bg-card p-2">
+    <div className="rounded-md border bg-card p-2 cursor-pointer hover:bg-muted/50 transition-colors" onClick={onPreview}>
       <div className="flex items-start gap-2">
         <StickyNote className="h-4 w-4 mt-0.5 text-blue-500 shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-sm line-clamp-3">{note.content || "Empty note"}</p>
         </div>
-        {note.page_number && <span className="text-[10px] text-muted-foreground shrink-0 self-center">p.{note.page_number}</span>}
-        <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={onPreview} title="View context">
-          <Eye className="h-3 w-3" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onUnlink} title="Remove from project">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            onUnlink();
+          }}
+          title="Remove from project"
+        >
           <X className="h-3 w-3" />
         </Button>
       </div>

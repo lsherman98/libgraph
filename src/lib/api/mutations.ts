@@ -247,8 +247,9 @@ export function useUpdateWritingProject() {
         mutationFn: ({ id, data }: { id: string; data: Update<Collections.WritingProjects> }) =>
             updateWritingProject(id, data),
         onError: handleError,
-        onSuccess: () => {
+        onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: ["writingProjects"] });
+            queryClient.invalidateQueries({ queryKey: ["writingProject", variables.id] });
         },
     });
 }

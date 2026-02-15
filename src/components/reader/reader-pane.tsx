@@ -28,6 +28,16 @@ import rehypeRaw from "rehype-raw";
 import { HighlightPopover, ExistingHighlightPopover, HighlightMark } from "@/components/reader/highlight-popover";
 import { BlockActions } from "@/components/reader/bookmark-button";
 import { DocumentSearchBar } from "@/components/reader/document-search-bar";
+import { isValidElement, type ReactNode } from "react";
+
+function extractText(children: ReactNode): string {
+  if (typeof children === "string") return children;
+  if (typeof children === "number") return String(children);
+  if (!children) return "";
+  if (Array.isArray(children)) return children.map(extractText).join("");
+  if (isValidElement(children)) return extractText((children.props as any)?.children);
+  return "";
+}
 import {
   injectHighlightsIntoMarkdown,
   findTextOffset,
@@ -349,7 +359,7 @@ function MarkdownContent({
                 {blockId && pageId && pageNumber && (
                   <BlockActions
                     blockId={blockId}
-                    previewText={typeof children === "string" ? children : String(children)}
+                    previewText={extractText(children)}
                     pageId={pageId}
                     pageNumber={pageNumber}
                     isBookmarked={isBookmarked}
@@ -378,7 +388,7 @@ function MarkdownContent({
                 {blockId && pageId && pageNumber && (
                   <BlockActions
                     blockId={blockId}
-                    previewText={typeof children === "string" ? children : String(children)}
+                    previewText={extractText(children)}
                     pageId={pageId}
                     pageNumber={pageNumber}
                     isBookmarked={isBookmarked}
@@ -446,7 +456,7 @@ function MarkdownContent({
                 {blockId && pageId && pageNumber && (
                   <BlockActions
                     blockId={blockId}
-                    previewText={typeof children === "string" ? children : String(children)}
+                    previewText={extractText(children)}
                     pageId={pageId}
                     pageNumber={pageNumber}
                     isBookmarked={isBookmarked}

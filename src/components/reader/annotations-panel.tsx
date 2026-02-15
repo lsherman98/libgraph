@@ -1,28 +1,21 @@
 import { useState, useMemo } from "react";
-import { useHighlights, useBookmarks, useNotes, usePageMarkdown, usePages, useTags } from "@/lib/api/queries";
+import { useHighlights, useBookmarks, useNotes, usePages, useTags } from "@/lib/api/queries";
 import { useDeleteNote } from "@/lib/api/mutations";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Highlighter, BookMarked, ExternalLink, FileText, Tag, Pencil, Trash2, StickyNote, SquarePen } from "lucide-react";
+import { Highlighter, BookMarked, Pencil, Trash2, StickyNote, SquarePen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HighlightsColorOptions, type HighlightsRecord, type BookmarksRecord, type NotesRecord } from "@/lib/pocketbase-types";
 import { useReaderStore } from "@/lib/stores/reader-store";
 import { AddToProjectButton } from "./add-to-project-button";
+import { PreviewDialog } from "@/components/workspace/preview-dialog";
 
 interface AnnotationsPanelProps {
+  activeTab?: "highlights" | "bookmarks" | "notes";
   onNavigateToPage?: (pageNumber: number, blockId?: string) => void;
 }
-
-const highlightColorClasses: Record<HighlightsColorOptions, string> = {
-  [HighlightsColorOptions.yellow]: "bg-yellow-200 text-yellow-900 dark:bg-yellow-900/50 dark:text-yellow-200",
-  [HighlightsColorOptions.green]: "bg-green-200 text-green-900 dark:bg-green-900/50 dark:text-green-200",
-  [HighlightsColorOptions.blue]: "bg-blue-200 text-blue-900 dark:bg-blue-900/50 dark:text-blue-200",
-  [HighlightsColorOptions.pink]: "bg-pink-200 text-pink-900 dark:bg-pink-900/50 dark:text-pink-200",
-  [HighlightsColorOptions.purple]: "bg-purple-200 text-purple-900 dark:bg-purple-900/50 dark:text-purple-200",
-};
 
 interface HighlightItemProps {
   highlight: HighlightsRecord;
@@ -51,15 +44,14 @@ function HighlightItem({ highlight, pageNumber, onClick, onEdit }: HighlightItem
         />
         <button onClick={onClick} className="flex-1 min-w-0 text-left">
           <p className="text-sm line-clamp-2 text-foreground/90">"{highlight.text}"</p>
-          {highlight.comment && (
-            <div className="flex items-start gap-1.5 mt-1.5 text-xs text-muted-foreground">
-              <StickyNote className="h-3 w-3 mt-0.5 shrink-0" />
-              <span className="line-clamp-1">{highlight.comment}</span>
-            </div>
-          )}
-          {tagTitles.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-1.5">
-              <Tag className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
+          {(highlight.comment || tagTitles.length > 0) && (
+            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mt-1.5">
+              {highlight.comment && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <StickyNote className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{highlight.comment}</span>
+                </span>
+              )}
               {tagTitles.map((title, i) => (
                 <Badge key={i} variant="outline" className="text-[10px] px-1 py-0 h-4 border-muted-foreground/30">
                   {title}
@@ -69,7 +61,6 @@ function HighlightItem({ highlight, pageNumber, onClick, onEdit }: HighlightItem
           )}
         </button>
         <div className="flex items-center gap-1 shrink-0">
-          <span className="text-[10px] text-muted-foreground">p.{pageNumber ?? "?"}</span>
           <div className="opacity-0 group-hover/item:opacity-100 transition-opacity">
             <AddToProjectButton itemId={highlight.id} itemType="highlight" />
           </div>
@@ -106,20 +97,16 @@ function BookmarkItem({ bookmark, onClick, onEdit }: BookmarkItemProps & { onEdi
       <div className="flex items-start gap-2">
         <BookMarked className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
         <button onClick={onClick} className="flex-1 min-w-0 text-left">
-          {bookmark.comment && <p className="text-sm text-muted-foreground line-clamp-2 italic">"{bookmark.comment}"</p>}
-          {tagTitles.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-1.5">
-              <Tag className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
-              {tagTitles.map((title, i) => (
-                <Badge key={i} variant="outline" className="text-[10px] px-1 py-0 h-4 border-muted-foreground/30">
-                  {title}
-                </Badge>
-              ))}
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+            {bookmark.comment && <span className="text-sm text-muted-foreground italic">"{bookmark.comment}"</span>}
+            {tagTitles.map((title, i) => (
+              <Badge key={i} variant="outline" className="text-[10px] px-1 py-0 h-4 border-muted-foreground/30">
+                {title}
+              </Badge>
+            ))}
+          </div>
         </button>
         <div className="flex items-center gap-1 shrink-0">
-          <span className="text-[10px] text-muted-foreground">p.{bookmark.page_number ?? "?"}</span>
           <div className="opacity-0 group-hover/item:opacity-100 transition-opacity">
             <AddToProjectButton itemId={bookmark.id} itemType="bookmark" />
           </div>
@@ -157,20 +144,16 @@ function NoteItem({ note, onDelete, onClick, onEdit }: NoteItemProps & { onEdit:
       <div className="flex items-start gap-2">
         <Pencil className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
         <button onClick={onClick} className="flex-1 min-w-0 text-left">
-          <p className="text-sm text-foreground line-clamp-2 whitespace-pre-wrap">{note.content}</p>
-          {tagTitles.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-1.5">
-              <Tag className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
-              {tagTitles.map((title, i) => (
-                <Badge key={i} variant="outline" className="text-[10px] px-1 py-0 h-4 border-muted-foreground/30">
-                  {title}
-                </Badge>
-              ))}
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+            <span className="text-sm text-foreground">{note.content}</span>
+            {tagTitles.map((title, i) => (
+              <Badge key={i} variant="outline" className="text-[10px] px-1 py-0 h-4 border-muted-foreground/30">
+                {title}
+              </Badge>
+            ))}
+          </div>
         </button>
         <div className="flex items-center gap-1 shrink-0">
-          <span className="text-[10px] text-muted-foreground">p.{note.page_number ?? "?"}</span>
           <div className="flex gap-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
             <AddToProjectButton itemId={note.id} itemType="note" />
             <Button
@@ -204,123 +187,7 @@ function NoteItem({ note, onDelete, onClick, onEdit }: NoteItemProps & { onEdit:
   );
 }
 
-interface PreviewDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  type: "highlight" | "bookmark" | "note";
-  item: HighlightsRecord | BookmarksRecord | NotesRecord | null;
-  pageNumber?: number;
-  onNavigate: () => void;
-}
-
-function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate }: PreviewDialogProps) {
-  const pageId = item?.page;
-  const { data: markdown, isLoading } = usePageMarkdown(pageId);
-
-  if (!item) return null;
-
-  const isHighlight = type === "highlight";
-  const isNote = type === "note";
-  const highlight = isHighlight ? (item as HighlightsRecord) : null;
-  const bookmark = type === "bookmark" ? (item as BookmarksRecord) : null;
-  const note = isNote ? (item as NotesRecord) : null;
-
-  const renderPageContent = () => {
-    if (!markdown) return null;
-
-    if (highlight && highlight.start_offset !== undefined && highlight.end_offset !== undefined) {
-      const before = markdown.slice(0, highlight.start_offset);
-      const highlighted = markdown.slice(highlight.start_offset, highlight.end_offset);
-      const after = markdown.slice(highlight.end_offset);
-
-      return (
-        <>
-          <span>{before}</span>
-          <mark className={cn("px-0.5 rounded", highlightColorClasses[highlight.color || HighlightsColorOptions.yellow])}>{highlighted}</mark>
-          <span>{after}</span>
-        </>
-      );
-    }
-
-    return <span>{markdown}</span>;
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
-        <DialogHeader className="shrink-0">
-          <DialogTitle className="flex items-center gap-2">
-            {isHighlight ? (
-              <>
-                <Highlighter className="h-5 w-5" />
-                Highlight Preview
-              </>
-            ) : isNote ? (
-              <>
-                <Pencil className="h-5 w-5 text-blue-500" />
-                Note Preview
-              </>
-            ) : (
-              <>
-                <BookMarked className="h-5 w-5 text-amber-500" />
-                {bookmark?.comment || "Bookmark Preview"}
-              </>
-            )}
-          </DialogTitle>
-          <DialogDescription>Page {pageNumber ?? "?"} • Click "Go to page" to navigate to this location</DialogDescription>
-        </DialogHeader>
-        {isHighlight && highlight && (
-          <div className="shrink-0 mb-2">
-            <div className={cn("p-3 rounded-lg", highlightColorClasses[highlight.color || HighlightsColorOptions.yellow])}>
-              <p className="text-sm font-medium">"{highlight.text}"</p>
-            </div>
-            {highlight.comment && (
-              <div className="flex items-start gap-2 mt-3 p-3 bg-muted/50 rounded-lg">
-                <StickyNote className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">{highlight.comment}</p>
-              </div>
-            )}
-          </div>
-        )}
-        {isNote && note && (
-          <div className="shrink-0 mb-2">
-            <div className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-              <p className="text-sm text-foreground whitespace-pre-wrap">{note.content}</p>
-            </div>
-          </div>
-        )}
-        <div className="flex-1 min-h-0 border rounded-lg bg-card flex flex-col overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-2 border-b text-xs text-muted-foreground shrink-0">
-            <FileText className="h-3.5 w-3.5" />
-            Page {pageNumber ?? "?"} content
-          </div>
-          <div className="flex-1 min-h-0 overflow-auto p-4">
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-              </div>
-            ) : markdown ? (
-              <div className="text-sm text-foreground/80 font-serif leading-relaxed whitespace-pre-wrap">{renderPageContent()}</div>
-            ) : (
-              <div className="text-sm text-muted-foreground italic">Could not load page content</div>
-            )}
-          </div>
-        </div>
-        <DialogFooter className="shrink-0">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-          <Button onClick={onNavigate} className="gap-2">
-            <ExternalLink className="h-4 w-4" />
-            Go to page
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-export function AnnotationsPanel({ onNavigateToPage: propNavigateToPage }: AnnotationsPanelProps) {
+export function AnnotationsPanel({ activeTab = "highlights", onNavigateToPage: propNavigateToPage }: AnnotationsPanelProps) {
   const storeUploadId = useReaderStore((state) => state.currentUploadId);
   const storeNavigateToPage = useReaderStore((state) => state.navigateToPage);
 
@@ -496,37 +363,8 @@ export function AnnotationsPanel({ onNavigateToPage: propNavigateToPage }: Annot
 
   return (
     <div className="flex flex-col h-full">
-      <Tabs defaultValue="highlights" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="mx-auto mt-3">
-          <TabsTrigger value="highlights" className="flex-1 gap-1.5">
-            <Highlighter className="h-3.5 w-3.5" />
-            Highlights
-            {allHighlights && allHighlights.length > 0 && (
-              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                {allHighlights.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="bookmarks" className="flex-1 gap-1.5">
-            <BookMarked className="h-3.5 w-3.5" />
-            Bookmarks
-            {allBookmarks && allBookmarks.length > 0 && (
-              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                {allBookmarks.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="notes" className="flex-1 gap-1.5">
-            <Pencil className="h-3.5 w-3.5" />
-            Notes
-            {allNotes && allNotes.length > 0 && (
-              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                {allNotes.length}
-              </Badge>
-            )}
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="highlights" className="flex-1 min-h-0 mt-0">
+      {activeTab === "highlights" && (
+        <div className="flex-1 min-h-0">
           <ScrollArea className="h-full">
             <div className="p-2 space-y-4">
               {groupedHighlights.length === 0 ? (
@@ -555,8 +393,10 @@ export function AnnotationsPanel({ onNavigateToPage: propNavigateToPage }: Annot
               )}
             </div>
           </ScrollArea>
-        </TabsContent>
-        <TabsContent value="bookmarks" className="flex-1 min-h-0 mt-0">
+        </div>
+      )}
+      {activeTab === "bookmarks" && (
+        <div className="flex-1 min-h-0">
           <ScrollArea className="h-full">
             <div className="p-2 space-y-4">
               {groupedBookmarks.length === 0 ? (
@@ -584,8 +424,10 @@ export function AnnotationsPanel({ onNavigateToPage: propNavigateToPage }: Annot
               )}
             </div>
           </ScrollArea>
-        </TabsContent>
-        <TabsContent value="notes" className="flex-1 min-h-0 mt-0 flex flex-col">
+        </div>
+      )}
+      {activeTab === "notes" && (
+        <div className="flex-1 min-h-0 flex flex-col">
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-4">
               {groupedNotes.length === 0 ? (
@@ -614,14 +456,16 @@ export function AnnotationsPanel({ onNavigateToPage: propNavigateToPage }: Annot
               )}
             </div>
           </ScrollArea>
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
       <PreviewDialog
         open={previewOpen}
         onOpenChange={setPreviewOpen}
         type={previewType}
         item={previewItem}
         pageNumber={previewPageNumber}
+        uploadId={uploadId || undefined}
+        totalPages={pagesData?.totalItems}
         onNavigate={handleNavigate}
       />
     </div>

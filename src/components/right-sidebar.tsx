@@ -1,23 +1,16 @@
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-  useSidebar,
-} from "@/components/ui/sidebar";
+import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 import { AnnotationsPanel } from "@/components/reader/annotations-panel";
 import { HighlightEditorPanel } from "@/components/reader/highlight-editor-panel";
 import { BookmarkEditorPanel, NoteEditorPanel } from "@/components/reader/bookmark-note-editor-panel";
-import { DocumentInfoPanel } from "@/components/reader/document-info-panel";
-import { Highlighter, Layers, PenLine, Bookmark, StickyNote, Info } from "lucide-react";
+import { Highlighter, Layers, PenLine, Bookmark, BookMarked, StickyNote, Pencil } from "lucide-react";
 import { useWorkspaceTabsStore, type WriterTab, type ReaderTab } from "@/lib/stores/workspace-tabs-store";
-import { useWritingProject } from "@/lib/api/queries";
+import { useWritingProject, useHighlights, useBookmarks, useNotes } from "@/lib/api/queries";
 import { useUpdateWritingProject } from "@/lib/api/mutations";
 import { useReaderStore } from "@/lib/stores/reader-store";
 import { useLocation } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { WorkspacePanel } from "./workspace";
 
 interface RightSidebarProps extends React.ComponentProps<typeof Sidebar> {
@@ -48,19 +41,17 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
   const readerTab = activeTab?.type === "reader" ? (activeTab as ReaderTab) : null;
   const readerUploadId = readerTab?.uploadId ?? null;
 
-  const [sidebarTab, setSidebarTab] = useState<"annotations" | "info">("annotations");
+  const { data: allHighlights = [] } = useHighlights(readerUploadId || undefined);
+  const { data: allBookmarks = [] } = useBookmarks(readerUploadId || undefined);
+  const { data: allNotes = [] } = useNotes(readerUploadId || undefined);
+
+  const [annotationTab, setAnnotationTab] = useState<"highlights" | "bookmarks" | "notes">("highlights");
 
   useEffect(() => {
     if (!isWorkspaceRoute) {
       setOpenRight(false);
     }
   }, [isWorkspaceRoute]);
-
-  useEffect(() => {
-    if (editorState) {
-      setSidebarTab("annotations");
-    }
-  }, [editorState]);
 
   if (!isWorkspaceRoute) {
     return (
@@ -132,9 +123,7 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
       return (
         <>
           <PenLine className="h-4 w-4" />
-          <span className="font-semibold text-sm">
-            {editorState?.mode === "editing-highlight" ? "Edit Highlight" : "New Highlight"}
-          </span>
+          <span className="font-semibold text-sm">{editorState?.mode === "editing-highlight" ? "Edit Highlight" : "New Highlight"}</span>
         </>
       );
     }
@@ -142,9 +131,7 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
       return (
         <>
           <Bookmark className="h-4 w-4 text-amber-500" />
-          <span className="font-semibold text-sm">
-            {editorState?.mode === "editing-bookmark" ? "Edit Bookmark" : "New Bookmark"}
-          </span>
+          <span className="font-semibold text-sm">{editorState?.mode === "editing-bookmark" ? "Edit Bookmark" : "New Bookmark"}</span>
         </>
       );
     }
@@ -152,23 +139,40 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
       return (
         <>
           <StickyNote className="h-4 w-4 text-blue-500" />
-          <span className="font-semibold text-sm">
-            {editorState?.mode === "editing-note" ? "Edit Note" : "New Note"}
-          </span>
+          <span className="font-semibold text-sm">{editorState?.mode === "editing-note" ? "Edit Note" : "New Note"}</span>
         </>
       );
     }
 
     return (
-      <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as "annotations" | "info")} className="w-full">
+      <Tabs value={annotationTab} onValueChange={(v) => setAnnotationTab(v as "highlights" | "bookmarks" | "notes")} className="w-full">
         <TabsList className="w-full h-8">
-          <TabsTrigger value="annotations" className="flex-1 gap-1 text-xs h-7">
+          <TabsTrigger value="highlights" className="flex-1 gap-1 text-xs h-7">
             <Highlighter className="h-3.5 w-3.5" />
-            Annotations
+            Highlights
+            {(allHighlights ?? []).length > 0 && (
+              <Badge variant="secondary" className="ml-0.5 h-4 px-1 text-[10px]">
+                {(allHighlights ?? []).length}
+              </Badge>
+            )}
           </TabsTrigger>
-          <TabsTrigger value="info" className="flex-1 gap-1 text-xs h-7">
-            <Info className="h-3.5 w-3.5" />
-            Document
+          <TabsTrigger value="bookmarks" className="flex-1 gap-1 text-xs h-7">
+            <BookMarked className="h-3.5 w-3.5" />
+            Bookmarks
+            {(allBookmarks ?? []).length > 0 && (
+              <Badge variant="secondary" className="ml-0.5 h-4 px-1 text-[10px]">
+                {(allBookmarks ?? []).length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="notes" className="flex-1 gap-1 text-xs h-7">
+            <Pencil className="h-3.5 w-3.5" />
+            Notes
+            {(allNotes ?? []).length > 0 && (
+              <Badge variant="secondary" className="ml-0.5 h-4 px-1 text-[10px]">
+                {(allNotes ?? []).length}
+              </Badge>
+            )}
           </TabsTrigger>
         </TabsList>
       </Tabs>
@@ -180,17 +184,7 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
     if (isBookmarkEditorOpen) return <BookmarkEditorPanel />;
     if (isNoteEditorOpen) return <NoteEditorPanel />;
 
-    if (sidebarTab === "info" && readerUploadId) {
-      return <DocumentInfoPanel uploadId={readerUploadId} />;
-    }
-
-    return (
-      <AnnotationsPanel
-        currentPageId={currentPageId}
-        currentPageNumber={currentPageNumber}
-        onNavigateToPage={onNavigateToPage}
-      />
-    );
+    return <AnnotationsPanel activeTab={annotationTab} onNavigateToPage={onNavigateToPage} />;
   };
 
   return (
