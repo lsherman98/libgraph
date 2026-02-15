@@ -5,43 +5,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import {
-  Highlighter,
-  BookMarked,
-  ExternalLink,
-  FileText,
-  Tag,
-  Pencil,
-  Trash2,
-  StickyNote,
-  SquarePen,
-} from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Highlighter, BookMarked, ExternalLink, FileText, Tag, Pencil, Trash2, StickyNote, SquarePen } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  HighlightsColorOptions,
-  type HighlightsRecord,
-  type BookmarksRecord,
-  type NotesRecord,
-} from "@/lib/pocketbase-types";
+import { HighlightsColorOptions, type HighlightsRecord, type BookmarksRecord, type NotesRecord } from "@/lib/pocketbase-types";
 import { useReaderStore } from "@/lib/stores/reader-store";
 import { AddToProjectButton } from "./add-to-project-button";
 
 interface AnnotationsPanelProps {
-  // Props are now optional - we prefer reading from the store
-  currentPageId?: string;
-  currentPageNumber?: number;
   onNavigateToPage?: (pageNumber: number, blockId?: string) => void;
 }
 
-// Color classes for highlight badges
 const highlightColorClasses: Record<HighlightsColorOptions, string> = {
   [HighlightsColorOptions.yellow]: "bg-yellow-200 text-yellow-900 dark:bg-yellow-900/50 dark:text-yellow-200",
   [HighlightsColorOptions.green]: "bg-green-200 text-green-900 dark:bg-green-900/50 dark:text-green-200",
@@ -132,9 +106,7 @@ function BookmarkItem({ bookmark, onClick, onEdit }: BookmarkItemProps & { onEdi
       <div className="flex items-start gap-2">
         <BookMarked className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
         <button onClick={onClick} className="flex-1 min-w-0 text-left">
-          {bookmark.comment && (
-            <p className="text-sm text-muted-foreground line-clamp-2 italic">"{bookmark.comment}"</p>
-          )}
+          {bookmark.comment && <p className="text-sm text-muted-foreground line-clamp-2 italic">"{bookmark.comment}"</p>}
           {tagTitles.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1.5">
               <Tag className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
@@ -186,7 +158,6 @@ function NoteItem({ note, onDelete, onClick, onEdit }: NoteItemProps & { onEdit:
         <Pencil className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
         <button onClick={onClick} className="flex-1 min-w-0 text-left">
           <p className="text-sm text-foreground line-clamp-2 whitespace-pre-wrap">{note.content}</p>
-
           {tagTitles.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1.5">
               <Tag className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
@@ -254,7 +225,6 @@ function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate 
   const bookmark = type === "bookmark" ? (item as BookmarksRecord) : null;
   const note = isNote ? (item as NotesRecord) : null;
 
-  // Render the full page content with the highlight marked
   const renderPageContent = () => {
     if (!markdown) return null;
 
@@ -266,11 +236,7 @@ function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate 
       return (
         <>
           <span>{before}</span>
-          <mark
-            className={cn("px-0.5 rounded", highlightColorClasses[highlight.color || HighlightsColorOptions.yellow])}
-          >
-            {highlighted}
-          </mark>
+          <mark className={cn("px-0.5 rounded", highlightColorClasses[highlight.color || HighlightsColorOptions.yellow])}>{highlighted}</mark>
           <span>{after}</span>
         </>
       );
@@ -301,17 +267,11 @@ function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate 
               </>
             )}
           </DialogTitle>
-          <DialogDescription>
-            Page {pageNumber ?? "?"} • Click "Go to page" to navigate to this location
-          </DialogDescription>
+          <DialogDescription>Page {pageNumber ?? "?"} • Click "Go to page" to navigate to this location</DialogDescription>
         </DialogHeader>
-
-        {/* Highlighted text or bookmark info - fixed at top */}
         {isHighlight && highlight && (
           <div className="shrink-0 mb-2">
-            <div
-              className={cn("p-3 rounded-lg", highlightColorClasses[highlight.color || HighlightsColorOptions.yellow])}
-            >
+            <div className={cn("p-3 rounded-lg", highlightColorClasses[highlight.color || HighlightsColorOptions.yellow])}>
               <p className="text-sm font-medium">"{highlight.text}"</p>
             </div>
             {highlight.comment && (
@@ -322,8 +282,6 @@ function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate 
             )}
           </div>
         )}
-
-        {/* Note content - fixed at top */}
         {isNote && note && (
           <div className="shrink-0 mb-2">
             <div className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/30">
@@ -331,8 +289,6 @@ function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate 
             </div>
           </div>
         )}
-
-        {/* Full page content - scrollable */}
         <div className="flex-1 min-h-0 border rounded-lg bg-card flex flex-col overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2 border-b text-xs text-muted-foreground shrink-0">
             <FileText className="h-3.5 w-3.5" />
@@ -344,15 +300,12 @@ function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate 
                 <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
               </div>
             ) : markdown ? (
-              <div className="text-sm text-foreground/80 font-serif leading-relaxed whitespace-pre-wrap">
-                {renderPageContent()}
-              </div>
+              <div className="text-sm text-foreground/80 font-serif leading-relaxed whitespace-pre-wrap">{renderPageContent()}</div>
             ) : (
               <div className="text-sm text-muted-foreground italic">Could not load page content</div>
             )}
           </div>
         </div>
-
         <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
@@ -367,21 +320,11 @@ function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate 
   );
 }
 
-export function AnnotationsPanel({
-  currentPageId: propPageId,
-  currentPageNumber: propPageNumber,
-  onNavigateToPage: propNavigateToPage,
-}: AnnotationsPanelProps) {
-  // Read from store as primary source, fall back to props for backwards compatibility
+export function AnnotationsPanel({ onNavigateToPage: propNavigateToPage }: AnnotationsPanelProps) {
   const storeUploadId = useReaderStore((state) => state.currentUploadId);
-  const storePageId = useReaderStore((state) => state.currentPageId);
-  const storePageNumber = useReaderStore((state) => state.currentPageNumber);
   const storeNavigateToPage = useReaderStore((state) => state.navigateToPage);
 
-  // Use store values, falling back to props if store is empty
   const uploadId = storeUploadId;
-  const currentPageId = storePageId ?? propPageId ?? null;
-  const currentPageNumber = storePageNumber ?? propPageNumber ?? null;
   const onNavigateToPage = storeNavigateToPage ?? propNavigateToPage ?? null;
 
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -392,9 +335,8 @@ export function AnnotationsPanel({
   const { data: allHighlights = [] } = useHighlights(uploadId || undefined);
   const { data: allBookmarks = [] } = useBookmarks(uploadId || undefined);
   const { data: allNotes = [] } = useNotes(uploadId || undefined);
-  const { data: pagesData } = usePages(uploadId || undefined, 1, 1000); // Get all pages to map page IDs to numbers
+  const { data: pagesData } = usePages(uploadId || undefined, 1, 1000);
 
-  // Create a map of page ID to page number
   const pageIdToNumber = useMemo(() => {
     const map = new Map<string, number>();
     pagesData?.items.forEach((page) => {
@@ -403,14 +345,12 @@ export function AnnotationsPanel({
     return map;
   }, [pagesData]);
 
-  // Group highlights by page
   const groupedHighlights = useMemo(() => {
     const grouped = new Map<number, HighlightsRecord[]>();
 
     allHighlights?.forEach((highlight) => {
       const pageNum = highlight.page ? pageIdToNumber.get(highlight.page) : undefined;
-      const displayPageNum = pageNum ?? 0; // 0 for unknown/no page
-
+      const displayPageNum = pageNum ?? 0;
       if (!grouped.has(displayPageNum)) {
         grouped.set(displayPageNum, []);
       }
@@ -422,7 +362,6 @@ export function AnnotationsPanel({
       .map(([pageNumber, items]) => ({ pageNumber, items }));
   }, [allHighlights, pageIdToNumber]);
 
-  // Group bookmarks by page
   const groupedBookmarks = useMemo(() => {
     const grouped = new Map<number, BookmarksRecord[]>();
 
@@ -440,7 +379,6 @@ export function AnnotationsPanel({
       .map(([pageNumber, items]) => ({ pageNumber, items }));
   }, [allBookmarks]);
 
-  // Group notes by page number
   const groupedNotes = useMemo(() => {
     const grouped = new Map<number, NotesRecord[]>();
 
@@ -480,7 +418,6 @@ export function AnnotationsPanel({
     setPreviewOpen(true);
   };
 
-  // Edit handlers - use the store to open editors
   const setEditorState = useReaderStore((state) => state.setEditorState);
 
   const handleHighlightEdit = (highlight: HighlightsRecord) => {
@@ -589,7 +526,6 @@ export function AnnotationsPanel({
             )}
           </TabsTrigger>
         </TabsList>
-
         <TabsContent value="highlights" className="flex-1 min-h-0 mt-0">
           <ScrollArea className="h-full">
             <div className="p-2 space-y-4">
@@ -620,7 +556,6 @@ export function AnnotationsPanel({
             </div>
           </ScrollArea>
         </TabsContent>
-
         <TabsContent value="bookmarks" className="flex-1 min-h-0 mt-0">
           <ScrollArea className="h-full">
             <div className="p-2 space-y-4">
@@ -650,7 +585,6 @@ export function AnnotationsPanel({
             </div>
           </ScrollArea>
         </TabsContent>
-
         <TabsContent value="notes" className="flex-1 min-h-0 mt-0 flex flex-col">
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-4">
@@ -682,7 +616,6 @@ export function AnnotationsPanel({
           </ScrollArea>
         </TabsContent>
       </Tabs>
-
       <PreviewDialog
         open={previewOpen}
         onOpenChange={setPreviewOpen}

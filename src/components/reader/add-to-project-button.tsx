@@ -27,7 +27,6 @@ export function AddToProjectButton({ itemId, itemType, variant = "icon", classNa
   const { data: projects = [], isLoading } = useWritingProjects();
   const updateProject = useUpdateWritingProject();
 
-  // Get the field name for this item type
   const getFieldName = (): "uploads" | "highlights" | "bookmarks" | "notes" => {
     switch (itemType) {
       case "upload":
@@ -41,7 +40,6 @@ export function AddToProjectButton({ itemId, itemType, variant = "icon", classNa
     }
   };
 
-  // Check if item is already in a project
   const getProjectsContainingItem = () => {
     const fieldName = getFieldName();
     return projects.filter((p) => {
@@ -60,7 +58,6 @@ export function AddToProjectButton({ itemId, itemType, variant = "icon", classNa
     const fieldName = getFieldName();
     const currentItems = ((project as any)[fieldName] as string[]) || [];
 
-    // Toggle - if already in project, remove it
     if (currentItems.includes(itemId)) {
       updateProject.mutate({
         id: projectId,
@@ -109,11 +106,7 @@ export function AddToProjectButton({ itemId, itemType, variant = "icon", classNa
               const fieldName = getFieldName();
               const isInProject = ((project as any)[fieldName] as string[] | undefined)?.includes(itemId);
               return (
-                <DropdownMenuItem
-                  key={project.id}
-                  onClick={() => handleAddToProject(project.id)}
-                  className="cursor-pointer"
-                >
+                <DropdownMenuItem key={project.id} onClick={() => handleAddToProject(project.id)} className="cursor-pointer">
                   <div className="flex items-center gap-2 w-full">
                     <div
                       className={cn(
@@ -160,11 +153,7 @@ export function AddToProjectButton({ itemId, itemType, variant = "icon", classNa
             const fieldName = getFieldName();
             const isInProject = ((project as any)[fieldName] as string[] | undefined)?.includes(itemId);
             return (
-              <DropdownMenuItem
-                key={project.id}
-                onClick={() => handleAddToProject(project.id)}
-                className="cursor-pointer"
-              >
+              <DropdownMenuItem key={project.id} onClick={() => handleAddToProject(project.id)} className="cursor-pointer">
                 <div className="flex items-center gap-2 w-full">
                   <div
                     className={cn(

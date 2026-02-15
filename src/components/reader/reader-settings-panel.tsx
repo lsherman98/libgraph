@@ -8,18 +8,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FONT_FAMILIES, READER_THEMES } from "@/lib/hooks/use-reader-settings";
 import type { FontFamilyKey, ReaderSettings, ReaderThemeKey } from "@/lib/hooks/use-reader-settings";
-import {
-  AlignCenter,
-  AlignJustify,
-  AlignLeft,
-  Check,
-  Minus,
-  Palette,
-  Plus,
-  RotateCcw,
-  Settings2,
-  Type,
-} from "lucide-react";
+import { AlignCenter, AlignJustify, AlignLeft, Check, Minus, Palette, Plus, RotateCcw, Settings2, Type } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
@@ -70,25 +59,13 @@ function SliderWithValue({
   return (
     <div className="flex items-center gap-3">
       {showButtons && (
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8 shrink-0"
-          onClick={handleDecrement}
-          disabled={value <= min}
-        >
+        <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={handleDecrement} disabled={value <= min}>
           <Minus className="h-3 w-3" />
         </Button>
       )}
       <Slider value={[value]} min={min} max={max} step={step} onValueChange={([v]) => onChange(v)} className="flex-1" />
       {showButtons && (
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8 shrink-0"
-          onClick={handleIncrement}
-          disabled={value >= max}
-        >
+        <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={handleIncrement} disabled={value >= max}>
           <Plus className="h-3 w-3" />
         </Button>
       )}
@@ -118,10 +95,7 @@ function ThemeButton({
         isActive && "ring-2 ring-primary ring-offset-1 ring-offset-background",
       )}
     >
-      <div
-        className="h-8 w-8 rounded-md border shadow-sm flex items-center justify-center"
-        style={{ backgroundColor: theme.backgroundColor }}
-      >
+      <div className="h-8 w-8 rounded-md border shadow-sm flex items-center justify-center" style={{ backgroundColor: theme.backgroundColor }}>
         <Type className="h-3 w-3" style={{ color: theme.textColor }} />
       </div>
       <span className="text-[10px] font-medium">{theme.name}</span>
@@ -129,15 +103,7 @@ function ThemeButton({
   );
 }
 
-function FontFamilyButton({
-  family,
-  isActive,
-  onClick,
-}: {
-  family: { name: string; value: string };
-  isActive: boolean;
-  onClick: () => void;
-}) {
+function FontFamilyButton({ family, isActive, onClick }: { family: { name: string; value: string }; isActive: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
@@ -173,7 +139,6 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
           </h4>
           <p className="text-xs text-muted-foreground mt-1">Customize your reading experience</p>
         </div>
-
         <Tabs defaultValue="typography" className="w-full">
           <TabsList className="grid w-full grid-cols-2 rounded-none border-b bg-transparent p-0 h-10">
             <TabsTrigger
@@ -279,22 +244,14 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
                   <Label className="text-xs font-medium">Hyphenation</Label>
                   <p className="text-xs text-muted-foreground">Auto word hyphenation</p>
                 </div>
-                <Switch
-                  checked={settings.hyphenation}
-                  onCheckedChange={(hyphenation) => onSettingsChange({ hyphenation })}
-                />
+                <Switch checked={settings.hyphenation} onCheckedChange={(hyphenation) => onSettingsChange({ hyphenation })} />
               </div>
             </TabsContent>
             <TabsContent value="theme" className="mt-0 p-4 space-y-4">
               <SettingRow label="Theme Presets">
                 <div className="grid grid-cols-4 gap-1.5">
                   {Object.entries(READER_THEMES).map(([key, theme]) => (
-                    <ThemeButton
-                      key={key}
-                      theme={theme}
-                      isActive={settings.theme === key}
-                      onClick={() => onApplyTheme(key as ReaderThemeKey)}
-                    />
+                    <ThemeButton key={key} theme={theme} isActive={settings.theme === key} onClick={() => onApplyTheme(key as ReaderThemeKey)} />
                   ))}
                 </div>
               </SettingRow>
@@ -304,10 +261,7 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
                   <div className="flex items-center gap-2">
                     <Label className="w-20 text-xs">Background</Label>
                     <div className="flex items-center gap-2 flex-1">
-                      <div
-                        className="h-7 w-7 rounded border cursor-pointer shrink-0"
-                        style={{ backgroundColor: settings.backgroundColor }}
-                      >
+                      <div className="h-7 w-7 rounded border cursor-pointer shrink-0" style={{ backgroundColor: settings.backgroundColor }}>
                         <Input
                           type="color"
                           value={settings.backgroundColor}
@@ -337,10 +291,7 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
                   <div className="flex items-center gap-2">
                     <Label className="w-20 text-xs">Text</Label>
                     <div className="flex items-center gap-2 flex-1">
-                      <div
-                        className="h-7 w-7 rounded border cursor-pointer shrink-0"
-                        style={{ backgroundColor: settings.textColor }}
-                      >
+                      <div className="h-7 w-7 rounded border cursor-pointer shrink-0" style={{ backgroundColor: settings.textColor }}>
                         <Input
                           type="color"
                           value={settings.textColor}
@@ -386,23 +337,11 @@ export function ReaderSettingsPanel({ settings, onSettingsChange, onApplyTheme, 
 export function QuickFontSizeControl({ fontSize, onChange }: { fontSize: number; onChange: (size: number) => void }) {
   return (
     <div className="flex items-center gap-1">
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8"
-        onClick={() => onChange(Math.max(12, fontSize - 1))}
-        disabled={fontSize <= 12}
-      >
+      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onChange(Math.max(12, fontSize - 1))} disabled={fontSize <= 12}>
         <Minus className="h-3 w-3" />
       </Button>
       <span className="text-sm w-8 text-center tabular-nums">{fontSize}</span>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8"
-        onClick={() => onChange(Math.min(32, fontSize + 1))}
-        disabled={fontSize >= 32}
-      >
+      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onChange(Math.min(32, fontSize + 1))} disabled={fontSize >= 32}>
         <Plus className="h-3 w-3" />
       </Button>
     </div>

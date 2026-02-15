@@ -55,7 +55,6 @@ export function HighlightPopover({
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      // Check if the click is inside the popover or inside a portal (like the tag combobox)
       if (
         popoverRef.current &&
         !popoverRef.current.contains(e.target as Node) &&
@@ -80,13 +79,11 @@ export function HighlightPopover({
   }, [onDismiss]);
 
   const handleColorClick = (color: HighlightsColorOptions) => {
-    // Immediately highlight with the selected color
     onHighlight(color);
   };
 
   if (!position || !selectedText) return null;
 
-  // Calculate position accounting for scroll
   const popoverStyle = {
     left: `${position.x}px`,
     top: `${position.y}px`,
@@ -98,11 +95,10 @@ export function HighlightPopover({
       ref={popoverRef}
       className="fixed z-50 animate-in fade-in-0 zoom-in-95 duration-100"
       style={popoverStyle}
-      onMouseDown={(e) => e.preventDefault()} // Prevent losing selection when clicking popover
-      onMouseUp={(e) => e.stopPropagation()} // Prevent parent mouseUp handler from clearing selection
+      onMouseDown={(e) => e.preventDefault()}
+      onMouseUp={(e) => e.stopPropagation()}
     >
       <div className="bg-popover text-popover-foreground border border-border rounded-lg shadow-md p-1.5">
-        {/* Color swatches - all in one line */}
         <div className="flex items-center gap-1">
           {HIGHLIGHT_COLORS.map((color) => (
             <button
@@ -113,18 +109,14 @@ export function HighlightPopover({
                 "ring-transparent hover:ring-foreground/20",
               )}
               onMouseDown={(e) => {
-                e.preventDefault(); // Prevent losing selection
+                e.preventDefault();
                 e.stopPropagation();
               }}
               onClick={() => handleColorClick(color.value)}
               title={`Highlight ${color.value}`}
             />
           ))}
-
-          {/* Divider */}
           <div className="w-px h-5 bg-border mx-0.5" />
-
-          {/* Open in sidebar button */}
           <Button
             variant="ghost"
             size="icon"
@@ -157,20 +149,11 @@ interface ExistingHighlightPopoverProps {
   onDismiss: () => void;
 }
 
-export function ExistingHighlightPopover({
-  color,
-  note,
-  position,
-  onUpdateColor,
-  onOpenEditor,
-  onDelete,
-  onDismiss,
-}: ExistingHighlightPopoverProps) {
+export function ExistingHighlightPopover({ color, note, position, onUpdateColor, onOpenEditor, onDelete, onDismiss }: ExistingHighlightPopoverProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      // Check if the click is inside the popover or inside a portal (like the tag combobox)
       if (
         popoverRef.current &&
         !popoverRef.current.contains(e.target as Node) &&
@@ -194,7 +177,6 @@ export function ExistingHighlightPopover({
     };
   }, [onDismiss]);
 
-  // Calculate position to appear above the highlight
   const popoverStyle = {
     left: `${position.x}px`,
     top: `${position.y}px`,
@@ -212,7 +194,6 @@ export function ExistingHighlightPopover({
       <div className="bg-popover text-popover-foreground border border-border rounded-lg shadow-md p-1.5">
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center gap-1">
-            {/* Color swatches */}
             {HIGHLIGHT_COLORS.map((c) => (
               <button
                 key={c.value}
@@ -224,22 +205,10 @@ export function ExistingHighlightPopover({
                 onClick={() => onUpdateColor(c.value)}
               />
             ))}
-
-            {/* Divider */}
             <div className="w-px h-4 bg-border mx-0.5" />
-
-            {/* Edit in sidebar button */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={onOpenEditor}
-              title={note ? "Edit note & tags" : "Add note & tags"}
-            >
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onOpenEditor} title={note ? "Edit note & tags" : "Add note & tags"}>
               <MessageSquare className="h-3.5 w-3.5" />
             </Button>
-
-            {/* Delete button */}
             <Button
               variant="ghost"
               size="icon"
@@ -250,8 +219,6 @@ export function ExistingHighlightPopover({
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>
-
-          {/* Show note preview if exists */}
           {note && (
             <div
               className="text-xs text-muted-foreground pt-1.5 border-t border-border cursor-pointer hover:text-foreground transition-colors max-w-[220px] truncate"
@@ -268,9 +235,6 @@ export function ExistingHighlightPopover({
   );
 }
 
-/**
- * Component to render highlighted text with optional hover tooltip for notes
- */
 interface HighlightMarkProps {
   highlightId: string;
   className: string;
@@ -280,14 +244,7 @@ interface HighlightMarkProps {
   onClick?: () => void;
 }
 
-export function HighlightMark({
-  highlightId,
-  className,
-  note,
-  tags: highlightTags = [],
-  children,
-  onClick,
-}: HighlightMarkProps) {
+export function HighlightMark({ highlightId, className, note, tags: highlightTags = [], children, onClick }: HighlightMarkProps) {
   const { data: allTags = [] } = useTags();
 
   const tagTitles = highlightTags.map((tagId) => allTags.find((t) => t.id === tagId)?.title).filter(Boolean);
@@ -297,23 +254,16 @@ export function HighlightMark({
       <TooltipProvider>
         <Tooltip delayDuration={300}>
           <TooltipTrigger asChild>
-            <mark
-              className={cn("cursor-pointer rounded-sm px-0.5", className)}
-              data-highlight-id={highlightId}
-              onClick={onClick}
-            >
+            <mark className={cn("cursor-pointer rounded-sm px-0.5", className)} data-highlight-id={highlightId} onClick={onClick}>
               {children}
             </mark>
           </TooltipTrigger>
-          <TooltipContent
-            side="top"
-            className="max-w-[280px] text-xs bg-popover text-popover-foreground border border-border p-2"
-          >
+          <TooltipContent side="top" className="max-w-70 text-xs bg-popover text-popover-foreground border border-border p-2">
             <div className="flex flex-col gap-2">
               {note && (
                 <div className="flex items-start gap-1.5">
                   <MessageSquare className="h-3 w-3 mt-0.5 shrink-0 text-muted-foreground" />
-                  <span className="break-words">{note}</span>
+                  <span className="wrap-break-word">{note}</span>
                 </div>
               )}
               {tagTitles.length > 0 && (
@@ -336,11 +286,7 @@ export function HighlightMark({
   }
 
   return (
-    <mark
-      className={cn("cursor-pointer rounded-sm px-0.5", className)}
-      data-highlight-id={highlightId}
-      onClick={onClick}
-    >
+    <mark className={cn("cursor-pointer rounded-sm px-0.5", className)} data-highlight-id={highlightId} onClick={onClick}>
       {children}
     </mark>
   );

@@ -1,13 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import {
-  useInfinitePages,
-  usePageMarkdown,
-  usePages,
-  usePageHighlights,
-  useBookmarks,
-  useNotes,
-  useUploadById,
-} from "@/lib/api/queries";
+import { useInfinitePages, usePageMarkdown, usePages, usePageHighlights, useBookmarks, useNotes, useUploadById } from "@/lib/api/queries";
 import { useCreateHighlight, useUpdateHighlight, useDeleteHighlight } from "@/lib/api/mutations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -57,7 +49,6 @@ interface ReaderPaneProps {
   onTitleLoad?: (title: string) => void;
 }
 
-// MarkdownContent component for rendering page content with highlights and bookmarks
 function MarkdownContent({
   content,
   isLoading,
@@ -89,19 +80,15 @@ function MarkdownContent({
   onDeleteHighlight?: (id: string) => void;
 }) {
   const [selection, setSelection] = useState<SelectionInfo | null>(null);
-  const [activeHighlight, setActiveHighlight] = useState<{ element: HTMLElement; highlight: HighlightInput } | null>(
-    null,
-  );
+  const [activeHighlight, setActiveHighlight] = useState<{ element: HTMLElement; highlight: HighlightInput } | null>(null);
   const [tempHighlight, setTempHighlight] = useState<HighlightInput | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
-  // --- Chunking for large markdown files ---
   const chunks = useMemo(() => (content ? splitMarkdownIntoChunks(content) : []), [content]);
   const isChunked = chunks.length > 1;
   const [currentChunkIndex, setCurrentChunkIndex] = useState(0);
 
-  // Reset chunk index when content changes
   useEffect(() => {
     setCurrentChunkIndex(0);
   }, [content]);
@@ -110,7 +97,6 @@ function MarkdownContent({
   const chunkContent = currentChunk?.content ?? content;
   const chunkStartOffset = currentChunk?.startOffset ?? 0;
 
-  // Reader store for opening highlight editor in sidebar
   const editorState = useReaderStore((state) => state.editorState);
   const setEditorState = useReaderStore((state) => state.setEditorState);
   const { toggleSidebar, open: sidebarOpen } = useSidebar();
@@ -153,7 +139,6 @@ function MarkdownContent({
           if (chunkContent) {
             const offsets = findTextOffset(chunkContent, selectionInfo.text);
             if (offsets) {
-              // Store page-level offsets (chunk offset added back)
               setTempHighlight({
                 id: "temp-selection",
                 text: selectionInfo.text,
@@ -182,7 +167,6 @@ function MarkdownContent({
 
       let startOffset, endOffset;
       if (tempHighlight && tempHighlight.text === selection.text) {
-        // tempHighlight already has page-level offsets
         startOffset = tempHighlight.start_offset;
         endOffset = tempHighlight.end_offset;
       } else {
@@ -191,7 +175,6 @@ function MarkdownContent({
           console.warn("Could not find text offset for selection");
           return;
         }
-        // Convert chunk-local offsets to page-level
         startOffset = offsets.start + chunkStartOffset;
         endOffset = offsets.end + chunkStartOffset;
       }
@@ -226,11 +209,9 @@ function MarkdownContent({
     setActiveHighlight(null);
   }, [activeHighlight, onDeleteHighlight]);
 
-  // Handler to open new highlight in sidebar editor
   const handleOpenNewHighlightEditor = useCallback(() => {
     if (!selection || !tempHighlight || !pageId) return;
 
-    // Set up the pending highlight with all necessary data
     setEditorState({
       mode: "pending-highlight",
       data: {
@@ -242,24 +223,20 @@ function MarkdownContent({
       },
     });
 
-    // Open the right sidebar if not already open
     if (!sidebarOpen) {
       toggleSidebar();
     }
 
-    // Clear the selection state
     setSelection(null);
     setTempHighlight(null);
     window.getSelection()?.removeAllRanges();
   }, [selection, tempHighlight, pageId, setEditorState, sidebarOpen, toggleSidebar]);
 
-  // Handler to open existing highlight in sidebar editor
   const handleOpenExistingHighlightEditor = useCallback(() => {
     if (!activeHighlight || !pageId) return;
 
     const highlight = activeHighlight.highlight;
 
-    // Set the editing highlight with all necessary data
     setEditorState({
       mode: "editing-highlight",
       data: {
@@ -272,12 +249,10 @@ function MarkdownContent({
       },
     });
 
-    // Open the right sidebar if not already open
     if (!sidebarOpen) {
       toggleSidebar();
     }
 
-    // Clear the active highlight state
     setActiveHighlight(null);
   }, [activeHighlight, pageId, setEditorState, sidebarOpen, toggleSidebar]);
 
@@ -336,35 +311,27 @@ function MarkdownContent({
     );
   }
 
-  // Build the list of highlights to render, including temp highlights for pending edits
   let allHighlights = [...highlights];
 
-  // Add temp highlight from local state (for popover selection)
   if (tempHighlight) {
     allHighlights.push(tempHighlight);
   }
 
-  // Add pending highlight from store (for sidebar editing) - shows as gray preview
   if (pendingHighlight && pendingHighlight.pageId === pageId) {
     allHighlights.push({
       id: "pending-highlight",
       text: pendingHighlight.text,
-      color: HighlightsColorOptions.yellow, // Will be styled with gray
+      color: HighlightsColorOptions.yellow,
       start_offset: pendingHighlight.startOffset,
       end_offset: pendingHighlight.endOffset,
       comment: "",
       tags: [],
-      isPending: true, // Mark as pending for special styling
+      isPending: true,
     });
   }
 
-  // If content is chunked, filter & adjust highlights for the current chunk
   const chunkHighlights = isChunked && currentChunk ? highlightsForChunk(allHighlights, currentChunk) : allHighlights;
-
-  const processedContent = injectHighlightsIntoMarkdown(
-    isChunked ? (currentChunk?.content ?? "") : content,
-    chunkHighlights,
-  );
+  const processedContent = injectHighlightsIntoMarkdown(isChunked ? (currentChunk?.content ?? "") : content, chunkHighlights);
 
   return (
     <div className="reader-content relative" ref={contentRef} onMouseUp={handleMouseUp}>
@@ -502,12 +469,7 @@ function MarkdownContent({
             const className = (props as any).className || "highlight-yellow";
             const highlight = highlights.find((h) => h.id === highlightId);
             return (
-              <HighlightMark
-                highlightId={highlightId}
-                className={className}
-                note={highlight?.comment}
-                tags={highlight?.tags}
-              >
+              <HighlightMark highlightId={highlightId} className={className} note={highlight?.comment} tags={highlight?.tags}>
                 {children}
               </HighlightMark>
             );
@@ -517,7 +479,6 @@ function MarkdownContent({
         {processedContent}
       </Markdown>
 
-      {/* Sub-page navigation for chunked large markdown */}
       {isChunked && (
         <div className="flex items-center justify-center gap-2 py-4 mt-4 border-t border-current/10">
           <Button
@@ -549,7 +510,6 @@ function MarkdownContent({
           </Button>
         </div>
       )}
-
       <div ref={popoverRef}>
         {selection && (
           <HighlightPopover
@@ -561,7 +521,6 @@ function MarkdownContent({
             onDismiss={() => setSelection(null)}
           />
         )}
-
         {activeHighlight && (
           <ExistingHighlightPopover
             highlightId={activeHighlight.highlight.id}
@@ -570,9 +529,7 @@ function MarkdownContent({
             tags={activeHighlight.highlight.tags}
             text={activeHighlight.highlight.text}
             position={{
-              x:
-                activeHighlight.element.getBoundingClientRect().left +
-                activeHighlight.element.getBoundingClientRect().width / 2,
+              x: activeHighlight.element.getBoundingClientRect().left + activeHighlight.element.getBoundingClientRect().width / 2,
               y: activeHighlight.element.getBoundingClientRect().top - 10,
             }}
             onUpdateColor={handleUpdateHighlightColor}
@@ -586,7 +543,6 @@ function MarkdownContent({
   );
 }
 
-// ScrollPageRenderer for infinite scroll mode
 function ScrollPageRenderer({
   page,
   onInView,
@@ -671,7 +627,6 @@ function ScrollPageRenderer({
   );
 }
 
-// ScrollReader component for infinite scroll mode
 function ScrollReader({
   uploadId,
   startPage,
@@ -806,7 +761,6 @@ function ScrollReader({
   );
 }
 
-// PaginatedPageContent for single page rendering
 function PaginatedPageContent({
   pageId,
   pageNumber,
@@ -859,7 +813,6 @@ function PaginatedPageContent({
   );
 }
 
-// PaginatedReader component for single page mode
 function PaginatedReader({
   uploadId,
   currentPage,
@@ -953,20 +906,11 @@ function PaginatedReader({
   );
 }
 
-// Main ReaderPane component
-export function ReaderPane({
-  uploadId,
-  tabId,
-  isActive = true,
-  showHeader = true,
-  onPageChange,
-  onTitleLoad,
-}: ReaderPaneProps) {
+export function ReaderPane({ uploadId, tabId, isActive = true, showHeader = true, onPageChange, onTitleLoad }: ReaderPaneProps) {
   const { data: upload } = useUploadById(uploadId);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const { isReadingMode, setReadingMode, setCurrentPageState, setCurrentUploadId, setNavigateToPage } =
-    useReaderStore();
+  const { isReadingMode, setReadingMode, setCurrentPageState, setCurrentUploadId, setNavigateToPage } = useReaderStore();
   const readerContainerRef = useRef<HTMLDivElement>(null);
   const { setOpen, setOpenRight, open: leftSidebarOpen, openRight: rightSidebarOpen } = useSidebar();
   const previousSidebarState = useRef({ left: true, right: true });
@@ -984,7 +928,6 @@ export function ReaderPane({
   setCurrentPageRef.current = setCurrentPage;
   viewModeRef.current = settings.viewMode;
 
-  // Sync current upload and page state to store for annotations panel (only when active)
   useEffect(() => {
     if (isActive) {
       setCurrentUploadId(uploadId ?? null);
@@ -1011,7 +954,6 @@ export function ReaderPane({
     }
   }, [navigateToPageFromAnnotation, setNavigateToPage, isActive]);
 
-  // Highlights, bookmarks, and notes
   const { data: bookmarksData = [] } = useBookmarks(uploadId ?? null);
   const { data: notesData = [] } = useNotes(uploadId ?? null);
   const createHighlightMutation = useCreateHighlight();
@@ -1032,7 +974,6 @@ export function ReaderPane({
     tags: n.tags || [],
   }));
 
-  // Highlight handlers
   const handleCreateHighlight = useCallback(
     (
       pageId: string,
@@ -1078,14 +1019,12 @@ export function ReaderPane({
   const onTitleLoadRef = useRef(onTitleLoad);
   onTitleLoadRef.current = onTitleLoad;
 
-  // Propagate title once upload data is available
   useEffect(() => {
     if (upload) {
       onTitleLoadRef.current?.(upload.title || "Untitled");
     }
   }, [upload?.id, upload?.title]);
 
-  // Build audio URL reactively when upload data is available
   useEffect(() => {
     if (upload?.file && isAudioFile(upload.file)) {
       pb.files
@@ -1193,10 +1132,7 @@ export function ReaderPane({
           <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
             <div className="flex items-center gap-3 min-w-0 shrink">
               <div className="hidden sm:flex items-center gap-2 min-w-0">
-                <h1
-                  className="text-sm font-semibold truncate max-w-30 md:max-w-45 lg:max-w-62"
-                  title={upload.title || "Untitled"}
-                >
+                <h1 className="text-sm font-semibold truncate max-w-30 md:max-w-45 lg:max-w-62" title={upload.title || "Untitled"}>
                   {upload.title || "Untitled"}
                 </h1>
                 <Badge variant="outline" className="text-xs shrink-0">
@@ -1206,13 +1142,7 @@ export function ReaderPane({
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  disabled={pageSettings.currentPage <= 1}
-                  onClick={() => navigatePage("prev")}
-                >
+                <Button variant="ghost" size="icon" className="h-7 w-7" disabled={pageSettings.currentPage <= 1} onClick={() => navigatePage("prev")}>
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 <div className="flex items-center gap-1.5 px-1">
@@ -1258,11 +1188,7 @@ export function ReaderPane({
                 <Label htmlFor={`scroll-mode-${tabId}`} className="text-xs cursor-pointer whitespace-nowrap">
                   Scroll
                 </Label>
-                <Switch
-                  id={`scroll-mode-${tabId}`}
-                  checked={settings.viewMode === "scroll"}
-                  onCheckedChange={toggleScrollMode}
-                />
+                <Switch id={`scroll-mode-${tabId}`} checked={settings.viewMode === "scroll"} onCheckedChange={toggleScrollMode} />
               </div>
               <div className="hidden xl:flex items-center gap-1 px-2 border-r">
                 <QuickFontSizeControl fontSize={settings.fontSize} onChange={(fontSize) => setSettings({ fontSize })} />
@@ -1284,12 +1210,7 @@ export function ReaderPane({
               />
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button
-                    variant={isReadingMode ? "default" : "ghost"}
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={toggleReadingMode}
-                  >
+                  <Button variant={isReadingMode ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={toggleReadingMode}>
                     <BookMarked className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
@@ -1303,20 +1224,12 @@ export function ReaderPane({
                 </TooltipTrigger>
                 <TooltipContent>{isFullscreen ? "Exit Fullscreen" : "Fullscreen"}</TooltipContent>
               </Tooltip>
-              <ReaderSettingsPanel
-                settings={settings}
-                onSettingsChange={setSettings}
-                onApplyTheme={applyTheme}
-                onReset={resetSettings}
-              />
+              <ReaderSettingsPanel settings={settings} onSettingsChange={setSettings} onApplyTheme={applyTheme} onReset={resetSettings} />
             </div>
           </div>
           <div className={cn("h-0.5", isReadingMode ? "bg-(--reader-text-color)/10" : "bg-muted")}>
             <div
-              className={cn(
-                "h-full transition-all duration-300",
-                isReadingMode ? "bg-(--reader-text-color)/30" : "bg-primary/50",
-              )}
+              className={cn("h-full transition-all duration-300", isReadingMode ? "bg-(--reader-text-color)/30" : "bg-primary/50")}
               style={{
                 width: `${(pageSettings.currentPage / (totalPages || 1)) * 100}%`,
               }}

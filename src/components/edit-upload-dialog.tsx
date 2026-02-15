@@ -4,22 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CreatableCombobox } from "@/components/creatable-combobox";
-import {
-  useUpdateUpload,
-  useCreatePerson,
-  useCreatePublication,
-  useCreateTag,
-  useCreateTopic,
-} from "@/lib/api/mutations";
+import { useUpdateUpload, useCreatePerson, useCreatePublication, useCreateTag, useCreateTopic } from "@/lib/api/mutations";
 import { usePeople, usePublications, useTags, useTopics, useUploads } from "@/lib/api/queries";
 import { getUserId } from "@/lib/utils";
 import {
@@ -59,7 +46,6 @@ export function EditUploadDialog({ upload, open, onOpenChange }: EditUploadDialo
   const topicsQuery = useTopics();
   const uploadsQuery = useUploads();
 
-  // Reset form when upload changes
   useEffect(() => {
     if (upload) {
       setTitle(upload.title || "");
@@ -113,7 +99,6 @@ export function EditUploadDialog({ upload, open, onOpenChange }: EditUploadDialo
     value: t.id,
   }));
 
-  // Filter out the current upload from the related uploads options
   const uploadOptions = (uploadsQuery.data || [])
     .filter((u: UploadsResponse) => u.id !== upload?.id)
     .map((u: UploadsResponse) => ({
@@ -127,24 +112,15 @@ export function EditUploadDialog({ upload, open, onOpenChange }: EditUploadDialo
         <DialogHeader>
           <DialogTitle>Edit Document</DialogTitle>
           <DialogDescription>
-            Update the metadata for this document. Changes to authors, tags, topics, and linked documents will be
-            reflected in your knowledge graph.
+            Update the metadata for this document. Changes to authors, tags, topics, and linked documents will be reflected in your knowledge graph.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
-          {/* Title */}
           <div className="grid gap-2">
             <Label htmlFor="edit-title">Title</Label>
-            <Input
-              id="edit-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Document title"
-            />
+            <Input id="edit-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Document title" />
           </div>
-
-          {/* Type */}
           <div className="grid gap-2">
             <Label>Type</Label>
             <Select value={type} onValueChange={(val) => setType(val as UploadsTypeOptions)}>
@@ -160,8 +136,6 @@ export function EditUploadDialog({ upload, open, onOpenChange }: EditUploadDialo
               </SelectContent>
             </Select>
           </div>
-
-          {/* Authors */}
           <div className="grid gap-2">
             <Label>Authors</Label>
             <CreatableCombobox
@@ -180,8 +154,6 @@ export function EditUploadDialog({ upload, open, onOpenChange }: EditUploadDialo
               emptyText="No authors found."
             />
           </div>
-
-          {/* Publication */}
           <div className="grid gap-2">
             <Label>Publication</Label>
             <CreatableCombobox
@@ -189,16 +161,12 @@ export function EditUploadDialog({ upload, open, onOpenChange }: EditUploadDialo
               value={publication}
               onSelect={(val) => setPublication(val)}
               onCreate={(name) => {
-                createPublicationMutation
-                  .mutateAsync({ name, user: getUserId() })
-                  .then((record) => setPublication(record.id));
+                createPublicationMutation.mutateAsync({ name, user: getUserId() }).then((record) => setPublication(record.id));
               }}
               placeholder="Select publication..."
               emptyText="No publications found."
             />
           </div>
-
-          {/* Tags */}
           <div className="grid gap-2">
             <Label>Tags</Label>
             <CreatableCombobox
@@ -209,16 +177,12 @@ export function EditUploadDialog({ upload, open, onOpenChange }: EditUploadDialo
                 setTags((prev) => (prev.includes(val) ? prev.filter((t) => t !== val) : [...prev, val]));
               }}
               onCreate={(tagTitle) => {
-                createTagMutation
-                  .mutateAsync({ title: tagTitle, user: getUserId() })
-                  .then((record) => setTags((prev) => [...prev, record.id]));
+                createTagMutation.mutateAsync({ title: tagTitle, user: getUserId() }).then((record) => setTags((prev) => [...prev, record.id]));
               }}
               placeholder="Select tags..."
               emptyText="No tags found."
             />
           </div>
-
-          {/* Topics */}
           <div className="grid gap-2">
             <Label>Topics</Label>
             <CreatableCombobox
@@ -229,16 +193,12 @@ export function EditUploadDialog({ upload, open, onOpenChange }: EditUploadDialo
                 setTopics((prev) => (prev.includes(val) ? prev.filter((t) => t !== val) : [...prev, val]));
               }}
               onCreate={(topicTitle) => {
-                createTopicMutation
-                  .mutateAsync({ title: topicTitle, user: getUserId() })
-                  .then((record) => setTopics((prev) => [...prev, record.id]));
+                createTopicMutation.mutateAsync({ title: topicTitle, user: getUserId() }).then((record) => setTopics((prev) => [...prev, record.id]));
               }}
               placeholder="Select topics..."
               emptyText="No topics found."
             />
           </div>
-
-          {/* Related Documents */}
           <div className="grid gap-2">
             <Label>Related Documents</Label>
             <CreatableCombobox
@@ -254,7 +214,6 @@ export function EditUploadDialog({ upload, open, onOpenChange }: EditUploadDialo
             />
           </div>
         </div>
-
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel

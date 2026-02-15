@@ -3,35 +3,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Search,
-  FileText,
-  Highlighter,
-  Bookmark,
-  StickyNote,
-  X,
-  ExternalLink,
-  ChevronDown,
-  BookMarked,
-  Eye,
-} from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Search, FileText, Highlighter, Bookmark, StickyNote, X, ExternalLink, ChevronDown, BookMarked, Eye } from "lucide-react";
 import { useWorkspaceMaterials, usePageMarkdown } from "@/lib/api/queries";
-import type {
-  UploadsResponse,
-  HighlightsResponse,
-  NotesResponse,
-  HighlightsRecord,
-  BookmarksRecord,
-  NotesRecord,
-} from "@/lib/pocketbase-types";
+import type { UploadsResponse, HighlightsResponse, NotesResponse, HighlightsRecord, BookmarksRecord, NotesRecord } from "@/lib/pocketbase-types";
 import { HighlightsColorOptions } from "@/lib/pocketbase-types";
 import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -51,7 +26,6 @@ interface WorkspacePanelProps {
   className?: string;
 }
 
-// Color classes for highlight badges
 const highlightColorClasses: Record<HighlightsColorOptions, string> = {
   [HighlightsColorOptions.yellow]: "bg-yellow-200 text-yellow-900 dark:bg-yellow-900/50 dark:text-yellow-200",
   [HighlightsColorOptions.green]: "bg-green-200 text-green-900 dark:bg-green-900/50 dark:text-green-200",
@@ -72,9 +46,7 @@ export function WorkspacePanel({
   className,
 }: WorkspacePanelProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    new Set(["uploads", "highlights", "bookmarks", "notes"]),
-  );
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["uploads", "highlights", "bookmarks", "notes"]));
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewType, setPreviewType] = useState<"highlight" | "bookmark" | "note">("highlight");
   const [previewItem, setPreviewItem] = useState<HighlightsRecord | BookmarksRecord | NotesRecord | null>(null);
@@ -107,7 +79,6 @@ export function WorkspacePanel({
     );
   };
 
-  // Get linked items
   const linkedUploadItems = useMemo(() => {
     return materials?.uploads?.filter((u) => linkedUploads.includes(u.id)) || [];
   }, [materials?.uploads, linkedUploads]);
@@ -124,7 +95,6 @@ export function WorkspacePanel({
     return materials?.notes?.filter((n) => linkedNotes.includes(n.id)) || [];
   }, [materials?.notes, linkedNotes]);
 
-  // Filter based on search
   const filteredUploads = filterBySearch(linkedUploadItems, ["title"] as (keyof UploadsResponse)[]);
   const filteredHighlights = filterBySearch(linkedHighlightItems, ["text", "comment"] as (keyof HighlightsResponse)[]);
   const filteredBookmarks = filterBySearch(linkedBookmarkItems as any[], ["comment", "preview_text"] as any[]);
@@ -140,7 +110,7 @@ export function WorkspacePanel({
   const handlePreviewHighlight = (highlight: HighlightsResponse) => {
     setPreviewType("highlight");
     setPreviewItem(highlight as HighlightsRecord);
-    setPreviewPageNumber(undefined); // We don't have page number easily accessible
+    setPreviewPageNumber(undefined);
     setPreviewOpen(true);
   };
 
@@ -206,28 +176,18 @@ export function WorkspacePanel({
             {linkedCount} items
           </Badge>
         </div>
-
         <div className="relative">
           <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search sources..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 h-9"
-          />
+          <Input placeholder="Search sources..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-8 h-9" />
         </div>
       </div>
-
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-2">
-          {/* Documents Section */}
           {linkedUploads.length > 0 && (
             <Collapsible open={expandedSections.has("uploads")} onOpenChange={() => toggleSection("uploads")}>
               <CollapsibleTrigger asChild>
                 <button className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-muted/50 text-left">
-                  <ChevronDown
-                    className={cn("h-4 w-4 transition-transform", !expandedSections.has("uploads") && "-rotate-90")}
-                  />
+                  <ChevronDown className={cn("h-4 w-4 transition-transform", !expandedSections.has("uploads") && "-rotate-90")} />
                   <FileText className="h-4 w-4 text-primary" />
                   <span className="text-sm font-medium">Documents</span>
                   <Badge variant="outline" className="ml-auto text-xs">
@@ -249,15 +209,11 @@ export function WorkspacePanel({
               </CollapsibleContent>
             </Collapsible>
           )}
-
-          {/* Highlights Section */}
           {linkedHighlights.length > 0 && (
             <Collapsible open={expandedSections.has("highlights")} onOpenChange={() => toggleSection("highlights")}>
               <CollapsibleTrigger asChild>
                 <button className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-muted/50 text-left">
-                  <ChevronDown
-                    className={cn("h-4 w-4 transition-transform", !expandedSections.has("highlights") && "-rotate-90")}
-                  />
+                  <ChevronDown className={cn("h-4 w-4 transition-transform", !expandedSections.has("highlights") && "-rotate-90")} />
                   <Highlighter className="h-4 w-4 text-yellow-500" />
                   <span className="text-sm font-medium">Highlights</span>
                   <Badge variant="outline" className="ml-auto text-xs">
@@ -279,15 +235,11 @@ export function WorkspacePanel({
               </CollapsibleContent>
             </Collapsible>
           )}
-
-          {/* Bookmarks Section */}
           {linkedBookmarks.length > 0 && (
             <Collapsible open={expandedSections.has("bookmarks")} onOpenChange={() => toggleSection("bookmarks")}>
               <CollapsibleTrigger asChild>
                 <button className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-muted/50 text-left">
-                  <ChevronDown
-                    className={cn("h-4 w-4 transition-transform", !expandedSections.has("bookmarks") && "-rotate-90")}
-                  />
+                  <ChevronDown className={cn("h-4 w-4 transition-transform", !expandedSections.has("bookmarks") && "-rotate-90")} />
                   <Bookmark className="h-4 w-4 text-amber-500" />
                   <span className="text-sm font-medium">Bookmarks</span>
                   <Badge variant="outline" className="ml-auto text-xs">
@@ -309,15 +261,11 @@ export function WorkspacePanel({
               </CollapsibleContent>
             </Collapsible>
           )}
-
-          {/* Notes Section */}
           {linkedNotes.length > 0 && (
             <Collapsible open={expandedSections.has("notes")} onOpenChange={() => toggleSection("notes")}>
               <CollapsibleTrigger asChild>
                 <button className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-muted/50 text-left">
-                  <ChevronDown
-                    className={cn("h-4 w-4 transition-transform", !expandedSections.has("notes") && "-rotate-90")}
-                  />
+                  <ChevronDown className={cn("h-4 w-4 transition-transform", !expandedSections.has("notes") && "-rotate-90")} />
                   <StickyNote className="h-4 w-4 text-blue-500" />
                   <span className="text-sm font-medium">Notes</span>
                   <Badge variant="outline" className="ml-auto text-xs">
@@ -328,12 +276,7 @@ export function WorkspacePanel({
               <CollapsibleContent>
                 <div className="pl-6 space-y-1 mt-1">
                   {filteredNotes.map((note) => (
-                    <NoteItem
-                      key={note.id}
-                      note={note}
-                      onUnlink={() => onUnlinkNote?.(note.id)}
-                      onPreview={() => handlePreviewNote(note)}
-                    />
+                    <NoteItem key={note.id} note={note} onUnlink={() => onUnlinkNote?.(note.id)} onPreview={() => handlePreviewNote(note)} />
                   ))}
                 </div>
               </CollapsibleContent>
@@ -341,7 +284,6 @@ export function WorkspacePanel({
           )}
         </div>
       </ScrollArea>
-
       <PreviewDialog
         open={previewOpen}
         onOpenChange={setPreviewOpen}
@@ -388,11 +330,7 @@ function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate 
       return (
         <>
           <span>{before}</span>
-          <mark
-            className={cn("px-0.5 rounded", highlightColorClasses[highlight.color || HighlightsColorOptions.yellow])}
-          >
-            {highlighted}
-          </mark>
+          <mark className={cn("px-0.5 rounded", highlightColorClasses[highlight.color || HighlightsColorOptions.yellow])}>{highlighted}</mark>
           <span>{after}</span>
         </>
       );
@@ -423,17 +361,13 @@ function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate 
               </>
             )}
           </DialogTitle>
-          <DialogDescription>
-            Page {pageNumber ?? "?"} • Click "Go to page" to navigate to this location
-          </DialogDescription>
+          <DialogDescription>Page {pageNumber ?? "?"} • Click "Go to page" to navigate to this location</DialogDescription>
         </DialogHeader>
 
         {/* Highlighted text or bookmark info - fixed at top */}
         {isHighlight && highlight && (
           <div className="shrink-0 mb-2">
-            <div
-              className={cn("p-3 rounded-lg", highlightColorClasses[highlight.color || HighlightsColorOptions.yellow])}
-            >
+            <div className={cn("p-3 rounded-lg", highlightColorClasses[highlight.color || HighlightsColorOptions.yellow])}>
               <p className="text-sm font-medium">"{highlight.text}"</p>
             </div>
             {highlight.comment && (
@@ -466,9 +400,7 @@ function PreviewDialog({ open, onOpenChange, type, item, pageNumber, onNavigate 
                 <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
               </div>
             ) : markdown ? (
-              <div className="text-sm text-foreground/80 font-serif leading-relaxed whitespace-pre-wrap">
-                {renderPageContent()}
-              </div>
+              <div className="text-sm text-foreground/80 font-serif leading-relaxed whitespace-pre-wrap">{renderPageContent()}</div>
             ) : (
               <div className="text-sm text-muted-foreground italic">Could not load page content</div>
             )}
@@ -541,9 +473,7 @@ function HighlightItem({ highlight, onUnlink, onPreview }: HighlightItemProps) {
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
           <p className="text-sm leading-relaxed line-clamp-3">{highlight.text}</p>
-          {highlight.comment && (
-            <p className="text-xs text-muted-foreground mt-1 pt-1 border-t italic line-clamp-2">{highlight.comment}</p>
-          )}
+          {highlight.comment && <p className="text-xs text-muted-foreground mt-1 pt-1 border-t italic line-clamp-2">{highlight.comment}</p>}
         </div>
         <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={onPreview} title="View context">
           <Eye className="h-3 w-3" />
@@ -569,13 +499,9 @@ function BookmarkItem({ bookmark, onUnlink, onPreview }: BookmarkItemProps) {
         <Bookmark className="h-4 w-4 mt-0.5 text-amber-500 shrink-0" />
         <div className="flex-1 min-w-0">
           {bookmark.comment && <p className="text-sm font-medium line-clamp-1">{bookmark.comment}</p>}
-          <p className={cn("text-sm line-clamp-2", bookmark.comment && "text-muted-foreground")}>
-            {bookmark.preview_text || "No preview"}
-          </p>
+          <p className={cn("text-sm line-clamp-2", bookmark.comment && "text-muted-foreground")}>{bookmark.preview_text || "No preview"}</p>
         </div>
-        {bookmark.page_number && (
-          <span className="text-[10px] text-muted-foreground shrink-0 self-center">p.{bookmark.page_number}</span>
-        )}
+        {bookmark.page_number && <span className="text-[10px] text-muted-foreground shrink-0 self-center">p.{bookmark.page_number}</span>}
         <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={onPreview} title="View context">
           <Eye className="h-3 w-3" />
         </Button>
@@ -601,9 +527,7 @@ function NoteItem({ note, onUnlink, onPreview }: NoteItemProps) {
         <div className="flex-1 min-w-0">
           <p className="text-sm line-clamp-3">{note.content || "Empty note"}</p>
         </div>
-        {note.page_number && (
-          <span className="text-[10px] text-muted-foreground shrink-0 self-center">p.{note.page_number}</span>
-        )}
+        {note.page_number && <span className="text-[10px] text-muted-foreground shrink-0 self-center">p.{note.page_number}</span>}
         <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={onPreview} title="View context">
           <Eye className="h-3 w-3" />
         </Button>

@@ -35,7 +35,6 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
   const handleTabClick = useCallback(
     (tab: WorkspaceTab) => {
       setActiveTab(tab.id);
-      // Update URL based on tab type
       if (tab.type === "reader") {
         navigate({ to: "/workspace", search: { id: (tab as ReaderTab).uploadId, type: "upload" } });
       } else {
@@ -50,7 +49,6 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
       e.stopPropagation();
       removeTab(tab.id);
 
-      // If this was the active tab, navigate to the next tab or documents
       if (tab.id === activeTabId) {
         const remainingTabs = tabs.filter((t) => t.id !== tab.id);
         if (remainingTabs.length > 0) {
@@ -74,7 +72,6 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
     } else if (tabs.length > 1) {
       setSplitMode("horizontal");
     } else {
-      // Only 1 tab, prompt user to open another
       setSplitPromptOpen(true);
     }
   }, [splitMode, setSplitMode, closeSplit, tabs.length]);
@@ -85,13 +82,10 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
 
   return (
     <header className={cn("flex h-12 shrink-0 items-center border-b bg-background", className)}>
-      {/* Left sidebar trigger */}
       <div className="flex items-center gap-2 px-4">
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="h-4" />
       </div>
-
-      {/* Tabs area */}
       <Tabs value={activeTabId || undefined} className="flex-1 min-w-0 overflow-x-auto no-scrollbar">
         <TabsList className="h-full bg-transparent p-0 gap-1">
           {tabs.map((tab) => (
@@ -104,8 +98,6 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
               onClose={(e) => handleTabClose(e, tab)}
             />
           ))}
-
-          {/* Add new tab button */}
           <Button
             variant="ghost"
             size="icon"
@@ -119,10 +111,7 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
           </Button>
         </TabsList>
       </Tabs>
-
-      {/* Right controls */}
       <div className="flex items-center gap-2 px-4">
-        {/* Save button for writer tabs */}
         {activeWriterTab?.isDirty && onSave && (
           <Tooltip>
             <TooltipTrigger asChild>
@@ -133,8 +122,6 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
             <TooltipContent>Save (⌘S)</TooltipContent>
           </Tooltip>
         )}
-
-        {/* Split view toggle - always visible */}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -148,14 +135,9 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
           </TooltipTrigger>
           <TooltipContent>{splitMode === "horizontal" ? "Close split view" : "Split view"}</TooltipContent>
         </Tooltip>
-
         <Separator orientation="vertical" className="h-4" />
-
-        {/* Right sidebar trigger */}
         <SidebarTrigger side="right" className="-mr-1" />
       </div>
-
-      {/* Split prompt dialog */}
       <Dialog open={splitPromptOpen} onOpenChange={setSplitPromptOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -190,7 +172,6 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
           </div>
         </DialogContent>
       </Dialog>
-
       <NewTabDialog open={newTabOpen} onOpenChange={setNewTabOpen} initialTab={initialDialogTab} />
     </header>
   );
@@ -217,24 +198,16 @@ function TabItem({ tab, isActive, isSplit, onClick, onClose }: TabItemProps) {
         isSplit && !isActive && "bg-primary/10 border-primary/30",
       )}
     >
-      {/* Tab type icon */}
       {isWriter ? <PenLine className="h-3.5 w-3.5 shrink-0" /> : <FileText className="h-3.5 w-3.5 shrink-0" />}
-
-      {/* Dirty indicator */}
       {isDirty && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
-
       <span className="truncate" title={tab.title}>
         {tab.title || "Untitled"}
       </span>
-
-      {/* Split indicator */}
       {isSplit && !isActive && (
         <span className="text-[10px] text-primary font-medium px-1.5 py-0.5 rounded-full bg-primary/10 shrink-0">
           Split
         </span>
       )}
-
-      {/* Close button - using span to avoid nested button inside TabsTrigger */}
       <span
         role="button"
         tabIndex={0}

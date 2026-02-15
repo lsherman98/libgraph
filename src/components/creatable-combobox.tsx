@@ -75,7 +75,7 @@ export function CreatableCombobox({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[300px] p-0" align="start">
+      <PopoverContent className="w-75 p-0" align="start">
         <Command>
           <CommandInput placeholder={placeholder} value={inputValue} onValueChange={setInputValue} />
           <CommandList>

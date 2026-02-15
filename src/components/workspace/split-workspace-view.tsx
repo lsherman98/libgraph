@@ -1,10 +1,5 @@
 import { useCallback, useState, useEffect } from "react";
-import {
-  useWorkspaceTabsStore,
-  type ReaderTab,
-  type WriterTab,
-  type WorkspaceTab,
-} from "@/lib/stores/workspace-tabs-store";
+import { useWorkspaceTabsStore, type ReaderTab, type WriterTab, type WorkspaceTab } from "@/lib/stores/workspace-tabs-store";
 import { ReaderPane } from "@/components/reader/reader-pane";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
 import { useWritingProject } from "@/lib/api/queries";
@@ -26,28 +21,14 @@ export function SplitWorkspaceView({
   onContentChange: parentOnContentChange,
   onTitleLoad,
 }: SplitWorkspaceViewProps) {
-  const {
-    tabs,
-    activeTabId,
-    splitMode,
-    splitTabId,
-    panelSizes,
-    updateReaderTabPage,
-    updateTabTitle,
-    setWriterTabDirty,
-    setPanelSizes,
-  } = useWorkspaceTabsStore();
+  const { tabs, activeTabId, splitMode, splitTabId, panelSizes, updateReaderTabPage, updateTabTitle, setWriterTabDirty } = useWorkspaceTabsStore();
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const splitTab = splitTabId ? tabs.find((t) => t.id === splitTabId) : null;
 
-  // For split tab that's a writer, we need separate local content
   const [splitLocalContent, setSplitLocalContent] = useState<string>("");
-  const { data: splitProject } = useWritingProject(
-    splitTab?.type === "writer" ? (splitTab as WriterTab).projectId : undefined,
-  );
+  const { data: splitProject } = useWritingProject(splitTab?.type === "writer" ? (splitTab as WriterTab).projectId : undefined);
 
-  // Sync split project content
   useEffect(() => {
     if (splitProject) {
       setSplitLocalContent(splitProject.content || "");
@@ -64,7 +45,6 @@ export function SplitWorkspaceView({
   const handleTitleLoad = useCallback(
     (tabId: string) => (title: string) => {
       updateTabTitle(tabId, title);
-      // Only call parent callback for active tab
       if (tabId === activeTabId && onTitleLoad) {
         onTitleLoad(title);
       }
@@ -86,14 +66,7 @@ export function SplitWorkspaceView({
     return null;
   }
 
-  // Render a single pane (reader or writer)
-  const renderPane = (
-    tab: WorkspaceTab,
-    isActive: boolean,
-    localContent?: string,
-    project?: any,
-    onContentChange?: (content: string) => void,
-  ) => {
+  const renderPane = (tab: WorkspaceTab, isActive: boolean, localContent?: string, project?: any, onContentChange?: (content: string) => void) => {
     if (tab.type === "reader") {
       const readerTab = tab as ReaderTab;
       return (
@@ -109,19 +82,10 @@ export function SplitWorkspaceView({
       );
     } else {
       const writerTab = tab as WriterTab;
-      return (
-        <WriterPane
-          key={tab.id}
-          tab={writerTab}
-          localContent={localContent || ""}
-          project={project}
-          onContentChange={onContentChange}
-        />
-      );
+      return <WriterPane key={tab.id} tab={writerTab} localContent={localContent || ""} project={project} onContentChange={onContentChange} />;
     }
   };
 
-  // Single view mode
   if (splitMode === "none" || !splitTab) {
     return (
       <div className={className}>
@@ -136,7 +100,6 @@ export function SplitWorkspaceView({
     );
   }
 
-  // Split view mode - can mix reader and writer panes
   return (
     <ResizablePanelGroup className={cn("flex h-full w-full", className)}>
       <ResizablePanel defaultSize={panelSizes[0]} minSize={20}>
@@ -166,7 +129,6 @@ export function SplitWorkspaceView({
   );
 }
 
-// Helper component to render writer pane
 interface WriterPaneProps {
   tab: WriterTab;
   localContent: string;
@@ -179,12 +141,5 @@ function WriterPane({ tab, localContent, project, onContentChange }: WriterPaneP
     return <div className="flex items-center justify-center h-full text-muted-foreground">Loading project...</div>;
   }
 
-  return (
-    <WriterEditorPane
-      projectId={tab.projectId}
-      content={localContent}
-      onContentChange={onContentChange ?? (() => {})}
-      className="h-full"
-    />
-  );
+  return <WriterEditorPane projectId={tab.projectId} content={localContent} onContentChange={onContentChange ?? (() => {})} className="h-full" />;
 }

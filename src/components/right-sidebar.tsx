@@ -37,7 +37,6 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
   const { data: project } = useWritingProject(writerTab?.projectId);
   const updateProject = useUpdateWritingProject();
 
-  // Only show sidebar content when on the workspace route
   const isWorkspaceRoute = location.pathname.startsWith("/workspace");
 
   const editorState = useReaderStore((state) => state.editorState);
@@ -46,29 +45,23 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
   const isBookmarkEditorOpen = editorState?.mode === "pending-bookmark" || editorState?.mode === "editing-bookmark";
   const isNoteEditorOpen = editorState?.mode === "pending-note" || editorState?.mode === "editing-note";
 
-  // Get the upload ID from the active reader tab
   const readerTab = activeTab?.type === "reader" ? (activeTab as ReaderTab) : null;
   const readerUploadId = readerTab?.uploadId ?? null;
 
   const [sidebarTab, setSidebarTab] = useState<"annotations" | "info">("annotations");
 
-  // Auto-close the right sidebar when leaving the workspace page
   useEffect(() => {
     if (!isWorkspaceRoute) {
       setOpenRight(false);
     }
-    // Only react to route changes, not setOpenRight reference changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isWorkspaceRoute]);
 
-  // Reset to annotations tab when an editor panel opens
   useEffect(() => {
     if (editorState) {
       setSidebarTab("annotations");
     }
   }, [editorState]);
 
-  // Show empty sidebar when not on workspace route
   if (!isWorkspaceRoute) {
     return (
       <Sidebar collapsible="offcanvas" {...props}>
@@ -77,7 +70,6 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
     );
   }
 
-  // Show workspace panel for writer tabs, annotations panel for reader tabs
   if (isWriterTab && writerTab) {
     return (
       <Sidebar collapsible="offcanvas" {...props}>
@@ -135,7 +127,6 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
     );
   }
 
-  // Determine which header to show
   const getHeaderContent = () => {
     if (isHighlightEditorOpen) {
       return (
@@ -168,7 +159,6 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
       );
     }
 
-    // Show tab switcher between Annotations and Document Info
     return (
       <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as "annotations" | "info")} className="w-full">
         <TabsList className="w-full h-8">
@@ -185,7 +175,6 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
     );
   };
 
-  // Determine which content to show
   const getContent = () => {
     if (isHighlightEditorOpen) return <HighlightEditorPanel />;
     if (isBookmarkEditorOpen) return <BookmarkEditorPanel />;

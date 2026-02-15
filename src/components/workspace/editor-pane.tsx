@@ -32,17 +32,9 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Toggle } from "@/components/ui/toggle";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-type OverflowAction =
-  | { type: "separator" }
-  | { type: "item"; label: string; icon: LucideIcon; action: () => void; active?: boolean };
+type OverflowAction = { type: "separator" } | { type: "item"; label: string; icon: LucideIcon; action: () => void; active?: boolean };
 
 interface EditorToolbarProps {
   editor: ReturnType<typeof useEditor>;
@@ -58,7 +50,6 @@ function EditorToolbar({ editor }: EditorToolbarProps) {
   const showBlocks = true;
   const showOverflow = false;
 
-  // Actions to show in overflow menu when hidden from toolbar
   const overflowActions: OverflowAction[] = [];
 
   if (!showHeadings) {
@@ -159,27 +150,15 @@ function EditorToolbar({ editor }: EditorToolbarProps) {
 
   return (
     <div ref={toolbarRef} className="flex flex-wrap items-center gap-1 p-2 border-b bg-muted/30 w-full shrink-0">
-      {/* Undo/Redo */}
       <div className="flex items-center gap-0.5 mr-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => editor.chain().focus().undo().run()}
-          disabled={!editor.can().undo()}
-        >
+        <Button variant="ghost" size="sm" onClick={() => editor.chain().focus().undo().run()} disabled={!editor.can().undo()}>
           <Undo className="h-4 w-4" />
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => editor.chain().focus().redo().run()}
-          disabled={!editor.can().redo()}
-        >
+        <Button variant="ghost" size="sm" onClick={() => editor.chain().focus().redo().run()} disabled={!editor.can().redo()}>
           <Redo className="h-4 w-4" />
         </Button>
       </div>
 
-      {/* Headings */}
       {showHeadings && (
         <div className="flex items-center gap-0.5 mr-1">
           <Toggle
@@ -206,87 +185,44 @@ function EditorToolbar({ editor }: EditorToolbarProps) {
         </div>
       )}
 
-      {/* Text formatting */}
       <div className="flex items-center gap-0.5 mr-1">
-        <Toggle
-          size="sm"
-          pressed={editor.isActive("bold")}
-          onPressedChange={() => editor.chain().focus().toggleBold().run()}
-        >
+        <Toggle size="sm" pressed={editor.isActive("bold")} onPressedChange={() => editor.chain().focus().toggleBold().run()}>
           <Bold className="h-4 w-4" />
         </Toggle>
-        <Toggle
-          size="sm"
-          pressed={editor.isActive("italic")}
-          onPressedChange={() => editor.chain().focus().toggleItalic().run()}
-        >
+        <Toggle size="sm" pressed={editor.isActive("italic")} onPressedChange={() => editor.chain().focus().toggleItalic().run()}>
           <Italic className="h-4 w-4" />
         </Toggle>
-        <Toggle
-          size="sm"
-          pressed={editor.isActive("strike")}
-          onPressedChange={() => editor.chain().focus().toggleStrike().run()}
-        >
+        <Toggle size="sm" pressed={editor.isActive("strike")} onPressedChange={() => editor.chain().focus().toggleStrike().run()}>
           <Strikethrough className="h-4 w-4" />
         </Toggle>
-        <Toggle
-          size="sm"
-          pressed={editor.isActive("code")}
-          onPressedChange={() => editor.chain().focus().toggleCode().run()}
-        >
+        <Toggle size="sm" pressed={editor.isActive("code")} onPressedChange={() => editor.chain().focus().toggleCode().run()}>
           <Code className="h-4 w-4" />
         </Toggle>
-        <Toggle
-          size="sm"
-          pressed={editor.isActive("highlight")}
-          onPressedChange={() => editor.chain().focus().toggleHighlight().run()}
-        >
+        <Toggle size="sm" pressed={editor.isActive("highlight")} onPressedChange={() => editor.chain().focus().toggleHighlight().run()}>
           <Highlighter className="h-4 w-4" />
         </Toggle>
       </div>
 
-      {/* Lists */}
       {showLists && (
         <div className="flex items-center gap-0.5 mr-1">
-          <Toggle
-            size="sm"
-            pressed={editor.isActive("bulletList")}
-            onPressedChange={() => editor.chain().focus().toggleBulletList().run()}
-          >
+          <Toggle size="sm" pressed={editor.isActive("bulletList")} onPressedChange={() => editor.chain().focus().toggleBulletList().run()}>
             <List className="h-4 w-4" />
           </Toggle>
-          <Toggle
-            size="sm"
-            pressed={editor.isActive("orderedList")}
-            onPressedChange={() => editor.chain().focus().toggleOrderedList().run()}
-          >
+          <Toggle size="sm" pressed={editor.isActive("orderedList")} onPressedChange={() => editor.chain().focus().toggleOrderedList().run()}>
             <ListOrdered className="h-4 w-4" />
           </Toggle>
-          <Toggle
-            size="sm"
-            pressed={editor.isActive("taskList")}
-            onPressedChange={() => editor.chain().focus().toggleTaskList().run()}
-          >
+          <Toggle size="sm" pressed={editor.isActive("taskList")} onPressedChange={() => editor.chain().focus().toggleTaskList().run()}>
             <ListTodo className="h-4 w-4" />
           </Toggle>
         </div>
       )}
 
-      {/* Blocks */}
       {showBlocks && (
         <div className="flex items-center gap-0.5">
-          <Toggle
-            size="sm"
-            pressed={editor.isActive("blockquote")}
-            onPressedChange={() => editor.chain().focus().toggleBlockquote().run()}
-          >
+          <Toggle size="sm" pressed={editor.isActive("blockquote")} onPressedChange={() => editor.chain().focus().toggleBlockquote().run()}>
             <Quote className="h-4 w-4" />
           </Toggle>
-          <Toggle
-            size="sm"
-            pressed={editor.isActive("codeBlock")}
-            onPressedChange={() => editor.chain().focus().toggleCodeBlock().run()}
-          >
+          <Toggle size="sm" pressed={editor.isActive("codeBlock")} onPressedChange={() => editor.chain().focus().toggleCodeBlock().run()}>
             <CodeSquare className="h-4 w-4" />
           </Toggle>
           <Button variant="ghost" size="sm" onClick={() => editor.chain().focus().setHorizontalRule().run()}>
@@ -311,7 +247,6 @@ function EditorToolbar({ editor }: EditorToolbarProps) {
         </div>
       )}
 
-      {/* Overflow menu for hidden actions */}
       {showOverflow && overflowActions.length > 0 && (
         <>
           <Separator orientation="vertical" className="h-6 mx-1" />
@@ -324,7 +259,6 @@ function EditorToolbar({ editor }: EditorToolbarProps) {
             <DropdownMenuContent align="end">
               {overflowActions.map((item, index) => {
                 if (item.type === "separator") {
-                  // Don't render separator at the end
                   if (index === overflowActions.length - 1) return null;
                   return <DropdownMenuSeparator key={index} />;
                 }
@@ -352,13 +286,7 @@ interface WriterEditorPaneProps {
   className?: string;
 }
 
-export function WriterEditorPane({
-  projectId,
-  content,
-  onContentChange,
-  onInsertContent,
-  className,
-}: WriterEditorPaneProps) {
+export function WriterEditorPane({ projectId, content, onContentChange, onInsertContent, className }: WriterEditorPaneProps) {
   const lastSavedContent = useRef(content);
 
   const editor = useEditor({
@@ -400,7 +328,6 @@ export function WriterEditorPane({
     },
   });
 
-  // Update editor content when project changes
   useEffect(() => {
     if (editor && content !== editor.getHTML()) {
       editor.commands.setContent(content);
@@ -408,7 +335,6 @@ export function WriterEditorPane({
     }
   }, [projectId, content, editor]);
 
-  // Expose insert function for workspace panel
   const insertContent = useCallback(
     (insertText: string) => {
       if (editor) {
@@ -418,10 +344,8 @@ export function WriterEditorPane({
     [editor],
   );
 
-  // Make insert available to parent
   useEffect(() => {
     if (onInsertContent) {
-      // Store the insert function reference
       (window as any).__writerInsertContent = insertContent;
     }
     return () => {
@@ -439,7 +363,6 @@ export function WriterEditorPane({
   );
 }
 
-// Hook to get current word count from editor
 export function useEditorWordCount(editor: ReturnType<typeof useEditor>) {
   if (!editor) return 0;
   const text = editor.getText();

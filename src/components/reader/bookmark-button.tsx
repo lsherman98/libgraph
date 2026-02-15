@@ -44,7 +44,6 @@ export function BlockActions({
 
   const handleBookmarkClick = () => {
     if (isBookmarked && bookmarkId) {
-      // Edit existing bookmark
       setEditorState({
         mode: "editing-bookmark",
         data: {
@@ -58,7 +57,6 @@ export function BlockActions({
         },
       });
     } else {
-      // Create new bookmark
       setEditorState({
         mode: "pending-bookmark",
         data: {
@@ -74,7 +72,6 @@ export function BlockActions({
 
   const handleNoteClick = () => {
     if (hasNote && noteId) {
-      // Edit existing note
       setEditorState({
         mode: "editing-note",
         data: {
@@ -88,7 +85,6 @@ export function BlockActions({
         },
       });
     } else {
-      // Create new note
       setEditorState({
         mode: "pending-note",
         data: {
@@ -104,7 +100,6 @@ export function BlockActions({
 
   return (
     <span className={cn("absolute -left-8 top-0 flex flex-col items-center gap-0.5", className)}>
-      {/* Bookmark button */}
       <Button
         variant="ghost"
         size="icon"
@@ -117,15 +112,10 @@ export function BlockActions({
       >
         {isBookmarked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
       </Button>
-
-      {/* Note button */}
       <Button
         variant="ghost"
         size="icon"
-        className={cn(
-          "h-6 w-6 transition-opacity",
-          hasNote ? "text-blue-500 opacity-100" : "opacity-0 group-hover:opacity-60 hover:opacity-100",
-        )}
+        className={cn("h-6 w-6 transition-opacity", hasNote ? "text-blue-500 opacity-100" : "opacity-0 group-hover:opacity-60 hover:opacity-100")}
         title={hasNote ? "Edit note" : "Add note"}
         onClick={handleNoteClick}
       >

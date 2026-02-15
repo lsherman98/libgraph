@@ -63,16 +63,13 @@ export function HighlightEditorPanel() {
   const isEditing = !!editingHighlight;
   const highlight = editingHighlight || pendingHighlight;
 
-  const [selectedColor, setSelectedColor] = useState<HighlightsColorOptions>(
-    highlight?.color || HighlightsColorOptions.yellow,
-  );
+  const [selectedColor, setSelectedColor] = useState<HighlightsColorOptions>(highlight?.color || HighlightsColorOptions.yellow);
   const [note, setNote] = useState(isEditing ? editingHighlight?.note || "" : "");
   const [selectedTags, setSelectedTags] = useState<string[]>(isEditing ? editingHighlight?.tags || [] : []);
 
   const { data: tags = [] } = useTags();
   const createTagMutation = useCreateTag();
 
-  // Reset state when highlight changes
   useEffect(() => {
     if (editingHighlight) {
       setSelectedColor(editingHighlight.color);
@@ -145,25 +142,20 @@ export function HighlightEditorPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <h3 className="font-semibold text-sm">{isEditing ? "Edit Highlight" : "New Highlight"}</h3>
         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleClose}>
           <X className="h-4 w-4" />
         </Button>
       </div>
-
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-5">
-          {/* Selected text preview */}
           <div>
             <label className="text-xs font-medium uppercase text-muted-foreground mb-2 block">Selected Text</label>
             <div className={cn("p-3 rounded-lg text-sm", colorConfig?.bg || "bg-yellow-300/70")}>
               <p className="text-foreground line-clamp-4">"{highlight.text}"</p>
             </div>
           </div>
-
-          {/* Color selection */}
           <div>
             <label className="text-xs font-medium uppercase text-muted-foreground mb-2 block">Color</label>
             <div className="flex items-center gap-2">
@@ -181,8 +173,6 @@ export function HighlightEditorPanel() {
               ))}
             </div>
           </div>
-
-          {/* Note input */}
           <div>
             <label className="text-xs font-medium uppercase text-muted-foreground mb-2 block">Note</label>
             <Textarea
@@ -192,8 +182,6 @@ export function HighlightEditorPanel() {
               className="min-h-30 text-sm resize-none"
             />
           </div>
-
-          {/* Tags selection */}
           <div>
             <label className="text-xs font-medium uppercase text-muted-foreground mb-2 block">Tags</label>
             <CreatableCombobox
@@ -207,26 +195,17 @@ export function HighlightEditorPanel() {
           </div>
         </div>
       </ScrollArea>
-
-      {/* Footer actions */}
       <div className="flex items-center justify-between gap-2 p-4 border-t">
         <div className="flex items-center gap-2">
           {isEditing ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={handleDelete}
-            >
+            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleDelete}>
               <Trash2 className="h-4 w-4 mr-1" />
               Delete
             </Button>
           ) : (
             <div />
           )}
-          {isEditing && editingHighlight && (
-            <AddToProjectButton itemId={editingHighlight.id} itemType="highlight" variant="default" />
-          )}
+          {isEditing && editingHighlight && <AddToProjectButton itemId={editingHighlight.id} itemType="highlight" variant="default" />}
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleClose}>

@@ -26,8 +26,7 @@ export const Route = createFileRoute("/_app/workspace/")({
 
 function RouteComponent() {
   const { id, type } = Route.useSearch();
-  const { tabs, activeTabId, addReaderTab, addWriterTab, updateTabTitle, setWriterTabDirty, getTab } =
-    useWorkspaceTabsStore();
+  const { tabs, activeTabId, addReaderTab, addWriterTab, updateTabTitle, setWriterTabDirty, getTab } = useWorkspaceTabsStore();
 
   const { data: projects } = useWritingProjects();
   const updateProject = useUpdateWritingProject();
@@ -37,7 +36,6 @@ function RouteComponent() {
 
   const activeTab = activeTabId ? getTab(activeTabId) : null;
   const activeWriterTab = activeTab?.type === "writer" ? activeTab : null;
-
   const { data: activeProject } = useWritingProject(activeWriterTab?.projectId);
 
   const [localContent, setLocalContent] = useState<string>("");

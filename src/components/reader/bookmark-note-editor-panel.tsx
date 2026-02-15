@@ -39,7 +39,6 @@ export function BookmarkEditorPanel() {
   const { data: tags = [] } = useTags();
   const createTagMutation = useCreateTag();
 
-  // Reset state when bookmark changes
   useEffect(() => {
     if (editingBookmark) {
       setComment(editingBookmark.comment || "");
@@ -105,7 +104,6 @@ export function BookmarkEditorPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <h3 className="font-semibold text-sm flex items-center gap-2">
           <Bookmark className="h-4 w-4 text-amber-500" />
@@ -115,18 +113,14 @@ export function BookmarkEditorPanel() {
           <X className="h-4 w-4" />
         </Button>
       </div>
-
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-5">
-          {/* Preview text */}
           <div>
             <label className="text-xs font-medium uppercase text-muted-foreground mb-2 block">Selected Text</label>
             <div className="p-3 rounded-lg bg-amber-100/50 dark:bg-amber-900/20 text-sm">
               <p className="text-foreground line-clamp-4 italic">"{bookmark.previewText}"</p>
             </div>
           </div>
-
-          {/* Comment input */}
           <div>
             <label className="text-xs font-medium uppercase text-muted-foreground mb-2 block">Comment</label>
             <Textarea
@@ -136,8 +130,6 @@ export function BookmarkEditorPanel() {
               className="min-h-30 text-sm resize-none"
             />
           </div>
-
-          {/* Tags selection */}
           <div>
             <label className="text-xs font-medium uppercase text-muted-foreground mb-2 block">Tags</label>
             <CreatableCombobox
@@ -151,26 +143,17 @@ export function BookmarkEditorPanel() {
           </div>
         </div>
       </ScrollArea>
-
-      {/* Footer actions */}
       <div className="flex items-center justify-between gap-2 p-4 border-t">
         <div className="flex items-center gap-2">
           {isEditing ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={handleDelete}
-            >
+            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleDelete}>
               <Trash2 className="h-4 w-4 mr-1" />
               Delete
             </Button>
           ) : (
             <div />
           )}
-          {isEditing && editingBookmark && (
-            <AddToProjectButton itemId={editingBookmark.id} itemType="bookmark" variant="default" />
-          )}
+          {isEditing && editingBookmark && <AddToProjectButton itemId={editingBookmark.id} itemType="bookmark" variant="default" />}
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleClose}>
@@ -206,7 +189,6 @@ export function NoteEditorPanel() {
   const { data: tags = [] } = useTags();
   const createTagMutation = useCreateTag();
 
-  // Reset state when note changes
   useEffect(() => {
     if (editingNote) {
       setContent(editingNote.content || "");
@@ -274,7 +256,6 @@ export function NoteEditorPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <h3 className="font-semibold text-sm flex items-center gap-2">
           <StickyNote className="h-4 w-4 text-blue-500" />
@@ -284,10 +265,8 @@ export function NoteEditorPanel() {
           <X className="h-4 w-4" />
         </Button>
       </div>
-
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-5">
-          {/* Preview text (only for new notes) */}
           {note.previewText && (
             <div>
               <label className="text-xs font-medium uppercase text-muted-foreground mb-2 block">Context</label>
@@ -296,8 +275,6 @@ export function NoteEditorPanel() {
               </div>
             </div>
           )}
-
-          {/* Content input */}
           <div>
             <label className="text-xs font-medium uppercase text-muted-foreground mb-2 block">Note</label>
             <Textarea
@@ -308,8 +285,6 @@ export function NoteEditorPanel() {
               autoFocus
             />
           </div>
-
-          {/* Tags selection */}
           <div>
             <label className="text-xs font-medium uppercase text-muted-foreground mb-2 block">Tags</label>
             <CreatableCombobox
@@ -323,17 +298,10 @@ export function NoteEditorPanel() {
           </div>
         </div>
       </ScrollArea>
-
-      {/* Footer actions */}
       <div className="flex items-center justify-between gap-2 p-4 border-t">
         <div className="flex items-center gap-2">
           {isEditing ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-              onClick={handleDelete}
-            >
+            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleDelete}>
               <Trash2 className="h-4 w-4 mr-1" />
               Delete
             </Button>

@@ -7,13 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CreatableCombobox } from "@/components/creatable-combobox";
-import {
-  useUpdateUpload,
-  useCreatePerson,
-  useCreatePublication,
-  useCreateTag,
-  useCreateTopic,
-} from "@/lib/api/mutations";
+import { useUpdateUpload, useCreatePerson, useCreatePublication, useCreateTag, useCreateTopic } from "@/lib/api/mutations";
 import { usePeople, usePublications, useTags, useTopics, useUploads, useUploadById } from "@/lib/api/queries";
 import { getUserId } from "@/lib/utils";
 import {
@@ -56,16 +50,15 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
   const topicsQuery = useTopics();
   const uploadsQuery = useUploads();
 
-  // Populate form when upload loads or changes
   useEffect(() => {
     if (upload) {
       setTitle(upload.title || "");
       setType(upload.type || UploadsTypeOptions.book);
-      setSubjects(upload.subjects || []);
+      setSubjects(upload.people || []);
       setPublication(upload.publication || "");
       setTags(upload.tags || []);
       setTopics(upload.topic || []);
-      setRelatedUploads(upload.upload || []);
+      setRelatedUploads(upload.uploads || []);
     }
   }, [upload]);
 
@@ -77,11 +70,11 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
       data: {
         title,
         type,
-        subjects: subjects.length > 0 ? subjects : [],
+        people: subjects.length > 0 ? subjects : [],
         publication: publication || undefined,
         tags: tags.length > 0 ? tags : [],
         topic: topics.length > 0 ? topics : [],
-        upload: relatedUploads.length > 0 ? relatedUploads : [],
+        uploads: relatedUploads.length > 0 ? relatedUploads : [],
       },
     });
 
@@ -92,11 +85,11 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
     if (upload) {
       setTitle(upload.title || "");
       setType(upload.type || UploadsTypeOptions.book);
-      setSubjects(upload.subjects || []);
+      setSubjects(upload.people || []);
       setPublication(upload.publication || "");
       setTags(upload.tags || []);
       setTopics(upload.topic || []);
-      setRelatedUploads(upload.upload || []);
+      setRelatedUploads(upload.uploads || []);
     }
     setIsEditing(false);
   };
@@ -111,14 +104,11 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
 
   if (!upload) return null;
 
-  // Helper to resolve names from IDs
   const getPersonName = (id: string) => peopleQuery.data?.find((p: PeopleResponse) => p.id === id)?.name || "Unknown";
-  const getPublicationName = (id: string) =>
-    publicationsQuery.data?.find((p: PublicationsResponse) => p.id === id)?.name || "Unknown";
+  const getPublicationName = (id: string) => publicationsQuery.data?.find((p: PublicationsResponse) => p.id === id)?.name || "Unknown";
   const getTagTitle = (id: string) => tagsQuery.data?.find((t: TagsResponse) => t.id === id)?.title || id;
   const getTopicTitle = (id: string) => topicsQuery.data?.find((t: TopicsResponse) => t.id === id)?.title || id;
-  const getUploadTitle = (id: string) =>
-    uploadsQuery.data?.find((u: UploadsResponse) => u.id === id)?.title || "Untitled";
+  const getUploadTitle = (id: string) => uploadsQuery.data?.find((u: UploadsResponse) => u.id === id)?.title || "Untitled";
 
   const authorOptions = (peopleQuery.data || [])
     .filter((p: PeopleResponse) => !p.type || p.type === PeopleTypeOptions.author)
@@ -161,18 +151,11 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold">Edit Document</h3>
           </div>
-
           <div className="grid gap-3">
             <div className="grid gap-1.5">
               <Label className="text-xs">Title</Label>
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="Document title"
-                className="h-8 text-sm"
-              />
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Document title" className="h-8 text-sm" />
             </div>
-
             <div className="grid gap-1.5">
               <Label className="text-xs">Type</Label>
               <Select value={type} onValueChange={(val) => setType(val as UploadsTypeOptions)}>
@@ -188,7 +171,6 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
                 </SelectContent>
               </Select>
             </div>
-
             <div className="grid gap-1.5">
               <Label className="text-xs">Authors</Label>
               <CreatableCombobox
@@ -196,9 +178,7 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
                 value={subjects}
                 isMulti
                 className="text-sm"
-                onSelect={(val) =>
-                  setSubjects((prev) => (prev.includes(val) ? prev.filter((s) => s !== val) : [...prev, val]))
-                }
+                onSelect={(val) => setSubjects((prev) => (prev.includes(val) ? prev.filter((s) => s !== val) : [...prev, val]))}
                 onCreate={(name) => {
                   createPersonMutation
                     .mutateAsync({ name, type: PeopleTypeOptions.author, user: getUserId() })
@@ -208,7 +188,6 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
                 emptyText="No authors found."
               />
             </div>
-
             <div className="grid gap-1.5">
               <Label className="text-xs">Publication</Label>
               <CreatableCombobox
@@ -217,15 +196,12 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
                 className="text-sm"
                 onSelect={(val) => setPublication(val)}
                 onCreate={(name) => {
-                  createPublicationMutation
-                    .mutateAsync({ name, user: getUserId() })
-                    .then((record) => setPublication(record.id));
+                  createPublicationMutation.mutateAsync({ name, user: getUserId() }).then((record) => setPublication(record.id));
                 }}
                 placeholder="Select publication..."
                 emptyText="No publications found."
               />
             </div>
-
             <div className="grid gap-1.5">
               <Label className="text-xs">Tags</Label>
               <CreatableCombobox
@@ -233,19 +209,14 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
                 value={tags}
                 isMulti
                 className="text-sm"
-                onSelect={(val) =>
-                  setTags((prev) => (prev.includes(val) ? prev.filter((t) => t !== val) : [...prev, val]))
-                }
+                onSelect={(val) => setTags((prev) => (prev.includes(val) ? prev.filter((t) => t !== val) : [...prev, val]))}
                 onCreate={(tagTitle) => {
-                  createTagMutation
-                    .mutateAsync({ title: tagTitle, user: getUserId() })
-                    .then((record) => setTags((prev) => [...prev, record.id]));
+                  createTagMutation.mutateAsync({ title: tagTitle, user: getUserId() }).then((record) => setTags((prev) => [...prev, record.id]));
                 }}
                 placeholder="Select tags..."
                 emptyText="No tags found."
               />
             </div>
-
             <div className="grid gap-1.5">
               <Label className="text-xs">Topics</Label>
               <CreatableCombobox
@@ -253,9 +224,7 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
                 value={topics}
                 isMulti
                 className="text-sm"
-                onSelect={(val) =>
-                  setTopics((prev) => (prev.includes(val) ? prev.filter((t) => t !== val) : [...prev, val]))
-                }
+                onSelect={(val) => setTopics((prev) => (prev.includes(val) ? prev.filter((t) => t !== val) : [...prev, val]))}
                 onCreate={(topicTitle) => {
                   createTopicMutation
                     .mutateAsync({ title: topicTitle, user: getUserId() })
@@ -265,7 +234,6 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
                 emptyText="No topics found."
               />
             </div>
-
             <div className="grid gap-1.5">
               <Label className="text-xs">Related Documents</Label>
               <CreatableCombobox
@@ -273,16 +241,13 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
                 value={relatedUploads}
                 isMulti
                 className="text-sm"
-                onSelect={(val) =>
-                  setRelatedUploads((prev) => (prev.includes(val) ? prev.filter((u) => u !== val) : [...prev, val]))
-                }
+                onSelect={(val) => setRelatedUploads((prev) => (prev.includes(val) ? prev.filter((u) => u !== val) : [...prev, val]))}
                 onCreate={() => {}}
                 placeholder="Link documents..."
                 emptyText="No other documents."
               />
             </div>
           </div>
-
           <div className="flex gap-2 pt-2">
             <Button size="sm" variant="outline" onClick={handleCancel} className="flex-1">
               Cancel
@@ -297,11 +262,9 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
     );
   }
 
-  // Read-only view
   return (
     <ScrollArea className="h-full">
       <div className="p-4 space-y-4">
-        {/* Header */}
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2 min-w-0">
             <TypeIcon className="h-5 w-5 text-muted-foreground shrink-0" />
@@ -311,20 +274,16 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
             <Pencil className="h-3.5 w-3.5" />
           </Button>
         </div>
-
         <div className="space-y-3">
-          {/* Type */}
           <div>
             <span className="text-xs text-muted-foreground">Type</span>
             <p className="text-sm capitalize">{upload.type}</p>
           </div>
-
-          {/* Authors */}
-          {upload.subjects?.length > 0 && (
+          {upload.people?.length > 0 && (
             <div>
               <span className="text-xs text-muted-foreground">Authors</span>
               <div className="flex flex-wrap gap-1 mt-1">
-                {upload.subjects.map((id: string) => (
+                {upload.people.map((id: string) => (
                   <Badge key={id} variant="secondary" className="text-xs">
                     {getPersonName(id)}
                   </Badge>
@@ -332,16 +291,12 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
               </div>
             </div>
           )}
-
-          {/* Publication */}
           {upload.publication && (
             <div>
               <span className="text-xs text-muted-foreground">Publication</span>
               <p className="text-sm">{getPublicationName(upload.publication)}</p>
             </div>
           )}
-
-          {/* Tags */}
           {upload.tags?.length > 0 && (
             <div>
               <span className="text-xs text-muted-foreground">Tags</span>
@@ -354,8 +309,6 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
               </div>
             </div>
           )}
-
-          {/* Topics */}
           {upload.topic?.length > 0 && (
             <div>
               <span className="text-xs text-muted-foreground">Topics</span>
@@ -368,16 +321,14 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
               </div>
             </div>
           )}
-
-          {/* Related Documents */}
-          {upload.upload?.length > 0 && (
+          {upload.uploads?.length > 0 && (
             <div>
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <Link2 className="h-3 w-3" />
                 Related Documents
               </span>
               <div className="mt-1 space-y-1">
-                {upload.upload.map((id: string) => (
+                {upload.uploads.map((id: string) => (
                   <button
                     key={id}
                     className="flex items-center gap-2 text-sm text-left w-full px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
@@ -391,8 +342,6 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
               </div>
             </div>
           )}
-
-          {/* Pages */}
           {upload.num_pages > 0 && (
             <div>
               <span className="text-xs text-muted-foreground">Pages</span>
