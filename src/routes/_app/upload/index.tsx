@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { X, Upload, File as FileIcon, Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { X, Upload, File as FileIcon, Loader2, CheckCircle, AlertCircle, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CreatableCombobox } from "@/components/creatable-combobox";
 
 import { useUpload, useCreatePerson, useCreatePublication, useCreateTag, useCreateTopic } from "@/lib/api/mutations";
@@ -73,14 +74,53 @@ function RouteComponent() {
     setFiles((prev) => [...prev, ...newFiles]);
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop });
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({ onDrop, noClick: true });
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const pendingIds = files.filter((f) => f.status === "PENDING").map((f) => f.id);
+  const allSelected = pendingIds.length > 0 && pendingIds.every((id) => selectedIds.has(id));
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(pendingIds));
+    }
+  };
 
   const removeFile = (id: string) => {
     setFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
   const updateFile = (id: string, updates: Partial<FileMetadata>) => {
-    setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...updates } : f)));
+    const isBulk = selectedIds.has(id) && selectedIds.size > 1;
+    if (isBulk) {
+      const { name, ...bulkUpdates } = updates;
+      // Name changes only apply to the individual file
+      if (name !== undefined) {
+        setFiles((prev) =>
+          prev.map((f) => {
+            if (f.id === id) return { ...f, ...updates };
+            if (selectedIds.has(f.id)) return { ...f, ...bulkUpdates };
+            return f;
+          }),
+        );
+      } else {
+        setFiles((prev) => prev.map((f) => (selectedIds.has(f.id) ? { ...f, ...bulkUpdates } : f)));
+      }
+    } else {
+      setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...updates } : f)));
+    }
   };
 
   const handleUploadAll = async () => {
@@ -95,7 +135,7 @@ function RouteComponent() {
           file: fileData.file,
           title: fileData.name,
           type: fileData.type,
-          subjects: fileData.subjects.length > 0 ? fileData.subjects : undefined,
+          people: fileData.subjects.length > 0 ? fileData.subjects : undefined,
           publication: fileData.publication || undefined,
           tags: fileData.tags.length > 0 ? fileData.tags : undefined,
           topic: fileData.topics.length > 0 ? fileData.topics : undefined,
@@ -127,45 +167,69 @@ function RouteComponent() {
   }));
 
   return (
-    <div className="container mx-auto px-4 py-8 space-y-8 max-w-6xl">
+    <div {...getRootProps()} className="container mx-auto px-4 py-8 space-y-8 max-w-6xl flex flex-col min-h-0 h-full">
+      <input {...getInputProps()} />
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Upload Files</h1>
           <p className="text-muted-foreground mt-2">Drag and drop files to upload to your library.</p>
         </div>
         {files.length > 0 && (
-          <Button
-            onClick={handleUploadAll}
-            disabled={uploadMutation.isPending || files.every((f) => f.status === "SUCCESS")}
-          >
-            {uploadMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Upload {files.filter((f) => f.status === "PENDING").length} Files
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={open}>
+              <Plus className="mr-1 h-4 w-4" /> Add Files
+            </Button>
+            <Button
+              onClick={handleUploadAll}
+              disabled={uploadMutation.isPending || files.every((f) => f.status === "SUCCESS")}
+            >
+              {uploadMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Upload {files.filter((f) => f.status === "PENDING").length} Files
+            </Button>
+          </div>
         )}
       </div>
 
-      <div
-        {...getRootProps()}
-        className={`border-2 border-dashed rounded-lg p-12 text-center hover:bg-accent/50 transition-colors cursor-pointer ${
-          isDragActive ? "border-primary bg-accent" : "border-muted-foreground/25"
-        }`}
-      >
-        <input {...getInputProps()} />
-        <div className="flex flex-col items-center gap-2">
-          <Upload className="h-10 w-10 text-muted-foreground" />
-          <p className="text-lg font-medium">Drop files here or click to select</p>
-          <p className="text-sm text-muted-foreground">Support for PDF, EPUB, MP3, MP4</p>
+      {files.length === 0 && (
+        <div
+          onClick={open}
+          className={`border-2 border-dashed rounded-lg p-12 text-center hover:bg-accent/50 transition-colors cursor-pointer flex-1 flex items-center justify-center ${
+            isDragActive ? "border-primary bg-accent" : "border-muted-foreground/25"
+          }`}
+        >
+          <div className="flex flex-col items-center gap-2">
+            <Upload className="h-10 w-10 text-muted-foreground" />
+            <p className="text-lg font-medium">Drop files here or click to select</p>
+            <p className="text-sm text-muted-foreground">Support for PDF, EPUB, MP3, MP4</p>
+          </div>
         </div>
-      </div>
+      )}
 
       {files.length > 0 && (
-        <Card>
+        <Card className={`transition-colors ${isDragActive ? "border-primary border-2 border-dashed" : ""}`}>
           <CardContent className="p-0">
-            <div className="divide-y">
+            {pendingIds.length > 1 && (
+              <div className="flex items-center gap-2 px-4 py-2 border-b bg-muted/30">
+                <Checkbox checked={allSelected} onCheckedChange={toggleAll} />
+                <span className="text-xs text-muted-foreground">
+                  {selectedIds.size > 0
+                    ? `${selectedIds.size} selected — edits to any selected file apply to all`
+                    : "Select files for bulk editing"}
+                </span>
+              </div>
+            )}
+            <div className="divide-y max-h-[70vh] overflow-y-auto">
               {files.map((file) => (
-                <div key={file.id} className="p-4 space-y-3">
-                  {/* Row 1: File info, title, type, and status */}
+                <div key={file.id} className={`p-4 space-y-3 ${selectedIds.has(file.id) ? "bg-accent/40" : ""}`}>
+                  {/* Row 1: Checkbox, file info, title, type, and status */}
                   <div className="flex items-center gap-2">
+                    {file.status === "PENDING" && (
+                      <Checkbox
+                        checked={selectedIds.has(file.id)}
+                        onCheckedChange={() => toggleSelected(file.id)}
+                        className="shrink-0"
+                      />
+                    )}
                     <div className="p-1.5 bg-muted rounded shrink-0">
                       <FileIcon className="h-4 w-4" />
                     </div>
@@ -209,10 +273,10 @@ function RouteComponent() {
                     </div>
                   </div>
 
-                  {/* Row 2: Authors (People) and Publication */}
-                  <div className="flex items-center gap-2 pl-9">
+                  {/* Row 2: Authors, Publication, Tags, Topics */}
+                  <div className={`flex items-center gap-2 ${file.status === "PENDING" ? "pl-14" : "pl-9"}`}>
                     <div className="flex items-center gap-2 flex-1">
-                      <span className="text-xs text-muted-foreground shrink-0 w-16">Authors</span>
+                      <span className="text-xs text-muted-foreground shrink-0">Authors</span>
                       <CreatableCombobox
                         options={authorOptions}
                         value={file.subjects}
@@ -231,12 +295,12 @@ function RouteComponent() {
                               updateFile(file.id, { subjects: [...file.subjects, record.id] });
                             });
                         }}
-                        placeholder="Select authors..."
+                        placeholder="Authors..."
                         emptyText="No authors found."
                       />
                     </div>
                     <div className="flex items-center gap-2 flex-1">
-                      <span className="text-xs text-muted-foreground shrink-0 w-20">Publication</span>
+                      <span className="text-xs text-muted-foreground shrink-0">Publication</span>
                       <CreatableCombobox
                         options={publicationOptions}
                         value={file.publication}
@@ -247,16 +311,12 @@ function RouteComponent() {
                             updateFile(file.id, { publication: record.id });
                           });
                         }}
-                        placeholder="Select publication..."
+                        placeholder="Publication..."
                         emptyText="No publications found."
                       />
                     </div>
-                  </div>
-
-                  {/* Row 3: Tags and Topics */}
-                  <div className="flex items-center gap-2 pl-9">
                     <div className="flex items-center gap-2 flex-1">
-                      <span className="text-xs text-muted-foreground shrink-0 w-16">Tags</span>
+                      <span className="text-xs text-muted-foreground shrink-0">Tags</span>
                       <CreatableCombobox
                         options={tagOptions}
                         value={file.tags}
@@ -273,12 +333,12 @@ function RouteComponent() {
                             updateFile(file.id, { tags: [...file.tags, record.id] });
                           });
                         }}
-                        placeholder="Select tags..."
+                        placeholder="Tags..."
                         emptyText="No tags found."
                       />
                     </div>
                     <div className="flex items-center gap-2 flex-1">
-                      <span className="text-xs text-muted-foreground shrink-0 w-20">Topics</span>
+                      <span className="text-xs text-muted-foreground shrink-0">Topics</span>
                       <CreatableCombobox
                         options={topicOptions}
                         value={file.topics}
@@ -295,13 +355,16 @@ function RouteComponent() {
                             updateFile(file.id, { topics: [...file.topics, record.id] });
                           });
                         }}
-                        placeholder="Select topics..."
+                        placeholder="Topics..."
                         emptyText="No topics found."
                       />
                     </div>
                   </div>
 
-                  <div className="text-xs text-muted-foreground pl-9 truncate" title={file.file.name}>
+                  <div
+                    className={`text-xs text-muted-foreground truncate ${file.status === "PENDING" ? "pl-14" : "pl-9"}`}
+                    title={file.file.name}
+                  >
                     {file.file.name} • {(file.file.size / 1024 / 1024).toFixed(2)} MB
                   </div>
                 </div>
