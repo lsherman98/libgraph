@@ -53,6 +53,7 @@ import {
 interface ReaderPaneProps {
   uploadId: string;
   tabId?: string;
+  initialPage?: number;
   isActive?: boolean;
   showHeader?: boolean;
   onPageChange?: (page: number) => void;
@@ -916,7 +917,7 @@ function PaginatedReader({
   );
 }
 
-export function ReaderPane({ uploadId, tabId, isActive = true, showHeader = true, onPageChange, onTitleLoad }: ReaderPaneProps) {
+export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, showHeader = true, onPageChange, onTitleLoad }: ReaderPaneProps) {
   const { data: upload } = useUploadById(uploadId);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -925,7 +926,15 @@ export function ReaderPane({ uploadId, tabId, isActive = true, showHeader = true
   const { setOpen, setOpenRight, open: leftSidebarOpen, openRight: rightSidebarOpen } = useSidebar();
   const previousSidebarState = useRef({ left: true, right: true });
   const { settings, setSettings, applyTheme, resetSettings, cssVariables } = useReaderSettings();
-  const { pageSettings, setCurrentPage } = usePageSettings(uploadId);
+  const { pageSettings, setCurrentPage, isLoaded: pageSettingsLoaded } = usePageSettings(uploadId, initialPage);
+
+  const dbSyncedRef = useRef(false);
+  useEffect(() => {
+    if (pageSettingsLoaded && !dbSyncedRef.current) {
+      dbSyncedRef.current = true;
+      onPageChange?.(pageSettings.currentPage);
+    }
+  }, [pageSettingsLoaded, pageSettings.currentPage, onPageChange]);
 
   const { data: firstPageData } = usePages(uploadId ?? null, 1, 1);
   const totalPages = firstPageData?.totalItems || 0;

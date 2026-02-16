@@ -150,14 +150,15 @@ interface PageSettings {
     scrollPosition?: number;
 }
 
-export function usePageSettings(uploadId: string | undefined) {
+export function usePageSettings(uploadId: string | undefined, initialPage?: number) {
     const { data: progress, isSuccess } = useReadingProgress(uploadId);
     const updateProgress = useUpdateReadingProgress();
 
     const [pageSettings, setPageSettingsState] = useState<PageSettings>({
-        currentPage: 1,
+        currentPage: initialPage ?? 1,
     });
 
+    const [isLoaded, setIsLoaded] = useState(false);
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
@@ -166,6 +167,9 @@ export function usePageSettings(uploadId: string | undefined) {
                 currentPage: progress.current_page || 1,
                 scrollPosition: progress.scroll_position || undefined,
             });
+        }
+        if (isSuccess) {
+            setIsLoaded(true);
         }
     }, [isSuccess, progress?.id]);
 
@@ -208,5 +212,6 @@ export function usePageSettings(uploadId: string | undefined) {
         pageSettings,
         setPageSettings,
         setCurrentPage: (page: number) => setPageSettings({ currentPage: page }),
+        isLoaded,
     };
 }

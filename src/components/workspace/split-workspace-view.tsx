@@ -103,6 +103,7 @@ export function SplitWorkspaceView({
           key={tab.id}
           uploadId={readerTab.uploadId}
           tabId={tab.id}
+          initialPage={readerTab.currentPage}
           isActive={isActive}
           showHeader={true}
           onPageChange={handlePageChange(tab.id)}
