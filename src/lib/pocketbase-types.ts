@@ -22,7 +22,9 @@ export enum Collections {
 	Notes = "notes",
 	Pages = "pages",
 	People = "people",
+	Preferences = "preferences",
 	Publications = "publications",
+	ReadingProgress = "reading_progress",
 	Tags = "tags",
 	Topics = "topics",
 	Uploads = "uploads",
@@ -273,6 +275,16 @@ export type PeopleRecord = {
 	user: RecordIdString
 }
 
+export type PreferencesRecord<Treader_settings = unknown, Tui_settings = unknown, Tworkspace_layout = unknown> = {
+	created: IsoAutoDateString
+	id: string
+	reader_settings?: null | Treader_settings
+	ui_settings?: null | Tui_settings
+	updated: IsoAutoDateString
+	user?: RecordIdString
+	workspace_layout?: null | Tworkspace_layout
+}
+
 export enum PublicationsTypeOptions {
 	"podcast" = "podcast",
 	"youtube_channel" = "youtube_channel",
@@ -287,6 +299,16 @@ export type PublicationsRecord = {
 	updated: IsoAutoDateString
 	url?: string
 	user: RecordIdString
+}
+
+export type ReadingProgressRecord = {
+	created: IsoAutoDateString
+	current_page?: number
+	id: string
+	scroll_position?: number
+	updated: IsoAutoDateString
+	upload?: RecordIdString
+	user?: RecordIdString
 }
 
 export type TagsRecord = {
@@ -389,7 +411,9 @@ export type NodesResponse<Tdata = unknown, Texpand = unknown> = Required<NodesRe
 export type NotesResponse<Texpand = unknown> = Required<NotesRecord> & BaseSystemFields<Texpand>
 export type PagesResponse<Texpand = unknown> = Required<PagesRecord> & BaseSystemFields<Texpand>
 export type PeopleResponse<Texpand = unknown> = Required<PeopleRecord> & BaseSystemFields<Texpand>
+export type PreferencesResponse<Treader_settings = unknown, Tui_settings = unknown, Tworkspace_layout = unknown, Texpand = unknown> = Required<PreferencesRecord<Treader_settings, Tui_settings, Tworkspace_layout>> & BaseSystemFields<Texpand>
 export type PublicationsResponse<Texpand = unknown> = Required<PublicationsRecord> & BaseSystemFields<Texpand>
+export type ReadingProgressResponse<Texpand = unknown> = Required<ReadingProgressRecord> & BaseSystemFields<Texpand>
 export type TagsResponse<Texpand = unknown> = Required<TagsRecord> & BaseSystemFields<Texpand>
 export type TopicsResponse<Texpand = unknown> = Required<TopicsRecord> & BaseSystemFields<Texpand>
 export type UploadsResponse<Texpand = unknown> = Required<UploadsRecord> & BaseSystemFields<Texpand>
@@ -415,7 +439,9 @@ export type CollectionRecords = {
 	notes: NotesRecord
 	pages: PagesRecord
 	people: PeopleRecord
+	preferences: PreferencesRecord
 	publications: PublicationsRecord
+	reading_progress: ReadingProgressRecord
 	tags: TagsRecord
 	topics: TopicsRecord
 	uploads: UploadsRecord
@@ -440,7 +466,9 @@ export type CollectionResponses = {
 	notes: NotesResponse
 	pages: PagesResponse
 	people: PeopleResponse
+	preferences: PreferencesResponse
 	publications: PublicationsResponse
+	reading_progress: ReadingProgressResponse
 	tags: TagsResponse
 	topics: TopicsResponse
 	uploads: UploadsResponse

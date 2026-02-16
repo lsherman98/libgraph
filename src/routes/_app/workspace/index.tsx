@@ -8,6 +8,7 @@ import { useWritingProject, useWritingProjects } from "@/lib/api/queries";
 import { useUpdateWritingProject } from "@/lib/api/mutations";
 import { SplitWorkspaceView, WorkspaceTabBar } from "@/components/workspace";
 import { NewTabDialog } from "@/components/workspace/new-tab-dialog";
+import { useWorkspaceTabsSync } from "@/lib/hooks/use-workspace-tabs-sync";
 
 type WorkspaceSearch = {
   id?: string;
@@ -27,6 +28,8 @@ export const Route = createFileRoute("/_app/workspace/")({
 function RouteComponent() {
   const { id, type } = Route.useSearch();
   const { tabs, activeTabId, addReaderTab, addWriterTab, updateTabTitle, setWriterTabDirty, getTab } = useWorkspaceTabsStore();
+
+  useWorkspaceTabsSync();
 
   const { data: projects } = useWritingProjects();
   const updateProject = useUpdateWritingProject();

@@ -1,5 +1,6 @@
 import { pb } from "../pocketbase"
-import { Collections, NodesTypeOptions, type Create, type EdgesResponse, type Update } from "../pocketbase-types"
+import { Collections, NodesTypeOptions, type Create, type EdgesResponse, type PreferencesResponse, type ReadingProgressResponse, type Update } from "../pocketbase-types"
+import { getUserId } from "../utils"
 import type { ChatFilters, ChatResponseData, EnrichedNodesResponse, FTSSearchResult, LLMParameters, RetrievalParameters } from "../types"
 
 export async function getPageUrl(id?: string) {
@@ -424,7 +425,50 @@ export const fullTextSearch = async (uploadId: string, query: string, signal?: A
         }
     );
 
-    // pb.send() returns parsed JSON directly (or null for 204)
     if (!result) return [];
     return Array.isArray(result) ? result : [];
+}
+
+export const getPreferences = async () => {
+    try {
+        return await pb.collection(Collections.Preferences).getFirstListItem("")
+    } catch (error) { return null }
+}
+
+export const createPreferences = async (data: Create<Collections.Preferences>) => {
+    return await pb.collection(Collections.Preferences).create(data);
+}
+
+export const updatePreferences = async (id: string, data: Update<Collections.Preferences>) => {
+    return await pb.collection(Collections.Preferences).update(id, data);
+}
+
+export const upsertPreferences = async (data: Create<Collections.Preferences>) => {
+    const existing = await getPreferences();
+    if (existing) {
+        return await updatePreferences(existing.id, data);
+    }
+    return await createPreferences(data);
+}
+
+export const getReadingProgress = async (uploadId: string) => {
+    try {
+        return await pb.collection(Collections.ReadingProgress).getFirstListItem(
+            `upload = "${uploadId}"`
+        );
+    } catch (error) { return null; }
+}
+
+export const upsertReadingProgress = async (
+    uploadId: string,
+    data: { current_page?: number; scroll_position?: number }
+) => {
+    const existing = await getReadingProgress(uploadId);
+    if (existing) {
+        return await pb.collection(Collections.ReadingProgress).update(existing.id, data);
+    }
+    return await pb.collection(Collections.ReadingProgress).create({
+        ...data,
+        upload: uploadId,
+    });
 }

@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createWritingProject, updateWritingProject, deleteWritingProject, createChat, updateChat, deleteChat, createMessage, updateUpload, deleteUpload, createCollection, updateCollection, deleteCollection, sendChatMessage } from "./api";
+import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createWritingProject, updateWritingProject, deleteWritingProject, createChat, updateChat, deleteChat, createMessage, updateUpload, deleteUpload, createCollection, updateCollection, deleteCollection, sendChatMessage, upsertPreferences, upsertReadingProgress } from "./api";
 import { handleError } from "../utils";
-import { Collections, type Update } from "../pocketbase-types";
+import { Collections, type Create, type Update } from "../pocketbase-types";
 import type { ChatFilters, LLMParameters, RetrievalParameters } from "../types";
 
 export function useUpload() {
@@ -424,6 +424,32 @@ export function useSendChatMessage({
             if (context?.chatId && context?.previousMessages) {
                 queryClient.setQueryData(["messages", context.chatId], context.previousMessages);
             }
+        },
+    });
+}
+
+export function useUpdatePreferences() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (data: Partial<Create<Collections.Preferences>>) =>
+            upsertPreferences(data),
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["preferences"] });
+        },
+    });
+}
+
+export function useUpdateReadingProgress() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: ({ uploadId, data }: { uploadId: string; data: { current_page?: number; scroll_position?: number } }) =>
+            upsertReadingProgress(uploadId, data),
+        onError: handleError,
+        onSuccess: (_data, variables) => {
+            queryClient.invalidateQueries({ queryKey: ["readingProgress", variables.uploadId] });
         },
     });
 }

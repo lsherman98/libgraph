@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useInfiniteQuery } from "@tanstack/react-query";
-import { getPeople, getPublications, getFirstPage, getPageByNumber, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection, fullTextSearch } from "./api";
+import { getPeople, getPublications, getFirstPage, getPageByNumber, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection, fullTextSearch, getPreferences, getReadingProgress } from "./api";
 import type { UploadFilters } from "./api";
 import type { NodesTypeOptions } from "../pocketbase-types";
 
@@ -259,6 +259,20 @@ export function useFullTextSearch(uploadId: string, query: string) {
         queryFn: ({ signal }) => fullTextSearch(uploadId, query, signal),
         enabled: !!uploadId && query.trim().length > 0,
         placeholderData: keepPreviousData,
-        staleTime: 60_000,
+    });
+}
+
+export function usePreferences() {
+    return useQuery({
+        queryKey: ["preferences"],
+        queryFn: getPreferences,
+    });
+}
+
+export function useReadingProgress(uploadId?: string) {
+    return useQuery({
+        queryKey: ["readingProgress", uploadId],
+        queryFn: () => getReadingProgress(uploadId!),
+        enabled: !!uploadId,
     });
 }

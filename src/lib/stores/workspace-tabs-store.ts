@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 
 interface BaseTab {
     id: string;
@@ -21,12 +20,17 @@ export interface WriterTab extends BaseTab {
 export type WorkspaceTab = ReaderTab | WriterTab;
 export type SplitMode = "none" | "horizontal";
 
-interface WorkspaceTabsStore {
+export interface WorkspaceLayoutState {
     tabs: WorkspaceTab[];
     activeTabId: string | null;
     splitMode: SplitMode;
     splitTabId: string | null;
     panelSizes: number[];
+}
+
+interface WorkspaceTabsStore extends WorkspaceLayoutState {
+    _hydrated: boolean;
+    hydrate: (state: Partial<WorkspaceLayoutState>) => void;
     addReaderTab: (uploadId: string, title: string) => string;
     addWriterTab: (projectId: string, title: string) => string;
     removeTab: (tabId: string) => void;
@@ -45,164 +49,162 @@ function generateTabId(type: "reader" | "writer"): string {
 }
 
 export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
-    persist(
-        (set, get) => ({
-            tabs: [],
-            activeTabId: null,
-            splitMode: "none",
-            splitTabId: null,
-            panelSizes: [50, 50],
+    (set, get) => ({
+        tabs: [],
+        activeTabId: null,
+        splitMode: "none",
+        splitTabId: null,
+        panelSizes: [50, 50],
+        _hydrated: false,
 
-            addReaderTab: (uploadId: string, title: string) => {
-                const state = get();
-                const existingTab = state.tabs.find((t): t is ReaderTab => t.type === "reader" && t.uploadId === uploadId);
-                if (existingTab) {
-                    if (state.activeTabId !== existingTab.id) {
-                        set({ activeTabId: existingTab.id });
-                    }
-                    return existingTab.id;
+        hydrate: (state: Partial<WorkspaceLayoutState>) => {
+            set({ ...state, _hydrated: true });
+        },
+
+        addReaderTab: (uploadId: string, title: string) => {
+            const state = get();
+            const existingTab = state.tabs.find((t): t is ReaderTab => t.type === "reader" && t.uploadId === uploadId);
+            if (existingTab) {
+                if (state.activeTabId !== existingTab.id) {
+                    set({ activeTabId: existingTab.id });
                 }
+                return existingTab.id;
+            }
 
-                const newTab: ReaderTab = {
-                    id: generateTabId("reader"),
-                    type: "reader",
-                    uploadId,
-                    title,
-                    currentPage: 1,
-                };
+            const newTab: ReaderTab = {
+                id: generateTabId("reader"),
+                type: "reader",
+                uploadId,
+                title,
+                currentPage: 1,
+            };
 
-                set((state) => ({
-                    tabs: [...state.tabs, newTab],
-                    activeTabId: newTab.id,
-                }));
+            set((state) => ({
+                tabs: [...state.tabs, newTab],
+                activeTabId: newTab.id,
+            }));
 
-                return newTab.id;
-            },
+            return newTab.id;
+        },
 
-            addWriterTab: (projectId: string, title: string) => {
-                const state = get();
-                const existingTab = state.tabs.find((t): t is WriterTab => t.type === "writer" && t.projectId === projectId);
-                if (existingTab) {
-                    if (state.activeTabId !== existingTab.id) {
-                        set({ activeTabId: existingTab.id });
-                    }
-                    return existingTab.id;
+        addWriterTab: (projectId: string, title: string) => {
+            const state = get();
+            const existingTab = state.tabs.find((t): t is WriterTab => t.type === "writer" && t.projectId === projectId);
+            if (existingTab) {
+                if (state.activeTabId !== existingTab.id) {
+                    set({ activeTabId: existingTab.id });
                 }
+                return existingTab.id;
+            }
 
-                const newTab: WriterTab = {
-                    id: generateTabId("writer"),
-                    type: "writer",
-                    projectId,
-                    title,
-                    isDirty: false,
-                };
+            const newTab: WriterTab = {
+                id: generateTabId("writer"),
+                type: "writer",
+                projectId,
+                title,
+                isDirty: false,
+            };
 
-                set((state) => ({
-                    tabs: [...state.tabs, newTab],
-                    activeTabId: newTab.id,
-                }));
+            set((state) => ({
+                tabs: [...state.tabs, newTab],
+                activeTabId: newTab.id,
+            }));
 
-                return newTab.id;
-            },
+            return newTab.id;
+        },
 
-            removeTab: (tabId: string) => {
-                const state = get();
-                const tabIndex = state.tabs.findIndex((t) => t.id === tabId);
+        removeTab: (tabId: string) => {
+            const state = get();
+            const tabIndex = state.tabs.findIndex((t) => t.id === tabId);
 
-                if (tabIndex === -1) return;
+            if (tabIndex === -1) return;
 
-                const newTabs = state.tabs.filter((t) => t.id !== tabId);
-                let newActiveTabId = state.activeTabId;
-                let newSplitTabId = state.splitTabId;
+            const newTabs = state.tabs.filter((t) => t.id !== tabId);
+            let newActiveTabId = state.activeTabId;
+            let newSplitTabId = state.splitTabId;
 
-                if (state.activeTabId === tabId) {
-                    if (newTabs.length > 0) {
-                        const newIndex = Math.min(tabIndex, newTabs.length - 1);
-                        newActiveTabId = newTabs[newIndex].id;
-                    } else {
-                        newActiveTabId = null;
-                    }
-                }
-
-                if (state.splitTabId === tabId) {
-                    newSplitTabId = null;
-                }
-
-                set({
-                    tabs: newTabs,
-                    activeTabId: newActiveTabId,
-                    splitTabId: newSplitTabId,
-                    splitMode: newSplitTabId ? state.splitMode : "none",
-                });
-            },
-
-            setActiveTab: (tabId: string) => {
-                set({ activeTabId: tabId });
-            },
-
-            updateTabTitle: (tabId: string, title: string) => {
-                set((state) => ({
-                    tabs: state.tabs.map((tab) =>
-                        tab.id === tabId ? { ...tab, title } : tab
-                    ),
-                }));
-            },
-
-            updateReaderTabPage: (tabId: string, page: number) => {
-                set((state) => ({
-                    tabs: state.tabs.map((tab) =>
-                        tab.id === tabId && tab.type === "reader"
-                            ? { ...tab, currentPage: page }
-                            : tab
-                    ),
-                }));
-            },
-
-            setWriterTabDirty: (tabId: string, isDirty: boolean) => {
-                set((state) => ({
-                    tabs: state.tabs.map((tab) =>
-                        tab.id === tabId && tab.type === "writer"
-                            ? { ...tab, isDirty }
-                            : tab
-                    ),
-                }));
-            },
-
-            setSplitMode: (mode: SplitMode) => {
-                const state = get();
-                if (mode === "none") {
-                    set({ splitMode: "none", splitTabId: null });
+            if (state.activeTabId === tabId) {
+                if (newTabs.length > 0) {
+                    const newIndex = Math.min(tabIndex, newTabs.length - 1);
+                    newActiveTabId = newTabs[newIndex].id;
                 } else {
-                    if (!state.splitTabId && state.tabs.length > 1) {
-                        const otherTab = state.tabs.find((t) => t.id !== state.activeTabId);
-                        set({ splitMode: mode, splitTabId: otherTab?.id ?? null });
-                    } else {
-                        set({ splitMode: mode });
-                    }
+                    newActiveTabId = null;
                 }
-            },
+            }
 
-            setPanelSizes: (sizes: number[]) => {
-                set({ panelSizes: sizes });
-            },
+            if (state.splitTabId === tabId) {
+                newSplitTabId = null;
+            }
 
-            closeSplit: () => {
+            set({
+                tabs: newTabs,
+                activeTabId: newActiveTabId,
+                splitTabId: newSplitTabId,
+                splitMode: newSplitTabId ? state.splitMode : "none",
+            });
+        },
+
+        setActiveTab: (tabId: string) => {
+            set({ activeTabId: tabId });
+        },
+
+        updateTabTitle: (tabId: string, title: string) => {
+            set((state) => ({
+                tabs: state.tabs.map((tab) =>
+                    tab.id === tabId ? { ...tab, title } : tab
+                ),
+            }));
+        },
+
+        updateReaderTabPage: (tabId: string, page: number) => {
+            set((state) => ({
+                tabs: state.tabs.map((tab) =>
+                    tab.id === tabId && tab.type === "reader"
+                        ? { ...tab, currentPage: page }
+                        : tab
+                ),
+            }));
+        },
+
+        setWriterTabDirty: (tabId: string, isDirty: boolean) => {
+            set((state) => ({
+                tabs: state.tabs.map((tab) =>
+                    tab.id === tabId && tab.type === "writer"
+                        ? { ...tab, isDirty }
+                        : tab
+                ),
+            }));
+        },
+
+        setSplitMode: (mode: SplitMode) => {
+            const state = get();
+            if (mode === "none") {
                 set({ splitMode: "none", splitTabId: null });
-            },
+            } else {
+                if (!state.splitTabId && state.tabs.length > 1) {
+                    const otherTab = state.tabs.find((t) => t.id !== state.activeTabId);
+                    set({ splitMode: mode, splitTabId: otherTab?.id ?? null });
+                } else {
+                    set({ splitMode: mode });
+                }
+            }
+        },
 
-            getTab: (tabId: string) => {
-                return get().tabs.find((t) => t.id === tabId);
-            },
-        }),
-        {
-            name: "workspace-tabs-storage",
-            partialize: (state) => ({
-                tabs: state.tabs,
-                activeTabId: state.activeTabId,
-                splitMode: state.splitMode,
-                splitTabId: state.splitTabId,
-                panelSizes: state.panelSizes,
-            }),
-        }
-    )
+        setPanelSizes: (sizes: number[]) => {
+            set({ panelSizes: sizes });
+        },
+
+        closeSplit: () => {
+            set({ splitMode: "none", splitTabId: null });
+        },
+
+        getTab: (tabId: string) => {
+            return get().tabs.find((t) => t.id === tabId);
+        },
+    }),
 );
+
+export function getWorkspaceLayoutSnapshot(): WorkspaceLayoutState {
+    const { tabs, activeTabId, splitMode, splitTabId, panelSizes } = useWorkspaceTabsStore.getState();
+    return { tabs, activeTabId, splitMode, splitTabId, panelSizes };
+}

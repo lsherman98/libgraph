@@ -1,4 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { usePreferences, useReadingProgress } from "@/lib/api/queries";
+import { useUpdatePreferences, useUpdateReadingProgress } from "@/lib/api/mutations";
 
 export const FONT_FAMILIES = {
     system: { name: "System", value: "system-ui, -apple-system, sans-serif" },
@@ -61,65 +63,65 @@ export const DEFAULT_READER_SETTINGS: ReaderSettings = {
     paragraphSpacing: 1.5,
 };
 
-const STORAGE_KEY = "reader-settings";
-
-function loadSettings(): ReaderSettings {
-    if (typeof window === "undefined") return DEFAULT_READER_SETTINGS;
-
-    try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-            const parsed = JSON.parse(stored);
-            return { ...DEFAULT_READER_SETTINGS, ...parsed };
-        }
-    } catch (e) {
-        console.error("Failed to load reader settings:", e);
-    }
-    return DEFAULT_READER_SETTINGS;
-}
-
-function saveSettings(settings: ReaderSettings): void {
-    if (typeof window === "undefined") return;
-
-    try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
-    } catch (e) {
-        console.error("Failed to save reader settings:", e);
-    }
-}
-
 export function useReaderSettings() {
-    const [settings, setSettingsState] = useState<ReaderSettings>(loadSettings);
+    const { data: preferences, isSuccess } = usePreferences();
+    const updatePreferences = useUpdatePreferences();
+
+    const [settings, setSettingsState] = useState<ReaderSettings>(DEFAULT_READER_SETTINGS);
     const [isLoaded, setIsLoaded] = useState(false);
+    const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const settingsRef = useRef(settings);
+    settingsRef.current = settings;
 
     useEffect(() => {
-        setSettingsState(loadSettings());
-        setIsLoaded(true);
-    }, []);
-
-    useEffect(() => {
-        if (isLoaded) {
-            saveSettings(settings);
+        if (isSuccess && preferences?.reader_settings) {
+            const dbSettings = preferences.reader_settings as Partial<ReaderSettings>;
+            setSettingsState((prev) => ({ ...prev, ...dbSettings }));
         }
-    }, [settings, isLoaded]);
+        if (isSuccess) {
+            setIsLoaded(true);
+        }
+    }, [isSuccess, preferences?.id]);
+
+    const scheduleSave = useCallback((newSettings: ReaderSettings) => {
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = setTimeout(() => {
+            updatePreferences.mutate({ reader_settings: JSON.stringify(newSettings) });
+        }, 1000);
+    }, [updatePreferences]);
+
+    useEffect(() => {
+        return () => {
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        };
+    }, []);
 
     const setSettings = useCallback((newSettings: Partial<ReaderSettings>) => {
-        setSettingsState((prev) => ({ ...prev, ...newSettings }));
-    }, []);
+        setSettingsState((prev) => {
+            const updated = { ...prev, ...newSettings };
+            scheduleSave(updated);
+            return updated;
+        });
+    }, [scheduleSave]);
 
     const applyTheme = useCallback((themeKey: ReaderThemeKey) => {
         const theme = READER_THEMES[themeKey];
-        setSettingsState((prev) => ({
-            ...prev,
-            theme: themeKey,
-            backgroundColor: theme.backgroundColor,
-            textColor: theme.textColor,
-        }));
-    }, []);
+        setSettingsState((prev) => {
+            const updated = {
+                ...prev,
+                theme: themeKey,
+                backgroundColor: theme.backgroundColor,
+                textColor: theme.textColor,
+            };
+            scheduleSave(updated);
+            return updated;
+        });
+    }, [scheduleSave]);
 
     const resetSettings = useCallback(() => {
         setSettingsState(DEFAULT_READER_SETTINGS);
-    }, []);
+        scheduleSave(DEFAULT_READER_SETTINGS);
+    }, [scheduleSave]);
 
     const cssVariables = {
         "--reader-font-size": `${settings.fontSize}px`,
@@ -142,7 +144,6 @@ export function useReaderSettings() {
     };
 }
 
-const PAGE_SETTINGS_PREFIX = "reader-page-";
 
 interface PageSettings {
     currentPage: number;
@@ -150,24 +151,29 @@ interface PageSettings {
 }
 
 export function usePageSettings(uploadId: string | undefined) {
+    const { data: progress, isSuccess } = useReadingProgress(uploadId);
+    const updateProgress = useUpdateReadingProgress();
+
     const [pageSettings, setPageSettingsState] = useState<PageSettings>({
         currentPage: 1,
     });
 
-    const storageKey = uploadId ? `${PAGE_SETTINGS_PREFIX}${uploadId}` : null;
+    const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
-        if (!storageKey) return;
-
-        try {
-            const stored = localStorage.getItem(storageKey);
-            if (stored) {
-                setPageSettingsState(JSON.parse(stored));
-            }
-        } catch (e) {
-            console.error("Failed to load page settings:", e);
+        if (isSuccess && progress) {
+            setPageSettingsState({
+                currentPage: progress.current_page || 1,
+                scrollPosition: progress.scroll_position || undefined,
+            });
         }
-    }, [storageKey]);
+    }, [isSuccess, progress?.id]);
+
+    useEffect(() => {
+        return () => {
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        };
+    }, []);
 
     const setPageSettings = useCallback(
         (newSettings: Partial<PageSettings>) => {
@@ -178,17 +184,24 @@ export function usePageSettings(uploadId: string | undefined) {
                 if (!hasChanges) return prev;
 
                 const updated = { ...prev, ...newSettings };
-                if (storageKey) {
-                    try {
-                        localStorage.setItem(storageKey, JSON.stringify(updated));
-                    } catch (e) {
-                        console.error("Failed to save page settings:", e);
-                    }
+
+                if (uploadId) {
+                    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+                    saveTimerRef.current = setTimeout(() => {
+                        updateProgress.mutate({
+                            uploadId,
+                            data: {
+                                current_page: updated.currentPage,
+                                scroll_position: updated.scrollPosition,
+                            },
+                        });
+                    }, 1000);
                 }
+
                 return updated;
             });
         },
-        [storageKey]
+        [uploadId, updateProgress]
     );
 
     return {
