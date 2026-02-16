@@ -18,6 +18,8 @@ import (
 
 func Init(app *pocketbase.PocketBase) error {
 	app.OnRecordCreateRequest(collections.Uploads).BindFunc(func(e *core.RecordRequestEvent) error {
+		e.Next()
+
 		upload := e.Record
 		filename := upload.GetString("file")
 
@@ -28,7 +30,7 @@ func Init(app *pocketbase.PocketBase) error {
 		}
 
 		if mistral.IsAudioFile(filename) {
-			handleAudioUpload(app, e, upload, token)
+			handleAudioUpload(app, e, upload)
 			return e.Next()
 		}
 
@@ -39,7 +41,7 @@ func Init(app *pocketbase.PocketBase) error {
 	return nil
 }
 
-func handleAudioUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent, upload *core.Record, token string) error {
+func handleAudioUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent, upload *core.Record) error {
 	uploadID := upload.Id
 	title := upload.GetString("title")
 

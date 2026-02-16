@@ -190,7 +190,7 @@ func FormatTranscriptMarkdown(segments []DiarizationSegment) string {
 	for _, seg := range segments {
 		minutes := int(seg.Start) / 60
 		seconds := int(seg.Start) % 60
-		sb.WriteString(fmt.Sprintf("**%s** _%d:%02d_\n\n", seg.Speaker, minutes, seconds))
+		fmt.Fprintf(&sb, "**%s** _%d:%02d_\n\n", seg.Speaker, minutes, seconds)
 		sb.WriteString(seg.Text + "\n\n")
 	}
 
