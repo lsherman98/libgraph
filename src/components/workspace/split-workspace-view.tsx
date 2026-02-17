@@ -62,7 +62,6 @@ export function SplitWorkspaceView({
         setWriterTabDirty(splitTabId, true);
       }
 
-      // Debounced auto-save for split pane
       if (splitAutoSaveTimerRef.current) {
         clearTimeout(splitAutoSaveTimerRef.current);
       }
@@ -82,7 +81,6 @@ export function SplitWorkspaceView({
     [splitTabId, splitTab, setWriterTabDirty, updateSplitProject],
   );
 
-  // Clean up split auto-save timer on unmount
   useEffect(() => {
     return () => {
       if (splitAutoSaveTimerRef.current) {

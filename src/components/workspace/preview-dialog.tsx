@@ -29,19 +29,15 @@ export function PreviewDialog({ open, onOpenChange, type, item, pageNumber, tota
   const [currentPageNumber, setCurrentPageNumber] = useState<number | undefined>(pageNumber);
   const isOnOriginalPage = currentPageNumber === pageNumber;
 
-  // Reset current page when the dialog opens with a new item
   useEffect(() => {
     if (open) {
       setCurrentPageNumber(pageNumber);
     }
   }, [open, pageNumber]);
 
-  // Fetch total pages from the upload if not provided as a prop
   const { data: pagesData } = usePages(open && uploadId ? uploadId : undefined, 1, 1);
   const totalPages = totalPagesProp ?? pagesData?.totalItems;
 
-  // When viewing the original page, use the item's page ID directly
-  // When navigating to other pages, look up by upload + page number
   const originalPageId = item?.page;
   const { data: navigatedPage } = usePageByNumber(!isOnOriginalPage && uploadId ? uploadId : "", currentPageNumber ?? 0);
 
@@ -70,7 +66,6 @@ export function PreviewDialog({ open, onOpenChange, type, item, pageNumber, tota
   const renderPageContent = () => {
     if (!markdown) return null;
 
-    // Only show highlight overlay when viewing the original page
     if (isOnOriginalPage && highlight && highlight.start_offset !== undefined && highlight.end_offset !== undefined) {
       const before = markdown.slice(0, highlight.start_offset);
       const highlighted = markdown.slice(highlight.start_offset, highlight.end_offset);
@@ -112,7 +107,6 @@ export function PreviewDialog({ open, onOpenChange, type, item, pageNumber, tota
           </DialogTitle>
           <DialogDescription>Page {pageNumber ?? "?"}</DialogDescription>
         </DialogHeader>
-
         {isHighlight && highlight && (
           <div className="shrink-0 mb-2">
             <div className={cn("p-3 rounded-lg", highlightColorClasses[highlight.color || HighlightsColorOptions.yellow])}>
@@ -126,7 +120,6 @@ export function PreviewDialog({ open, onOpenChange, type, item, pageNumber, tota
             )}
           </div>
         )}
-
         {isNote && note && (
           <div className="shrink-0 mb-2">
             <div className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/30">
@@ -134,7 +127,6 @@ export function PreviewDialog({ open, onOpenChange, type, item, pageNumber, tota
             </div>
           </div>
         )}
-
         <div className="flex-1 min-h-0 border rounded-lg bg-card flex flex-col overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2 border-b text-xs text-muted-foreground shrink-0">
             <FileText className="h-3.5 w-3.5" />
@@ -152,7 +144,6 @@ export function PreviewDialog({ open, onOpenChange, type, item, pageNumber, tota
             )}
           </div>
         </div>
-
         <DialogFooter className="shrink-0 flex items-center !justify-between">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close

@@ -288,7 +288,6 @@ export function WorkspacePanel({
   );
 }
 
-// Individual item components
 interface UploadItemProps {
   upload: UploadsResponse;
   onUnlink: () => void;

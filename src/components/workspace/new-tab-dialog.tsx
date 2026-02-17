@@ -47,7 +47,6 @@ export function NewTabDialog({ open, onOpenChange, initialTab = "documents" }: N
               </TabsTrigger>
             </TabsList>
           </div>
-
           <TabsContent value="documents" className="m-0 border-t-0 p-0">
             <Command className="border-t-0 rounded-none shadow-none">
               <CommandInput placeholder="Search documents..." className="border-none focus:ring-0" />
@@ -55,11 +54,7 @@ export function NewTabDialog({ open, onOpenChange, initialTab = "documents" }: N
                 <CommandEmpty>No documents found.</CommandEmpty>
                 <CommandGroup>
                   {uploads?.map((upload) => (
-                    <CommandItem
-                      key={upload.id}
-                      value={upload.title || "Untitled"}
-                      onSelect={() => handleSelectUpload(upload)}
-                    >
+                    <CommandItem key={upload.id} value={upload.title || "Untitled"} onSelect={() => handleSelectUpload(upload)}>
                       <FileText className="mr-2 h-4 w-4" />
                       <span>{upload.title || "Untitled"}</span>
                     </CommandItem>
@@ -68,7 +63,6 @@ export function NewTabDialog({ open, onOpenChange, initialTab = "documents" }: N
               </CommandList>
             </Command>
           </TabsContent>
-
           <TabsContent value="projects" className="m-0 border-t-0 p-0">
             <Command className="border-t-0 rounded-none shadow-none">
               <CommandInput placeholder="Search projects..." className="border-none focus:ring-0" />
@@ -76,11 +70,7 @@ export function NewTabDialog({ open, onOpenChange, initialTab = "documents" }: N
                 <CommandEmpty>No projects found.</CommandEmpty>
                 <CommandGroup>
                   {projects?.map((project) => (
-                    <CommandItem
-                      key={project.id}
-                      value={project.title || "Untitled"}
-                      onSelect={() => handleSelectProject(project)}
-                    >
+                    <CommandItem key={project.id} value={project.title || "Untitled"} onSelect={() => handleSelectProject(project)}>
                       <PenLine className="mr-2 h-4 w-4" />
                       <span>{project.title || "Untitled"}</span>
                     </CommandItem>

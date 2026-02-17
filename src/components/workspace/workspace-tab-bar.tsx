@@ -1,11 +1,6 @@
 import { useCallback, useState } from "react";
 import { X, Plus, PenLine, Columns2, Square, Save, BookMarked, FileText } from "lucide-react";
-import {
-  useWorkspaceTabsStore,
-  type WorkspaceTab,
-  type ReaderTab,
-  type WriterTab,
-} from "@/lib/stores/workspace-tabs-store";
+import { useWorkspaceTabsStore, type WorkspaceTab, type ReaderTab, type WriterTab } from "@/lib/stores/workspace-tabs-store";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,8 +21,7 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
   const [splitPromptOpen, setSplitPromptOpen] = useState(false);
   const [newTabOpen, setNewTabOpen] = useState(false);
   const [initialDialogTab, setInitialDialogTab] = useState<"documents" | "projects">("documents");
-  const { tabs, activeTabId, splitMode, splitTabId, setActiveTab, removeTab, setSplitMode, closeSplit, getTab } =
-    useWorkspaceTabsStore();
+  const { tabs, activeTabId, splitMode, splitTabId, setActiveTab, removeTab, setSplitMode, closeSplit, getTab } = useWorkspaceTabsStore();
 
   const activeTab = activeTabId ? getTab(activeTabId) : null;
   const activeWriterTab = activeTab?.type === "writer" ? (activeTab as WriterTab) : null;
@@ -124,12 +118,7 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
         )}
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button
-              variant={splitMode === "horizontal" ? "secondary" : "ghost"}
-              size="icon"
-              className="h-8 w-8"
-              onClick={handleSplitToggle}
-            >
+            <Button variant={splitMode === "horizontal" ? "secondary" : "ghost"} size="icon" className="h-8 w-8" onClick={handleSplitToggle}>
               {splitMode === "horizontal" ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
             </Button>
           </TooltipTrigger>
@@ -143,8 +132,7 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
           <DialogHeader>
             <DialogTitle>Open Another Tab</DialogTitle>
             <DialogDescription>
-              To use split view, you need to have at least two tabs open. Open a document or writing project to
-              continue.
+              To use split view, you need to have at least two tabs open. Open a document or writing project to continue.
             </DialogDescription>
           </DialogHeader>
           <div className="flex gap-3 justify-center pt-4">
@@ -193,21 +181,14 @@ function TabItem({ tab, isActive, isSplit, onClick, onClose }: TabItemProps) {
     <TabsTrigger
       value={tab.id}
       onClick={onClick}
-      className={cn(
-        "group relative gap-1.5 pr-8 max-w-50 data-[state=active]:shadow-sm",
-        isSplit && !isActive && "bg-primary/10 border-primary/30",
-      )}
+      className={cn("group relative gap-1.5 pr-8 max-w-50 data-[state=active]:shadow-sm", isSplit && !isActive && "bg-primary/10 border-primary/30")}
     >
       {isWriter ? <PenLine className="h-3.5 w-3.5 shrink-0" /> : <FileText className="h-3.5 w-3.5 shrink-0" />}
       {isDirty && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
       <span className="truncate" title={tab.title}>
         {tab.title || "Untitled"}
       </span>
-      {isSplit && !isActive && (
-        <span className="text-[10px] text-primary font-medium px-1.5 py-0.5 rounded-full bg-primary/10 shrink-0">
-          Split
-        </span>
-      )}
+      {isSplit && !isActive && <span className="text-[10px] text-primary font-medium px-1.5 py-0.5 rounded-full bg-primary/10 shrink-0">Split</span>}
       <span
         role="button"
         tabIndex={0}
