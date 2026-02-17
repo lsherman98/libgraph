@@ -5,49 +5,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, Trash2 } from "lucide-react";
 import { cn, getUserId } from "@/lib/utils";
 import { HighlightsColorOptions } from "@/lib/pocketbase-types";
-import { useTags } from "@/lib/api/queries";
-import { useCreateTag, useCreateHighlight, useUpdateHighlight, useDeleteHighlight } from "@/lib/api/mutations";
+import { useCreateHighlight, useUpdateHighlight, useDeleteHighlight } from "@/lib/api/mutations";
 import { CreatableCombobox } from "@/components/creatable-combobox";
 import { useReaderStore } from "@/lib/stores/reader-store";
 import { AddToProjectButton } from "./add-to-project-button";
-
-const HIGHLIGHT_COLORS: { value: HighlightsColorOptions; bg: string; border: string; ring: string; label: string }[] = [
-  {
-    value: HighlightsColorOptions.yellow,
-    bg: "bg-yellow-300/70",
-    border: "border-yellow-400",
-    ring: "ring-yellow-400",
-    label: "Yellow",
-  },
-  {
-    value: HighlightsColorOptions.green,
-    bg: "bg-green-300/70",
-    border: "border-green-400",
-    ring: "ring-green-400",
-    label: "Green",
-  },
-  {
-    value: HighlightsColorOptions.blue,
-    bg: "bg-blue-300/70",
-    border: "border-blue-400",
-    ring: "ring-blue-400",
-    label: "Blue",
-  },
-  {
-    value: HighlightsColorOptions.pink,
-    bg: "bg-pink-300/70",
-    border: "border-pink-400",
-    ring: "ring-pink-400",
-    label: "Pink",
-  },
-  {
-    value: HighlightsColorOptions.purple,
-    bg: "bg-purple-300/70",
-    border: "border-purple-400",
-    ring: "ring-purple-400",
-    label: "Purple",
-  },
-];
+import { HIGHLIGHT_COLORS, getHighlightColorConfig } from "@/lib/constants/highlight-colors";
+import { useEditorTagManagement } from "@/lib/hooks/use-tags-helpers";
 
 export function HighlightEditorPanel() {
   const editorState = useReaderStore((state) => state.editorState);
@@ -65,10 +28,9 @@ export function HighlightEditorPanel() {
 
   const [selectedColor, setSelectedColor] = useState<HighlightsColorOptions>(highlight?.color || HighlightsColorOptions.yellow);
   const [note, setNote] = useState(isEditing ? editingHighlight?.note || "" : "");
-  const [selectedTags, setSelectedTags] = useState<string[]>(isEditing ? editingHighlight?.tags || [] : []);
-
-  const { data: tags = [] } = useTags();
-  const createTagMutation = useCreateTag();
+  const { selectedTags, setSelectedTags, tagOptions, handleTagSelect, handleTagCreate } = useEditorTagManagement(
+    isEditing ? editingHighlight?.tags || [] : [],
+  );
 
   useEffect(() => {
     if (editingHighlight) {
@@ -80,7 +42,7 @@ export function HighlightEditorPanel() {
       setNote("");
       setSelectedTags([]);
     }
-  }, [editingHighlight, pendingHighlight]);
+  }, [editingHighlight, pendingHighlight, setSelectedTags]);
 
   const handleClose = () => {
     setEditorState(null);
@@ -119,26 +81,9 @@ export function HighlightEditorPanel() {
     handleClose();
   };
 
-  const handleTagSelect = (tagId: string) => {
-    setSelectedTags((prev) => (prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
-  };
-
-  const handleTagCreate = (title: string) => {
-    createTagMutation.mutate(
-      { title, user: getUserId() },
-      {
-        onSuccess: (newTag) => {
-          setSelectedTags((prev) => [...prev, newTag.id]);
-        },
-      },
-    );
-  };
-
-  const tagOptions = tags.map((t) => ({ label: t.title || t.id, value: t.id }));
-
   if (!highlight) return null;
 
-  const colorConfig = HIGHLIGHT_COLORS.find((c) => c.value === selectedColor);
+  const colorConfig = getHighlightColorConfig(selectedColor);
 
   return (
     <div className="flex flex-col h-full">

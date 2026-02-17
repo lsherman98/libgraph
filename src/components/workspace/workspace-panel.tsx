@@ -1,16 +1,19 @@
 import { useState, useMemo } from "react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Search, FileText, Highlighter, Bookmark, StickyNote, X, ExternalLink, ChevronDown } from "lucide-react";
+import { Search, FileText, Highlighter, Bookmark, StickyNote } from "lucide-react";
 import { useWorkspaceMaterials } from "@/lib/api/queries";
 import type { UploadsResponse, HighlightsResponse, NotesResponse, HighlightsRecord, BookmarksRecord, NotesRecord } from "@/lib/pocketbase-types";
 import { cn } from "@/lib/utils";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useNavigate } from "@tanstack/react-router";
 import { useWorkspaceTabsStore } from "@/lib/stores/workspace-tabs-store";
 import { PreviewDialog } from "@/components/workspace/preview-dialog";
+import { CollapsibleSection } from "./collapsible-section";
+import { UploadItem } from "./upload-item";
+import { HighlightItem } from "./highlight-item";
+import { BookmarkItem } from "./bookmark-item";
+import { NoteItem } from "./note-item";
 
 interface WorkspacePanelProps {
   projectId: string;
@@ -49,13 +52,9 @@ export function WorkspacePanel({
 
   const toggleSection = (section: string) => {
     setExpandedSections((prev) => {
-      const newSet = new Set(prev);
-      if (newSet.has(section)) {
-        newSet.delete(section);
-      } else {
-        newSet.add(section);
-      }
-      return newSet;
+      const next = new Set(prev);
+      next.has(section) ? next.delete(section) : next.add(section);
+      return next;
     });
   };
 
@@ -98,24 +97,10 @@ export function WorkspacePanel({
     navigate({ to: "/workspace", search: { id: uploadId, type: "upload" } });
   };
 
-  const handlePreviewHighlight = (highlight: HighlightsResponse) => {
-    setPreviewType("highlight");
-    setPreviewItem(highlight as HighlightsRecord);
-    setPreviewPageNumber(undefined);
-    setPreviewOpen(true);
-  };
-
-  const handlePreviewBookmark = (bookmark: any) => {
-    setPreviewType("bookmark");
-    setPreviewItem(bookmark as BookmarksRecord);
-    setPreviewPageNumber(bookmark.page_number);
-    setPreviewOpen(true);
-  };
-
-  const handlePreviewNote = (note: NotesResponse) => {
-    setPreviewType("note");
-    setPreviewItem(note as NotesRecord);
-    setPreviewPageNumber(note.page_number);
+  const openPreview = (type: "highlight" | "bookmark" | "note", item: HighlightsResponse | NotesResponse | any, pageNumber?: number) => {
+    setPreviewType(type);
+    setPreviewItem(item as HighlightsRecord | BookmarksRecord | NotesRecord);
+    setPreviewPageNumber(pageNumber);
     setPreviewOpen(true);
   };
 
@@ -175,103 +160,80 @@ export function WorkspacePanel({
       <ScrollArea className="flex-1">
         <div className="p-2 space-y-2">
           {linkedUploads.length > 0 && (
-            <Collapsible open={expandedSections.has("uploads")} onOpenChange={() => toggleSection("uploads")}>
-              <CollapsibleTrigger asChild>
-                <button className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-muted/50 text-left">
-                  <ChevronDown className={cn("h-4 w-4 transition-transform", !expandedSections.has("uploads") && "-rotate-90")} />
-                  <FileText className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-medium">Documents</span>
-                  <Badge variant="outline" className="ml-auto text-xs">
-                    {filteredUploads.length}
-                  </Badge>
-                </button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="pl-6 space-y-1 mt-1">
-                  {filteredUploads.map((upload) => (
-                    <UploadItem
-                      key={upload.id}
-                      upload={upload}
-                      onUnlink={() => onUnlinkUpload?.(upload.id)}
-                      onOpen={() => handleOpenDocument(upload.id, upload.title || "Document")}
-                    />
-                  ))}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+            <CollapsibleSection
+              sectionKey="uploads"
+              label="Documents"
+              icon={<FileText className="h-4 w-4 text-primary" />}
+              count={filteredUploads.length}
+              expanded={expandedSections.has("uploads")}
+              onToggle={toggleSection}
+            >
+              {filteredUploads.map((upload) => (
+                <UploadItem
+                  key={upload.id}
+                  upload={upload}
+                  onUnlink={() => onUnlinkUpload?.(upload.id)}
+                  onOpen={() => handleOpenDocument(upload.id, upload.title || "Document")}
+                />
+              ))}
+            </CollapsibleSection>
           )}
           {linkedHighlights.length > 0 && (
-            <Collapsible open={expandedSections.has("highlights")} onOpenChange={() => toggleSection("highlights")}>
-              <CollapsibleTrigger asChild>
-                <button className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-muted/50 text-left">
-                  <ChevronDown className={cn("h-4 w-4 transition-transform", !expandedSections.has("highlights") && "-rotate-90")} />
-                  <Highlighter className="h-4 w-4 text-yellow-500" />
-                  <span className="text-sm font-medium">Highlights</span>
-                  <Badge variant="outline" className="ml-auto text-xs">
-                    {filteredHighlights.length}
-                  </Badge>
-                </button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="pl-6 space-y-1 mt-1">
-                  {filteredHighlights.map((highlight) => (
-                    <HighlightItem
-                      key={highlight.id}
-                      highlight={highlight}
-                      onUnlink={() => onUnlinkHighlight?.(highlight.id)}
-                      onPreview={() => handlePreviewHighlight(highlight)}
-                    />
-                  ))}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+            <CollapsibleSection
+              sectionKey="highlights"
+              label="Highlights"
+              icon={<Highlighter className="h-4 w-4 text-yellow-500" />}
+              count={filteredHighlights.length}
+              expanded={expandedSections.has("highlights")}
+              onToggle={toggleSection}
+            >
+              {filteredHighlights.map((highlight) => (
+                <HighlightItem
+                  key={highlight.id}
+                  highlight={highlight}
+                  onUnlink={() => onUnlinkHighlight?.(highlight.id)}
+                  onPreview={() => openPreview("highlight", highlight)}
+                />
+              ))}
+            </CollapsibleSection>
           )}
           {linkedBookmarks.length > 0 && (
-            <Collapsible open={expandedSections.has("bookmarks")} onOpenChange={() => toggleSection("bookmarks")}>
-              <CollapsibleTrigger asChild>
-                <button className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-muted/50 text-left">
-                  <ChevronDown className={cn("h-4 w-4 transition-transform", !expandedSections.has("bookmarks") && "-rotate-90")} />
-                  <Bookmark className="h-4 w-4 text-amber-500" />
-                  <span className="text-sm font-medium">Bookmarks</span>
-                  <Badge variant="outline" className="ml-auto text-xs">
-                    {filteredBookmarks.length}
-                  </Badge>
-                </button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="pl-6 space-y-1 mt-1">
-                  {filteredBookmarks.map((bookmark) => (
-                    <BookmarkItem
-                      key={bookmark.id}
-                      bookmark={bookmark}
-                      onUnlink={() => onUnlinkBookmark?.(bookmark.id)}
-                      onPreview={() => handlePreviewBookmark(bookmark)}
-                    />
-                  ))}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+            <CollapsibleSection
+              sectionKey="bookmarks"
+              label="Bookmarks"
+              icon={<Bookmark className="h-4 w-4 text-amber-500" />}
+              count={filteredBookmarks.length}
+              expanded={expandedSections.has("bookmarks")}
+              onToggle={toggleSection}
+            >
+              {filteredBookmarks.map((bookmark) => (
+                <BookmarkItem
+                  key={bookmark.id}
+                  bookmark={bookmark}
+                  onUnlink={() => onUnlinkBookmark?.(bookmark.id)}
+                  onPreview={() => openPreview("bookmark", bookmark, bookmark.page_number)}
+                />
+              ))}
+            </CollapsibleSection>
           )}
           {linkedNotes.length > 0 && (
-            <Collapsible open={expandedSections.has("notes")} onOpenChange={() => toggleSection("notes")}>
-              <CollapsibleTrigger asChild>
-                <button className="flex items-center gap-2 w-full p-2 rounded-md hover:bg-muted/50 text-left">
-                  <ChevronDown className={cn("h-4 w-4 transition-transform", !expandedSections.has("notes") && "-rotate-90")} />
-                  <StickyNote className="h-4 w-4 text-blue-500" />
-                  <span className="text-sm font-medium">Notes</span>
-                  <Badge variant="outline" className="ml-auto text-xs">
-                    {filteredNotes.length}
-                  </Badge>
-                </button>
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="pl-6 space-y-1 mt-1">
-                  {filteredNotes.map((note) => (
-                    <NoteItem key={note.id} note={note} onUnlink={() => onUnlinkNote?.(note.id)} onPreview={() => handlePreviewNote(note)} />
-                  ))}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+            <CollapsibleSection
+              sectionKey="notes"
+              label="Notes"
+              icon={<StickyNote className="h-4 w-4 text-blue-500" />}
+              count={filteredNotes.length}
+              expanded={expandedSections.has("notes")}
+              onToggle={toggleSection}
+            >
+              {filteredNotes.map((note) => (
+                <NoteItem
+                  key={note.id}
+                  note={note}
+                  onUnlink={() => onUnlinkNote?.(note.id)}
+                  onPreview={() => openPreview("note", note, note.page_number)}
+                />
+              ))}
+            </CollapsibleSection>
           )}
         </div>
       </ScrollArea>
@@ -284,144 +246,6 @@ export function WorkspacePanel({
         uploadId={(previewItem as any)?.upload}
         onNavigate={handleNavigateFromPreview}
       />
-    </div>
-  );
-}
-
-interface UploadItemProps {
-  upload: UploadsResponse;
-  onUnlink: () => void;
-  onOpen: () => void;
-}
-
-function UploadItem({ upload, onUnlink, onOpen }: UploadItemProps) {
-  return (
-    <div className="group rounded-md border bg-card p-2">
-      <div className="flex items-center gap-2">
-        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{upload.title}</p>
-          <div className="flex items-center gap-1">
-            <Badge variant="outline" className="text-[10px] px-1 py-0">
-              {upload.type}
-            </Badge>
-          </div>
-        </div>
-        <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={onOpen} title="Open document">
-          <ExternalLink className="h-3 w-3" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onUnlink} title="Remove from project">
-          <X className="h-3 w-3" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-interface HighlightItemProps {
-  highlight: HighlightsResponse;
-  onUnlink: () => void;
-  onPreview: () => void;
-}
-
-function HighlightItem({ highlight, onUnlink, onPreview }: HighlightItemProps) {
-  const colorClasses: Record<string, string> = {
-    yellow: "border-l-yellow-400",
-    green: "border-l-green-400",
-    blue: "border-l-blue-400",
-    pink: "border-l-pink-400",
-    purple: "border-l-purple-400",
-  };
-
-  return (
-    <div
-      className={cn(
-        "rounded-md border bg-card border-l-4 p-2 cursor-pointer hover:bg-muted/50 transition-colors",
-        colorClasses[highlight.color || "yellow"],
-      )}
-      onClick={onPreview}
-    >
-      <div className="flex items-start gap-2">
-        <div className="flex-1 min-w-0">
-          <p className="text-sm leading-relaxed line-clamp-3">{highlight.text}</p>
-          {highlight.comment && <p className="text-xs text-muted-foreground mt-1 pt-1 border-t italic line-clamp-2">{highlight.comment}</p>}
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 shrink-0"
-          onClick={(e) => {
-            e.stopPropagation();
-            onUnlink();
-          }}
-          title="Remove from project"
-        >
-          <X className="h-3 w-3" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-interface BookmarkItemProps {
-  bookmark: any;
-  onUnlink: () => void;
-  onPreview: () => void;
-}
-
-function BookmarkItem({ bookmark, onUnlink, onPreview }: BookmarkItemProps) {
-  return (
-    <div className="rounded-md border bg-card p-2 cursor-pointer hover:bg-muted/50 transition-colors" onClick={onPreview}>
-      <div className="flex items-start gap-2">
-        <Bookmark className="h-4 w-4 mt-0.5 text-amber-500 shrink-0" />
-        <div className="flex-1 min-w-0">
-          {bookmark.comment && <p className="text-sm font-medium line-clamp-1">{bookmark.comment}</p>}
-          <p className={cn("text-sm line-clamp-2", bookmark.comment && "text-muted-foreground")}>{bookmark.preview_text || "No preview"}</p>
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 shrink-0"
-          onClick={(e) => {
-            e.stopPropagation();
-            onUnlink();
-          }}
-          title="Remove from project"
-        >
-          <X className="h-3 w-3" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-interface NoteItemProps {
-  note: NotesResponse;
-  onUnlink: () => void;
-  onPreview: () => void;
-}
-
-function NoteItem({ note, onUnlink, onPreview }: NoteItemProps) {
-  return (
-    <div className="rounded-md border bg-card p-2 cursor-pointer hover:bg-muted/50 transition-colors" onClick={onPreview}>
-      <div className="flex items-start gap-2">
-        <StickyNote className="h-4 w-4 mt-0.5 text-blue-500 shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm line-clamp-3">{note.content || "Empty note"}</p>
-        </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 shrink-0"
-          onClick={(e) => {
-            e.stopPropagation();
-            onUnlink();
-          }}
-          title="Remove from project"
-        >
-          <X className="h-3 w-3" />
-        </Button>
-      </div>
     </div>
   );
 }

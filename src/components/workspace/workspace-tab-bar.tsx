@@ -1,15 +1,16 @@
 import { useCallback, useState } from "react";
-import { X, Plus, PenLine, Columns2, Square, Save, BookMarked, FileText } from "lucide-react";
+import { Plus, PenLine, Columns2, Square, Save, BookMarked } from "lucide-react";
 import { useWorkspaceTabsStore, type WorkspaceTab, type ReaderTab, type WriterTab } from "@/lib/stores/workspace-tabs-store";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "@tanstack/react-router";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { NewTabDialog } from "./new-tab-dialog";
+import { TabItem } from "./tab-item";
 
 interface WorkspaceTabBarProps {
   onSave?: () => void;
@@ -26,16 +27,26 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
   const activeTab = activeTabId ? getTab(activeTabId) : null;
   const activeWriterTab = activeTab?.type === "writer" ? (activeTab as WriterTab) : null;
 
+  const navigateToTab = useCallback(
+    (tab: WorkspaceTab) => {
+      const isReader = tab.type === "reader";
+      navigate({
+        to: "/workspace",
+        search: {
+          id: isReader ? (tab as ReaderTab).uploadId : (tab as WriterTab).projectId,
+          type: isReader ? "upload" : "project",
+        },
+      });
+    },
+    [navigate],
+  );
+
   const handleTabClick = useCallback(
     (tab: WorkspaceTab) => {
       setActiveTab(tab.id);
-      if (tab.type === "reader") {
-        navigate({ to: "/workspace", search: { id: (tab as ReaderTab).uploadId, type: "upload" } });
-      } else {
-        navigate({ to: "/workspace", search: { id: (tab as WriterTab).projectId, type: "project" } });
-      }
+      navigateToTab(tab);
     },
-    [navigate, setActiveTab],
+    [navigateToTab, setActiveTab],
   );
 
   const handleTabClose = useCallback(
@@ -46,18 +57,13 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
       if (tab.id === activeTabId) {
         const remainingTabs = tabs.filter((t) => t.id !== tab.id);
         if (remainingTabs.length > 0) {
-          const nextTab = remainingTabs[0];
-          if (nextTab.type === "reader") {
-            navigate({ to: "/workspace", search: { id: (nextTab as ReaderTab).uploadId, type: "upload" } });
-          } else {
-            navigate({ to: "/workspace", search: { id: (nextTab as WriterTab).projectId, type: "project" } });
-          }
+          navigateToTab(remainingTabs[0]);
         } else {
           navigate({ to: "/workspace" });
         }
       }
     },
-    [removeTab, activeTabId, tabs, navigate],
+    [removeTab, activeTabId, tabs, navigate, navigateToTab],
   );
 
   const handleSplitToggle = useCallback(() => {
@@ -162,51 +168,5 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
       </Dialog>
       <NewTabDialog open={newTabOpen} onOpenChange={setNewTabOpen} initialTab={initialDialogTab} />
     </header>
-  );
-}
-
-interface TabItemProps {
-  tab: WorkspaceTab;
-  isActive: boolean;
-  isSplit: boolean;
-  onClick: () => void;
-  onClose: (e: React.MouseEvent) => void;
-}
-
-function TabItem({ tab, isActive, isSplit, onClick, onClose }: TabItemProps) {
-  const isWriter = tab.type === "writer";
-  const isDirty = isWriter ? (tab as WriterTab).isDirty : false;
-
-  return (
-    <TabsTrigger
-      value={tab.id}
-      onClick={onClick}
-      className={cn("group relative gap-1.5 pr-8 max-w-50 data-[state=active]:shadow-sm", isSplit && !isActive && "bg-primary/10 border-primary/30")}
-    >
-      {isWriter ? <PenLine className="h-3.5 w-3.5 shrink-0" /> : <FileText className="h-3.5 w-3.5 shrink-0" />}
-      {isDirty && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
-      <span className="truncate" title={tab.title}>
-        {tab.title || "Untitled"}
-      </span>
-      {isSplit && !isActive && <span className="text-[10px] text-primary font-medium px-1.5 py-0.5 rounded-full bg-primary/10 shrink-0">Split</span>}
-      <span
-        role="button"
-        tabIndex={0}
-        className={cn(
-          "absolute right-1.5 h-5 w-5 rounded-sm flex items-center justify-center shrink-0",
-          "opacity-0 group-hover:opacity-100 transition-opacity",
-          "hover:bg-muted",
-        )}
-        onClick={onClose}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            onClose(e as unknown as React.MouseEvent);
-          }
-        }}
-      >
-        <X className="h-3 w-3" />
-      </span>
-    </TabsTrigger>
   );
 }

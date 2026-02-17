@@ -5,14 +5,10 @@ import { Highlighter, BookMarked, ExternalLink, FileText, Pencil, StickyNote, Ch
 import { cn } from "@/lib/utils";
 import { HighlightsColorOptions, type HighlightsRecord, type BookmarksRecord, type NotesRecord } from "@/lib/pocketbase-types";
 import { usePageMarkdown, usePageByNumber, usePages } from "@/lib/api/queries";
+import { HIGHLIGHT_PREVIEW_CLASSES } from "@/lib/constants/highlight-colors";
 
-export const highlightColorClasses: Record<HighlightsColorOptions, string> = {
-  [HighlightsColorOptions.yellow]: "bg-yellow-200 text-yellow-900 dark:bg-yellow-900/50 dark:text-yellow-200",
-  [HighlightsColorOptions.green]: "bg-green-200 text-green-900 dark:bg-green-900/50 dark:text-green-200",
-  [HighlightsColorOptions.blue]: "bg-blue-200 text-blue-900 dark:bg-blue-900/50 dark:text-blue-200",
-  [HighlightsColorOptions.pink]: "bg-pink-200 text-pink-900 dark:bg-pink-900/50 dark:text-pink-200",
-  [HighlightsColorOptions.purple]: "bg-purple-200 text-purple-900 dark:bg-purple-900/50 dark:text-purple-200",
-};
+/** @deprecated Use HIGHLIGHT_PREVIEW_CLASSES from @/lib/constants/highlight-colors instead */
+export const highlightColorClasses = HIGHLIGHT_PREVIEW_CLASSES;
 
 export interface PreviewDialogProps {
   open: boolean;
@@ -49,7 +45,6 @@ export function PreviewDialog({ open, onOpenChange, type, item, pageNumber, tota
   const isHighlight = type === "highlight";
   const isNote = type === "note";
   const highlight = isHighlight ? (item as HighlightsRecord) : null;
-  const bookmark = type === "bookmark" ? (item as BookmarksRecord) : null;
   const note = isNote ? (item as NotesRecord) : null;
 
   const canNavigate = !!uploadId && totalPages != null && totalPages > 1;
@@ -74,7 +69,7 @@ export function PreviewDialog({ open, onOpenChange, type, item, pageNumber, tota
       return (
         <>
           <span>{before}</span>
-          <mark className={cn("px-0.5 rounded", highlightColorClasses[highlight.color || HighlightsColorOptions.yellow])}>{highlighted}</mark>
+          <mark className={cn("px-0.5 rounded", HIGHLIGHT_PREVIEW_CLASSES[highlight.color || HighlightsColorOptions.yellow])}>{highlighted}</mark>
           <span>{after}</span>
         </>
       );
@@ -101,7 +96,7 @@ export function PreviewDialog({ open, onOpenChange, type, item, pageNumber, tota
             ) : (
               <>
                 <BookMarked className="h-5 w-5 text-amber-500" />
-                {bookmark?.comment || "Bookmark Preview"}
+                {(item as BookmarksRecord)?.comment || "Bookmark Preview"}
               </>
             )}
           </DialogTitle>
@@ -109,7 +104,7 @@ export function PreviewDialog({ open, onOpenChange, type, item, pageNumber, tota
         </DialogHeader>
         {isHighlight && highlight && (
           <div className="shrink-0 mb-2">
-            <div className={cn("p-3 rounded-lg", highlightColorClasses[highlight.color || HighlightsColorOptions.yellow])}>
+            <div className={cn("p-3 rounded-lg", HIGHLIGHT_PREVIEW_CLASSES[highlight.color || HighlightsColorOptions.yellow])}>
               <p className="text-sm font-medium">"{highlight.text}"</p>
             </div>
             {highlight.comment && (
@@ -144,7 +139,7 @@ export function PreviewDialog({ open, onOpenChange, type, item, pageNumber, tota
             )}
           </div>
         </div>
-        <DialogFooter className="shrink-0 flex items-center !justify-between">
+        <DialogFooter className="shrink-0 flex items-center justify-between!">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
@@ -153,7 +148,7 @@ export function PreviewDialog({ open, onOpenChange, type, item, pageNumber, tota
               <Button variant="outline" size="icon" className="h-8 w-8" onClick={goToPrevPage} disabled={!canGoPrev}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className="text-sm text-muted-foreground min-w-[5rem] text-center">
+              <span className="text-sm text-muted-foreground min-w-20 text-center">
                 {currentPageNumber ?? "?"} / {totalPages ?? "?"}
               </span>
               <Button variant="outline" size="icon" className="h-8 w-8" onClick={goToNextPage} disabled={!canGoNext}>

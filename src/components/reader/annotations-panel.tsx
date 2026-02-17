@@ -1,190 +1,19 @@
 import { useState, useMemo } from "react";
-import { useHighlights, useBookmarks, useNotes, usePages, useTags } from "@/lib/api/queries";
+import { useHighlights, useBookmarks, useNotes, usePages } from "@/lib/api/queries";
 import { useDeleteNote } from "@/lib/api/mutations";
-
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Highlighter, BookMarked, Pencil, Trash2, StickyNote, SquarePen } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Highlighter, BookMarked, Pencil } from "lucide-react";
 import { HighlightsColorOptions, type HighlightsRecord, type BookmarksRecord, type NotesRecord } from "@/lib/pocketbase-types";
 import { useReaderStore } from "@/lib/stores/reader-store";
-import { AddToProjectButton } from "./add-to-project-button";
 import { PreviewDialog } from "@/components/workspace/preview-dialog";
+import { AnnotationHighlightItem } from "./annotation-highlight-item";
+import { AnnotationBookmarkItem } from "./annotation-bookmark-item";
+import { AnnotationNoteItem } from "./annotation-note-item";
+import { groupByPage } from "@/lib/utils/group-by-page";
 
 interface AnnotationsPanelProps {
   activeTab?: "highlights" | "bookmarks" | "notes";
   onNavigateToPage?: (pageNumber: number, blockId?: string) => void;
-}
-
-interface HighlightItemProps {
-  highlight: HighlightsRecord;
-  pageNumber?: number;
-  onClick: () => void;
-}
-
-function HighlightItem({ highlight, pageNumber, onClick, onEdit }: HighlightItemProps & { onEdit: () => void }) {
-  const color = highlight.color || HighlightsColorOptions.yellow;
-  const { data: allTags = [] } = useTags();
-
-  const tagTitles = (highlight.tags || []).map((tagId) => allTags.find((t) => t.id === tagId)?.title).filter(Boolean);
-
-  return (
-    <div className="group/item w-full text-left p-2.5 rounded-lg border border-transparent hover:border-border hover:bg-accent/50 transition-colors">
-      <div className="flex items-start gap-2">
-        <div
-          className={cn(
-            "w-1 h-full min-h-8 rounded-full shrink-0",
-            color === HighlightsColorOptions.yellow && "bg-yellow-400",
-            color === HighlightsColorOptions.green && "bg-green-400",
-            color === HighlightsColorOptions.blue && "bg-blue-400",
-            color === HighlightsColorOptions.pink && "bg-pink-400",
-            color === HighlightsColorOptions.purple && "bg-purple-400",
-          )}
-        />
-        <button onClick={onClick} className="flex-1 min-w-0 text-left">
-          <p className="text-sm line-clamp-2 text-foreground/90">"{highlight.text}"</p>
-          {(highlight.comment || tagTitles.length > 0) && (
-            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 mt-1.5">
-              {highlight.comment && (
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <StickyNote className="h-3 w-3 shrink-0" />
-                  <span className="truncate">{highlight.comment}</span>
-                </span>
-              )}
-              {tagTitles.map((title, i) => (
-                <Badge key={i} variant="outline" className="text-[10px] px-1 py-0 h-4 border-muted-foreground/30">
-                  {title}
-                </Badge>
-              ))}
-            </div>
-          )}
-        </button>
-        <div className="flex items-center gap-1 shrink-0">
-          <div className="opacity-0 group-hover/item:opacity-100 transition-opacity">
-            <AddToProjectButton itemId={highlight.id} itemType="highlight" />
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 opacity-0 group-hover/item:opacity-100 transition-opacity"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
-            title="Edit highlight"
-          >
-            <SquarePen className="h-3 w-3" />
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-interface BookmarkItemProps {
-  bookmark: BookmarksRecord;
-  onClick: () => void;
-}
-
-function BookmarkItem({ bookmark, onClick, onEdit }: BookmarkItemProps & { onEdit: () => void }) {
-  const { data: allTags = [] } = useTags();
-
-  const tagTitles = (bookmark.tags || []).map((tagId) => allTags.find((t) => t.id === tagId)?.title).filter(Boolean);
-
-  return (
-    <div className="group/item w-full text-left p-2.5 rounded-lg border border-transparent hover:border-border hover:bg-accent/50 transition-colors">
-      <div className="flex items-start gap-2">
-        <BookMarked className="h-4 w-4 mt-0.5 shrink-0 text-amber-500" />
-        <button onClick={onClick} className="flex-1 min-w-0 text-left">
-          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-            {bookmark.comment && <span className="text-sm text-muted-foreground italic">"{bookmark.comment}"</span>}
-            {tagTitles.map((title, i) => (
-              <Badge key={i} variant="outline" className="text-[10px] px-1 py-0 h-4 border-muted-foreground/30">
-                {title}
-              </Badge>
-            ))}
-          </div>
-        </button>
-        <div className="flex items-center gap-1 shrink-0">
-          <div className="opacity-0 group-hover/item:opacity-100 transition-opacity">
-            <AddToProjectButton itemId={bookmark.id} itemType="bookmark" />
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 opacity-0 group-hover/item:opacity-100 transition-opacity"
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit();
-            }}
-            title="Edit bookmark"
-          >
-            <SquarePen className="h-3 w-3" />
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-interface NoteItemProps {
-  note: NotesRecord;
-  onDelete: () => void;
-  onClick: () => void;
-}
-
-function NoteItem({ note, onDelete, onClick, onEdit }: NoteItemProps & { onEdit: () => void }) {
-  const { data: allTags = [] } = useTags();
-
-  const tagTitles = (note.tags || []).map((tagId) => allTags.find((t) => t.id === tagId)?.title).filter(Boolean);
-
-  return (
-    <div className="group/item w-full text-left p-2.5 rounded-lg border border-transparent hover:border-border hover:bg-accent/50 transition-colors">
-      <div className="flex items-start gap-2">
-        <Pencil className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
-        <button onClick={onClick} className="flex-1 min-w-0 text-left">
-          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-            <span className="text-sm text-foreground">{note.content}</span>
-            {tagTitles.map((title, i) => (
-              <Badge key={i} variant="outline" className="text-[10px] px-1 py-0 h-4 border-muted-foreground/30">
-                {title}
-              </Badge>
-            ))}
-          </div>
-        </button>
-        <div className="flex items-center gap-1 shrink-0">
-          <div className="flex gap-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
-            <AddToProjectButton itemId={note.id} itemType="note" />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit();
-              }}
-              title="Edit note"
-            >
-              <SquarePen className="h-3 w-3" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-destructive hover:text-destructive"
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete();
-              }}
-              title="Delete note"
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 export function AnnotationsPanel({ activeTab = "highlights", onNavigateToPage: propNavigateToPage }: AnnotationsPanelProps) {
@@ -212,56 +41,14 @@ export function AnnotationsPanel({ activeTab = "highlights", onNavigateToPage: p
     return map;
   }, [pagesData]);
 
-  const groupedHighlights = useMemo(() => {
-    const grouped = new Map<number, HighlightsRecord[]>();
+  const groupedHighlights = useMemo(
+    () => groupByPage(allHighlights ?? [], (h): number | undefined => (h.page ? pageIdToNumber.get(h.page) : undefined)),
+    [allHighlights, pageIdToNumber],
+  );
 
-    allHighlights?.forEach((highlight) => {
-      const pageNum = highlight.page ? pageIdToNumber.get(highlight.page) : undefined;
-      const displayPageNum = pageNum ?? 0;
-      if (!grouped.has(displayPageNum)) {
-        grouped.set(displayPageNum, []);
-      }
-      grouped.get(displayPageNum)!.push(highlight);
-    });
+  const groupedBookmarks = useMemo(() => groupByPage(allBookmarks ?? [], (b) => b.page_number), [allBookmarks]);
 
-    return Array.from(grouped.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([pageNumber, items]) => ({ pageNumber, items }));
-  }, [allHighlights, pageIdToNumber]);
-
-  const groupedBookmarks = useMemo(() => {
-    const grouped = new Map<number, BookmarksRecord[]>();
-
-    allBookmarks?.forEach((bookmark) => {
-      const displayPageNum = bookmark.page_number ?? 0;
-
-      if (!grouped.has(displayPageNum)) {
-        grouped.set(displayPageNum, []);
-      }
-      grouped.get(displayPageNum)!.push(bookmark);
-    });
-
-    return Array.from(grouped.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([pageNumber, items]) => ({ pageNumber, items }));
-  }, [allBookmarks]);
-
-  const groupedNotes = useMemo(() => {
-    const grouped = new Map<number, NotesRecord[]>();
-
-    allNotes?.forEach((note) => {
-      const displayPageNum = note.page_number ?? 0;
-
-      if (!grouped.has(displayPageNum)) {
-        grouped.set(displayPageNum, []);
-      }
-      grouped.get(displayPageNum)!.push(note);
-    });
-
-    return Array.from(grouped.entries())
-      .sort(([a], [b]) => a - b)
-      .map(([pageNumber, items]) => ({ pageNumber, items }));
-  }, [allNotes]);
+  const groupedNotes = useMemo(() => groupByPage(allNotes ?? [], (n) => n.page_number), [allNotes]);
 
   const handleHighlightClick = (highlight: HighlightsRecord) => {
     const pageNum = highlight.page ? pageIdToNumber.get(highlight.page) : undefined;
@@ -380,7 +167,7 @@ export function AnnotationsPanel({ activeTab = "highlights", onNavigateToPage: p
                       {pageNumber === 0 ? "Unknown Page" : `Page ${pageNumber}`}
                     </div>
                     {items.map((highlight) => (
-                      <HighlightItem
+                      <AnnotationHighlightItem
                         key={highlight.id}
                         highlight={highlight}
                         pageNumber={highlight.page ? pageIdToNumber.get(highlight.page) : undefined}
@@ -412,7 +199,7 @@ export function AnnotationsPanel({ activeTab = "highlights", onNavigateToPage: p
                       {pageNumber === 0 ? "Unknown Page" : `Page ${pageNumber}`}
                     </div>
                     {items.map((bookmark) => (
-                      <BookmarkItem
+                      <AnnotationBookmarkItem
                         key={bookmark.id}
                         bookmark={bookmark}
                         onClick={() => handleBookmarkClick(bookmark)}
@@ -443,7 +230,7 @@ export function AnnotationsPanel({ activeTab = "highlights", onNavigateToPage: p
                       {pageNumber === 0 ? "Unknown Page" : `Page ${pageNumber}`}
                     </div>
                     {items.map((note) => (
-                      <NoteItem
+                      <AnnotationNoteItem
                         key={note.id}
                         note={note}
                         onDelete={() => deleteNoteMutation.mutate(note.id)}

@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Search, X, ChevronUp, ChevronDown, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useFullTextSearch } from "@/lib/api/queries";
 import { cn, useDebouncedCallback } from "@/lib/utils";
+import { clearSearchHighlights, applySearchHighlights, updateActiveSearchHighlight, reconnectSearchObserver } from "@/lib/utils/search-highlights";
 
 interface SearchMatch {
   pageNumber: number;
@@ -29,7 +30,6 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, isReadingMode = 
   const onNavigateToPageRef = useRef(onNavigateToPage);
   onNavigateToPageRef.current = onNavigateToPage;
   const lastNavigatedPageRef = useRef<number | null>(null);
-  // Track active match state so MutationObserver can restore highlights after React re-renders
   const activeMatchRef = useRef({ pageNumber: 0, highlightIndex: 0 });
   const observerRef = useRef<MutationObserver | null>(null);
   const observerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -75,7 +75,6 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, isReadingMode = 
         occIdx++;
         if (expanded.length >= MAX_MATCHES) break;
       }
-      // If FTS matched but our simple regex didn't, still include one entry
       if (occIdx === 0) {
         expanded.push({
           pageNumber: chunk.pageNumber,
@@ -106,7 +105,7 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, isReadingMode = 
       }
 
       if (!needsPageChange) {
-        const success = updateActiveHighlight(match.pageNumber, highlightIndexOnPage);
+        const success = updateActiveSearchHighlight(match.pageNumber, highlightIndexOnPage);
         if (success) return;
       }
 
@@ -117,10 +116,10 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, isReadingMode = 
         observerTimerRef.current = null;
         observerRef.current?.disconnect();
 
-        applyHighlights(debouncedQuery);
-        const success = updateActiveHighlight(match.pageNumber, highlightIndexOnPage);
+        applySearchHighlights(debouncedQuery);
+        const success = updateActiveSearchHighlight(match.pageNumber, highlightIndexOnPage);
 
-        reconnectObserver(observerRef, observerTimerRef, debouncedQuery, activeMatchRef);
+        reconnectSearchObserver(observerRef, observerTimerRef, debouncedQuery, activeMatchRef);
 
         if (!success) {
           setTimeout(() => tryApply(attempt + 1), 100);
@@ -138,13 +137,13 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, isReadingMode = 
     observerRef.current?.disconnect();
     observerRef.current = null;
 
-    clearHighlights();
+    clearSearchHighlights();
 
     if (debouncedQuery.trim()) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          applyHighlights(debouncedQuery);
-          reconnectObserver(observerRef, observerTimerRef, debouncedQuery, activeMatchRef);
+          applySearchHighlights(debouncedQuery);
+          reconnectSearchObserver(observerRef, observerTimerRef, debouncedQuery, activeMatchRef);
         });
       });
     }
@@ -210,7 +209,7 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, isReadingMode = 
     observerTimerRef.current = null;
     observerRef.current?.disconnect();
     observerRef.current = null;
-    clearHighlights();
+    clearSearchHighlights();
   }, []);
 
   const handleInputChange = (value: string) => {
@@ -277,182 +276,4 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, isReadingMode = 
       </Button>
     </div>
   );
-}
-
-const HIGHLIGHT_CLASS = "fts-search-highlight";
-const ACTIVE_HIGHLIGHT_CLASS = "fts-search-highlight-active";
-
-function getReaderContainer(): Element | null {
-  return document.querySelector("[data-reader-root]");
-}
-
-function clearHighlights() {
-  const marks = document.querySelectorAll(`.${HIGHLIGHT_CLASS}`);
-  if (marks.length === 0) return;
-
-  const ops: { mark: Element; parent: Node; textNode: Text }[] = [];
-  marks.forEach((mark) => {
-    const parent = mark.parentNode;
-    if (parent) {
-      ops.push({ mark, parent, textNode: document.createTextNode(mark.textContent || "") });
-    }
-  });
-
-  for (const { mark, parent, textNode } of ops) {
-    parent.replaceChild(textNode, mark);
-  }
-
-  const parents = new Set(ops.map((o) => o.parent));
-  for (const parent of parents) {
-    parent.normalize();
-  }
-}
-
-function applyHighlights(query: string): number {
-  if (!query.trim()) return 0;
-
-  const container = getReaderContainer();
-  if (!container) return 0;
-
-  clearHighlights();
-
-  const terms = query
-    .trim()
-    .split(/\s+/)
-    .filter((t) => t.length > 0);
-
-  const escapedTerms = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  const regex = new RegExp(`(${escapedTerms.join("|")})`, "gi");
-
-  const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
-    acceptNode: (node) => {
-      const parent = node.parentElement;
-      if (parent?.classList.contains(HIGHLIGHT_CLASS) || parent?.tagName === "MARK" || parent?.tagName === "STYLE") {
-        return NodeFilter.FILTER_REJECT;
-      }
-      return NodeFilter.FILTER_ACCEPT;
-    },
-  });
-
-  const textNodes: Text[] = [];
-  let node: Node | null;
-  while ((node = walker.nextNode())) {
-    textNodes.push(node as Text);
-  }
-
-  let globalHighlightCount = 0;
-
-  textNodes.forEach((textNode) => {
-    const text = textNode.textContent || "";
-    if (!regex.test(text)) return;
-    regex.lastIndex = 0;
-
-    const fragment = document.createDocumentFragment();
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-
-    while ((match = regex.exec(text)) !== null) {
-      if (match.index > lastIndex) {
-        fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
-      }
-
-      const span = document.createElement("span");
-      span.className = HIGHLIGHT_CLASS;
-      span.textContent = match[0];
-      span.dataset.highlightIndex = String(globalHighlightCount);
-      globalHighlightCount++;
-
-      fragment.appendChild(span);
-      lastIndex = match.index + match[0].length;
-    }
-
-    if (lastIndex < text.length) {
-      fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
-    }
-
-    textNode.parentNode?.replaceChild(fragment, textNode);
-  });
-
-  return globalHighlightCount;
-}
-
-function updateActiveHighlight(pageNumber: number, highlightIndexOnPage: number): boolean {
-  const allHighlights = document.querySelectorAll(`.${HIGHLIGHT_CLASS}`);
-  if (allHighlights.length === 0) return false;
-
-  allHighlights.forEach((el) => el.classList.remove(ACTIVE_HIGHLIGHT_CLASS));
-
-  const pageElement = document.getElementById(`page-${pageNumber}`);
-  let targetHighlight: Element | null = null;
-
-  if (pageElement) {
-    const pageHighlights = pageElement.querySelectorAll(`.${HIGHLIGHT_CLASS}`);
-    if (pageHighlights.length > highlightIndexOnPage) {
-      targetHighlight = pageHighlights[highlightIndexOnPage];
-    } else if (pageHighlights.length > 0) {
-      targetHighlight = pageHighlights[pageHighlights.length - 1];
-    }
-  }
-
-  if (!targetHighlight) {
-    if (allHighlights.length > highlightIndexOnPage) {
-      targetHighlight = allHighlights[highlightIndexOnPage];
-    } else if (allHighlights.length > 0) {
-      targetHighlight = allHighlights[0];
-    }
-  }
-
-  if (targetHighlight) {
-    targetHighlight.classList.add(ACTIVE_HIGHLIGHT_CLASS);
-    targetHighlight.scrollIntoView({ behavior: "smooth", block: "center" });
-    return true;
-  }
-
-  return false;
-}
-
-function reconnectObserver(
-  observerRef: React.MutableRefObject<MutationObserver | null>,
-  timerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
-  query: string,
-  activeMatchRef: React.MutableRefObject<{ pageNumber: number; highlightIndex: number }>,
-) {
-  if (timerRef.current) clearTimeout(timerRef.current);
-  timerRef.current = null;
-  observerRef.current?.disconnect();
-
-  const container = getReaderContainer();
-  if (!container || !query.trim()) return;
-
-  let retryCount = 0;
-  const MAX_RETRIES = 3;
-
-  const observer = new MutationObserver(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      timerRef.current = null;
-
-      if (!container.querySelector(`.${HIGHLIGHT_CLASS}`) && query.trim()) {
-        if (retryCount >= MAX_RETRIES) return;
-        retryCount++;
-
-        observer.disconnect();
-
-        applyHighlights(query);
-        const { pageNumber, highlightIndex } = activeMatchRef.current;
-        updateActiveHighlight(pageNumber, highlightIndex);
-
-        requestAnimationFrame(() => {
-          try {
-            observer.observe(container, { childList: true, subtree: true });
-          } catch {}
-        });
-      } else {
-        retryCount = 0;
-      }
-    }, 150);
-  });
-
-  observer.observe(container, { childList: true, subtree: true });
-  observerRef.current = observer;
 }

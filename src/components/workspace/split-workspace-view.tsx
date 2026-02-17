@@ -5,7 +5,7 @@ import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/componen
 import { useWritingProject } from "@/lib/api/queries";
 import { useUpdateWritingProject } from "@/lib/api/mutations";
 import { cn } from "@/lib/utils";
-import { WriterEditorPane } from "./editor-pane";
+import { WriterPane } from "./writer-pane";
 
 interface SplitWorkspaceViewProps {
   className?: string;
@@ -93,81 +93,57 @@ export function SplitWorkspaceView({
     return null;
   }
 
-  const renderPane = (tab: WorkspaceTab, isActive: boolean, localContent?: string, project?: any, onContentChange?: (content: string) => void) => {
+  const renderPane = (
+    tab: WorkspaceTab,
+    isActive: boolean,
+    writerProps?: { localContent: string; project: any; onContentChange?: (c: string) => void },
+  ) => {
     if (tab.type === "reader") {
-      const readerTab = tab as ReaderTab;
       return (
         <ReaderPane
           key={tab.id}
-          uploadId={readerTab.uploadId}
+          uploadId={(tab as ReaderTab).uploadId}
           tabId={tab.id}
-          initialPage={readerTab.currentPage}
+          initialPage={(tab as ReaderTab).currentPage}
           isActive={isActive}
           showHeader={true}
           onPageChange={handlePageChange(tab.id)}
           onTitleLoad={handleTitleLoad(tab.id)}
         />
       );
-    } else {
-      const writerTab = tab as WriterTab;
-      return <WriterPane key={tab.id} tab={writerTab} localContent={localContent || ""} project={project} onContentChange={onContentChange} />;
     }
+    return (
+      <WriterPane
+        key={tab.id}
+        tab={tab as WriterTab}
+        localContent={writerProps?.localContent || ""}
+        project={writerProps?.project}
+        onContentChange={writerProps?.onContentChange}
+      />
+    );
   };
 
+  const activeWriterProps =
+    activeTab.type === "writer"
+      ? { localContent: parentLocalContent || "", project: parentActiveProject, onContentChange: parentOnContentChange }
+      : undefined;
+
+  const splitWriterProps =
+    splitTab?.type === "writer" ? { localContent: splitLocalContent, project: splitProject, onContentChange: handleSplitContentChange } : undefined;
+
   if (splitMode === "none" || !splitTab) {
-    return (
-      <div className={className}>
-        {renderPane(
-          activeTab,
-          true,
-          activeTab.type === "writer" ? parentLocalContent : undefined,
-          activeTab.type === "writer" ? parentActiveProject : undefined,
-          activeTab.type === "writer" ? parentOnContentChange : undefined,
-        )}
-      </div>
-    );
+    return <div className={className}>{renderPane(activeTab, true, activeWriterProps)}</div>;
   }
 
   return (
     <ResizablePanelGroup className={cn("flex h-full w-full", className)}>
       <ResizablePanel defaultSize={panelSizes[0]} minSize={20}>
-        <div className="h-full w-full overflow-hidden">
-          {renderPane(
-            activeTab,
-            true,
-            activeTab.type === "writer" ? parentLocalContent : undefined,
-            activeTab.type === "writer" ? parentActiveProject : undefined,
-            activeTab.type === "writer" ? parentOnContentChange : undefined,
-          )}
-        </div>
+        <div className="h-full w-full overflow-hidden">{renderPane(activeTab, true, activeWriterProps)}</div>
       </ResizablePanel>
       <ResizableHandle withHandle />
       <ResizablePanel defaultSize={panelSizes[1]} minSize={20}>
-        <div className="h-full w-full overflow-hidden">
-          {renderPane(
-            splitTab,
-            false,
-            splitTab.type === "writer" ? splitLocalContent : undefined,
-            splitTab.type === "writer" ? splitProject : undefined,
-            splitTab.type === "writer" ? handleSplitContentChange : undefined,
-          )}
-        </div>
+        <div className="h-full w-full overflow-hidden">{renderPane(splitTab, false, splitWriterProps)}</div>
       </ResizablePanel>
     </ResizablePanelGroup>
   );
-}
-
-interface WriterPaneProps {
-  tab: WriterTab;
-  localContent: string;
-  project: any;
-  onContentChange?: (content: string) => void;
-}
-
-function WriterPane({ tab, localContent, project, onContentChange }: WriterPaneProps) {
-  if (!project) {
-    return <div className="flex items-center justify-center h-full text-muted-foreground">Loading project...</div>;
-  }
-
-  return <WriterEditorPane projectId={tab.projectId} content={localContent} onContentChange={onContentChange ?? (() => {})} className="h-full" />;
 }

@@ -18,7 +18,7 @@ function isAudioFile(filename: string): boolean {
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useReaderSettings, usePageSettings, FONT_FAMILIES } from "@/lib/hooks/use-reader-settings";
-import { ReaderSettingsPanel, QuickFontSizeControl } from "@/components/reader/reader-settings-panel";
+import { ReaderSettingsPanel } from "@/components/reader/reader-settings-panel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn, getUserId, useDebouncedCallback } from "@/lib/utils";
 import { useSidebar } from "@/components/ui/sidebar";
@@ -49,6 +49,7 @@ import {
   type HighlightInput,
   type MarkdownChunk,
 } from "@/lib/highlight-utils";
+import { QuickFontSizeControl } from "./reader-settings-controls";
 
 interface ReaderPaneProps {
   uploadId: string;
