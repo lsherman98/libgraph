@@ -97,7 +97,6 @@ function RouteComponent() {
         setWriterTabDirty(activeTabId, true);
       }
 
-      // Debounced auto-save
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current);
       }
@@ -108,7 +107,6 @@ function RouteComponent() {
     [activeTabId, setWriterTabDirty, saveContent],
   );
 
-  // Clean up auto-save timer on unmount
   useEffect(() => {
     return () => {
       if (autoSaveTimerRef.current) {
@@ -117,7 +115,6 @@ function RouteComponent() {
     };
   }, []);
 
-  // Immediate save on ⌘S
   const handleSave = useCallback(async () => {
     if (autoSaveTimerRef.current) {
       clearTimeout(autoSaveTimerRef.current);

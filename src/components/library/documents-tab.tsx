@@ -22,7 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FileText, Upload, Search, Library, X } from "lucide-react";
-import { EditUploadDialog } from "@/components/edit-upload-dialog";
+import { EditUploadDialog } from "@/components/upload/edit-upload-dialog";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { AdvancedFilters } from "./advanced-filters";
 import { DocumentRow } from "./document-row";

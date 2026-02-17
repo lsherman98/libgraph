@@ -60,7 +60,6 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
         hydrate: (state: Partial<WorkspaceLayoutState>) => {
             set({ ...state, _hydrated: true });
         },
-
         addReaderTab: (uploadId: string, title: string) => {
             const state = get();
             const existingTab = state.tabs.find((t): t is ReaderTab => t.type === "reader" && t.uploadId === uploadId);
@@ -86,7 +85,6 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
 
             return newTab.id;
         },
-
         addWriterTab: (projectId: string, title: string) => {
             const state = get();
             const existingTab = state.tabs.find((t): t is WriterTab => t.type === "writer" && t.projectId === projectId);
@@ -112,7 +110,6 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
 
             return newTab.id;
         },
-
         removeTab: (tabId: string) => {
             const state = get();
             const tabIndex = state.tabs.findIndex((t) => t.id === tabId);
@@ -143,11 +140,9 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
                 splitMode: newSplitTabId ? state.splitMode : "none",
             });
         },
-
         setActiveTab: (tabId: string) => {
             set({ activeTabId: tabId });
         },
-
         updateTabTitle: (tabId: string, title: string) => {
             set((state) => ({
                 tabs: state.tabs.map((tab) =>
@@ -155,7 +150,6 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
                 ),
             }));
         },
-
         updateReaderTabPage: (tabId: string, page: number) => {
             set((state) => ({
                 tabs: state.tabs.map((tab) =>
@@ -165,7 +159,6 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
                 ),
             }));
         },
-
         setWriterTabDirty: (tabId: string, isDirty: boolean) => {
             set((state) => ({
                 tabs: state.tabs.map((tab) =>
@@ -175,7 +168,6 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
                 ),
             }));
         },
-
         setSplitMode: (mode: SplitMode) => {
             const state = get();
             if (mode === "none") {
@@ -189,15 +181,12 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
                 }
             }
         },
-
         setPanelSizes: (sizes: number[]) => {
             set({ panelSizes: sizes });
         },
-
         closeSplit: () => {
             set({ splitMode: "none", splitTabId: null });
         },
-
         getTab: (tabId: string) => {
             return get().tabs.find((t) => t.id === tabId);
         },
