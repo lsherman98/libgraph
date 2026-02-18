@@ -123,43 +123,18 @@ func Init(app *pocketbase.PocketBase) error {
 				retrievalParams := buildRetrievalParams(body.RetrievalParameters, searchFilters)
 				retrieveReq := retrieveRequestFromParams(body.Message, retrievalParams)
 
-				reqJSON, _ := json.Marshal(retrieveReq)
-				app.Logger().Info("[chat/search] sending retrieve request", "body", string(reqJSON))
-
 				resp, err := llamaClient.Retrieve(retrieveReq)
 				if err != nil {
 					app.Logger().Error("[chat/search] retrieve request failed", "error", err)
 					return e.InternalServerError("search request failed", err)
 				}
 
-				app.Logger().Info("[chat/search] retrieve response",
-					"nodeCount", len(resp.Nodes),
-				)
-				for i, node := range resp.Nodes {
-					app.Logger().Info("[chat/search] node",
-						"index", i,
-						"id", node.ID,
-						"score", node.Score,
-						"textLen", len(node.Text),
-					)
-				}
-
 				sources := sourcesFromNodes(resp.Nodes)
-
-				app.Logger().Info("[chat/search] mapped sources", "sourceCount", len(sources))
 
 				assistantMsgID, err := saveMessage(app, chatID, userID, "assistant", "", sources)
 				if err != nil {
 					return e.InternalServerError("failed to save assistant message", err)
 				}
-
-				respJSON, _ := json.Marshal(ChatResponse{
-					ChatID:             chatID,
-					Sources:            sources,
-					UserMessageID:      userMsgID,
-					AssistantMessageID: assistantMsgID,
-				})
-				app.Logger().Info("[chat/search] returning response", "response", string(respJSON))
 
 				return e.JSON(http.StatusOK, ChatResponse{
 					ChatID:             chatID,
@@ -365,10 +340,12 @@ func mapSourceMetadata(m *llama.NodeMetadata, source *ChatSource) {
 	source.Title = m.Title
 	source.StartCharIdx = m.StartCharIdx
 	source.EndCharIdx = m.EndCharIdx
-	if m.PageNumber != nil {
-		source.PageNumber = *m.PageNumber
-	} else if m.PageLabel != nil {
-		source.PageNumber = *m.PageLabel
+	if m.PageNumber != nil && m.PageNumber.Set {
+		source.PageNumber = m.PageNumber.Value
+	} else if m.PageLabel != nil && m.PageLabel.Set {
+		source.PageNumber = m.PageLabel.Value
+	} else if m.PageNum != nil && m.PageNum.Set {
+		source.PageNumber = m.PageNum.Value
 	}
 }
 

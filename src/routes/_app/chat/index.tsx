@@ -183,7 +183,7 @@ function ChatPage() {
             <div className="max-w-3xl mx-auto py-6 px-4">
               <div className="space-y-6">
                 {displayMessages.map((message) => (
-                  <MessageBubble key={message.id} message={message} onSourceClick={handleSourceClick} />
+                  <MessageBubble key={message.id} message={message} mode={mode} onSourceClick={handleSourceClick} />
                 ))}
                 <div ref={messagesEndRef} />
               </div>

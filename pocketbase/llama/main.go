@@ -371,7 +371,6 @@ func (c *LlamaClient) Chat(req *ChatRequestBody) (*ChatResponse, error) {
 
 func (c *LlamaClient) Retrieve(req *RetrieveRequestBody) (*RetrieveResponse, error) {
 	if c.PipelineID == "" {
-		c.App.Logger().Error("[llama/Retrieve] pipeline ID is not configured")
 		return nil, errors.New("pipeline ID is not configured")
 	}
 
@@ -391,13 +390,6 @@ func (c *LlamaClient) Retrieve(req *RetrieveRequestBody) (*RetrieveResponse, err
 		return nil, err
 	}
 
-	c.App.Logger().Info("[llama/Retrieve] request",
-		"url", fullURL.String(),
-		"pipelineID", c.PipelineID,
-		"projectID", c.ProjectID,
-		"body", string(bodyBytes),
-	)
-
 	httpReq, err := http.NewRequest(http.MethodPost, fullURL.String(), bytes.NewBuffer(bodyBytes))
 	if err != nil {
 		return nil, err
@@ -409,7 +401,6 @@ func (c *LlamaClient) Retrieve(req *RetrieveRequestBody) (*RetrieveResponse, err
 
 	resp, err := c.Client.Do(httpReq)
 	if err != nil {
-		c.App.Logger().Error("[llama/Retrieve] HTTP request failed", "error", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -419,23 +410,14 @@ func (c *LlamaClient) Retrieve(req *RetrieveRequestBody) (*RetrieveResponse, err
 		return nil, err
 	}
 
-	c.App.Logger().Info("[llama/Retrieve] response",
-		"status", resp.StatusCode,
-		"bodyLen", len(respBody),
-		"body", string(respBody),
-	)
-
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("LlamaIndex: API request failed with status: %s, body: %s", resp.Status, string(respBody))
 	}
 
 	var raw retrieveRawResponse
 	if err := json.Unmarshal(respBody, &raw); err != nil {
-		c.App.Logger().Error("[llama/Retrieve] failed to parse response", "error", err, "body", string(respBody))
 		return nil, fmt.Errorf("failed to parse retrieve response: %w", err)
 	}
-
-	c.App.Logger().Info("[llama/Retrieve] parsed nodes", "rawNodeCount", len(raw.Nodes))
 
 	response := RetrieveResponse{
 		Nodes: make([]NodeInfo, len(raw.Nodes)),

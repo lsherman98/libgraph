@@ -1,5 +1,11 @@
 package llama
 
+import (
+	"encoding/json"
+	"strconv"
+	"strings"
+)
+
 type StatusEnum string
 
 const (
@@ -163,14 +169,44 @@ type ChatResponse struct {
 	Nodes    []NodeInfo `json:"nodes,omitempty"`
 }
 
+// FlexInt handles JSON values that may be a number or a numeric string (e.g. "5" or 5).
+type FlexInt struct {
+	Value int
+	Set   bool
+}
+
+func (f *FlexInt) UnmarshalJSON(data []byte) error {
+	f.Set = true
+	// Try as number first.
+	var n int
+	if err := json.Unmarshal(data, &n); err == nil {
+		f.Value = n
+		return nil
+	}
+	// Try as quoted string.
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		parsed, err := strconv.Atoi(strings.TrimSpace(s))
+		if err != nil {
+			f.Set = false
+			return nil // non-numeric label like "iv" – just skip
+		}
+		f.Value = parsed
+		return nil
+	}
+	f.Set = false
+	return nil
+}
+
 type NodeMetadata struct {
-	UploadID       string `json:"upload_id,omitempty"`
-	ExternalFileID string `json:"external_file_id,omitempty"`
-	Title          string `json:"title,omitempty"`
-	PageNumber     *int   `json:"page_number,omitempty"`
-	PageLabel      *int   `json:"page_label,omitempty"`
-	StartCharIdx   *int   `json:"start_char_idx,omitempty"`
-	EndCharIdx     *int   `json:"end_char_idx,omitempty"`
+	UploadID       string   `json:"upload_id,omitempty"`
+	ExternalFileID string   `json:"external_file_id,omitempty"`
+	Title          string   `json:"title,omitempty"`
+	PageNumber     *FlexInt `json:"page_number,omitempty"`
+	PageLabel      *FlexInt `json:"page_label,omitempty"`
+	PageNum        *FlexInt `json:"page_num,omitempty"`
+	StartCharIdx   *int     `json:"start_char_idx,omitempty"`
+	EndCharIdx     *int     `json:"end_char_idx,omitempty"`
 }
 
 type NodeInfo struct {
@@ -213,5 +249,5 @@ type retrieveRawNodeWithScore struct {
 type retrieveRawNode struct {
 	ID_      string        `json:"id_"`
 	Text     string        `json:"text"`
-	Metadata *NodeMetadata `json:"metadata"`
+	Metadata *NodeMetadata `json:"extra_info"`
 }
