@@ -1,6 +1,8 @@
 import { useMemo } from "react";
 import { User, Bot, FileText } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { CitationContent } from "@/components/chat/citation-content";
 import { buildCitationMap } from "@/components/chat/citation-utils";
@@ -82,41 +84,53 @@ function SourceList({
   onSourceClick?: (source: ChatSource) => void;
 }) {
   return (
-    <div className="space-y-2 pt-2">
-      <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Sources</p>
-      <div className="grid grid-cols-1 gap-2">
-        {sources.map((source, idx) => {
-          const citNum = source.node_id ? citationMap.get(source.node_id) : undefined;
-          return (
-            <button
-              key={idx}
-              onClick={() => onSourceClick?.(source)}
-              className="group flex flex-col gap-1.5 rounded-xl border border-border bg-card p-3 transition-colors hover:border-primary/30 text-left w-full cursor-pointer"
-            >
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2 min-w-0">
-                  {citNum != null && (
-                    <span className="flex items-center justify-center h-5 min-w-5 px-1 text-[10px] font-semibold rounded bg-primary/15 text-primary shrink-0">
-                      {citNum}
+    <div className="flex items-center gap-1.5 pt-2">
+      <span className="text-[11px] text-muted-foreground">Sources</span>
+      {sources.map((source, idx) => {
+        const citNum = source.node_id ? citationMap.get(source.node_id) : idx + 1;
+        return (
+          <Popover key={idx}>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <PopoverTrigger asChild>
+                    <button className="inline-flex items-center justify-center h-5 min-w-5 px-1.5 text-[10px] font-semibold rounded-md bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer">
+                      {citNum ?? idx + 1}
+                    </button>
+                  </PopoverTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  {source.title || "Document"}{source.page_number ? ` · p.${source.page_number}` : ""}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <PopoverContent side="top" align="start" className="w-80 max-h-56 overflow-y-auto p-3">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    onClick={() => onSourceClick?.(source)}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline cursor-pointer text-left"
+                  >
+                    <FileText className="h-3 w-3 shrink-0" />
+                    {source.title || "Document"}
+                    {source.page_number ? <span className="text-muted-foreground ml-1">p.{source.page_number}</span> : null}
+                  </button>
+                  {source.score != null && (
+                    <span className="text-[10px] tabular-nums text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
+                      {Math.round(source.score * 100)}%
                     </span>
                   )}
-                  <span className="inline-flex items-center gap-1.5 text-xs font-medium text-primary group-hover:underline truncate">
-                    <FileText className="h-3 w-3 shrink-0" />
-                    <span className="truncate">{source.title || "Document"}</span>
-                    {source.page_number ? <span className="text-muted-foreground ml-1 shrink-0">p.{source.page_number}</span> : null}
-                  </span>
                 </div>
-                {source.score != null && (
-                  <span className="text-[10px] tabular-nums text-muted-foreground bg-muted px-1.5 py-0.5 rounded shrink-0">
-                    {Math.round(source.score * 100)}% Match
-                  </span>
+                {source.text && (
+                  <p className="text-xs leading-relaxed text-muted-foreground italic">
+                    "{source.text.length > 300 ? source.text.slice(0, 300) + "…" : source.text}"
+                  </p>
                 )}
               </div>
-              {source.text && <p className="text-xs leading-relaxed text-muted-foreground line-clamp-3 italic">"{source.text}"</p>}
-            </button>
-          );
-        })}
-      </div>
+            </PopoverContent>
+          </Popover>
+        );
+      })}
     </div>
   );
 }

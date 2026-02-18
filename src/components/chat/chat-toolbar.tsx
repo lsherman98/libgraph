@@ -1,8 +1,7 @@
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PanelLeftClose, PanelLeft, SlidersHorizontal, Settings2, Library, MessageSquare, Search, RotateCcw } from "lucide-react";
+import { PanelLeftClose, PanelLeft, SlidersHorizontal, Settings2, MessageSquare, Search, RotateCcw } from "lucide-react";
 
 interface ChatToolbarProps {
   mode: "chat" | "search";
@@ -32,7 +31,7 @@ export function ChatToolbar({
   onNewChat,
 }: ChatToolbarProps) {
   return (
-    <div className="h-12 shrink-0 border-b border-border flex items-center justify-between px-4">
+    <div className="h-12 shrink-0 border-b border-border flex items-center px-4">
       <div className="flex items-center gap-2">
         <TooltipProvider>
           <Tooltip>
@@ -73,25 +72,22 @@ export function ChatToolbar({
             </Tooltip>
           </TooltipProvider>
         )}
-        <div className="flex items-center gap-2">
-          <Library className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Library</span>
-          <Separator orientation="vertical" className="h-4 mx-1" />
-          <Tabs value={mode} onValueChange={(v) => onModeChange(v as "chat" | "search")} className="h-8">
-            <TabsList className="h-8 bg-transparent p-0 gap-1">
-              <TabsTrigger value="chat" className="h-7 px-2.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">
-                <MessageSquare className="h-3 w-3 mr-1.5" />
-                Chat
-              </TabsTrigger>
-              <TabsTrigger value="search" className="h-7 px-2.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">
-                <Search className="h-3 w-3 mr-1.5" />
-                Search
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
       </div>
-      {hasMessages && (
+      <div className="flex-1 flex justify-center">
+        <Tabs value={mode} onValueChange={(v) => onModeChange(v as "chat" | "search")} className="h-8">
+          <TabsList className="h-8 bg-transparent p-0 gap-1">
+            <TabsTrigger value="chat" className="h-7 px-2.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">
+              <MessageSquare className="h-3 w-3 mr-1.5" />
+              Chat
+            </TabsTrigger>
+            <TabsTrigger value="search" className="h-7 px-2.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">
+              <Search className="h-3 w-3 mr-1.5" />
+              Search
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+      <div className={hasMessages ? "" : "invisible"}>
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -103,7 +99,7 @@ export function ChatToolbar({
             <TooltipContent side="bottom">Start a new conversation</TooltipContent>
           </Tooltip>
         </TooltipProvider>
-      )}
+      </div>
     </div>
   );
 }

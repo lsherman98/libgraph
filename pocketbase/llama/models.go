@@ -202,7 +202,7 @@ type RetrieveResponse struct {
 }
 
 type retrieveRawResponse struct {
-	Nodes []retrieveRawNodeWithScore `json:"nodes"`
+	Nodes []retrieveRawNodeWithScore `json:"retrieval_nodes"`
 }
 
 type retrieveRawNodeWithScore struct {

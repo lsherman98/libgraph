@@ -1,53 +1,86 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Highlighter, BookMarked, ExternalLink, FileText, Pencil, StickyNote, ChevronLeft, ChevronRight } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Highlighter, BookMarked, ExternalLink, FileText, Pencil, StickyNote, ChevronLeft, ChevronRight, Hash } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HighlightsColorOptions, type HighlightsRecord, type BookmarksRecord, type NotesRecord } from "@/lib/pocketbase-types";
 import { usePageMarkdown, usePageByNumber, usePages } from "@/lib/api/queries";
 import { HIGHLIGHT_PREVIEW_CLASSES } from "@/lib/constants/highlight-colors";
+import { Link } from "@tanstack/react-router";
+import type { ChatSource } from "@/lib/types";
 
 /** @deprecated Use HIGHLIGHT_PREVIEW_CLASSES from @/lib/constants/highlight-colors instead */
-export const highlightColorClasses = HIGHLIGHT_PREVIEW_CLASSES;
+// export const highlightColorClasses = HIGHLIGHT_PREVIEW_CLASSES;
 
 export interface PreviewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  type: "highlight" | "bookmark" | "note";
+  type: "highlight" | "bookmark" | "note" | "source";
   item: HighlightsRecord | BookmarksRecord | NotesRecord | null;
+  source?: ChatSource | null;
   pageNumber?: number;
   totalPages?: number;
   uploadId?: string;
-  onNavigate: () => void;
+  onNavigate?: () => void;
 }
 
-export function PreviewDialog({ open, onOpenChange, type, item, pageNumber, totalPages: totalPagesProp, uploadId, onNavigate }: PreviewDialogProps) {
-  const [currentPageNumber, setCurrentPageNumber] = useState<number | undefined>(pageNumber);
-  const isOnOriginalPage = currentPageNumber === pageNumber;
+export function PreviewDialog({
+  open,
+  onOpenChange,
+  type,
+  item,
+  source,
+  pageNumber,
+  totalPages: totalPagesProp,
+  uploadId,
+  onNavigate,
+}: PreviewDialogProps) {
+  const isSource = type === "source";
+  const effectiveUploadId = isSource ? source?.upload_id : uploadId;
+  const effectivePageNumber = isSource ? source?.page_number : pageNumber;
+
+  const [currentPageNumber, setCurrentPageNumber] = useState<number | undefined>(effectivePageNumber);
+  const isOnOriginalPage = currentPageNumber != null && currentPageNumber === effectivePageNumber;
 
   useEffect(() => {
-    if (open) {
-      setCurrentPageNumber(pageNumber);
-    }
-  }, [open, pageNumber]);
+    setCurrentPageNumber(effectivePageNumber);
+  }, [open, effectivePageNumber]);
 
-  const { data: pagesData } = usePages(open && uploadId ? uploadId : undefined, 1, 1);
+  const { data: pagesData } = usePages(open && effectiveUploadId ? effectiveUploadId : undefined, 1, 1);
   const totalPages = totalPagesProp ?? pagesData?.totalItems;
 
-  const originalPageId = item?.page;
-  const { data: navigatedPage } = usePageByNumber(!isOnOriginalPage && uploadId ? uploadId : "", currentPageNumber ?? 0);
+  const originalPageId = isSource ? undefined : item?.page;
+  const needsPageByNumber = isSource || !isOnOriginalPage;
+  const validPageNumber = currentPageNumber != null && currentPageNumber > 0;
+  const { data: fetchedPage } = usePageByNumber(
+    needsPageByNumber && validPageNumber && effectiveUploadId ? effectiveUploadId : "",
+    needsPageByNumber && validPageNumber ? currentPageNumber : 0,
+  );
 
-  const activePageId = isOnOriginalPage ? originalPageId : navigatedPage?.id;
+  const activePageId = isSource ? fetchedPage?.id : isOnOriginalPage ? originalPageId : fetchedPage?.id;
   const { data: markdown, isLoading } = usePageMarkdown(activePageId);
 
-  if (!item) return null;
+  const highlightRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (highlightRef.current) {
+      const timer = setTimeout(() => {
+        highlightRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [markdown, source?.text]);
+
+  if (!isSource && !item) return null;
+  if (isSource && !source) return null;
 
   const isHighlight = type === "highlight";
   const isNote = type === "note";
   const highlight = isHighlight ? (item as HighlightsRecord) : null;
   const note = isNote ? (item as NotesRecord) : null;
 
-  const canNavigate = !!uploadId && totalPages != null && totalPages > 1;
+  const canNavigate = !!effectiveUploadId && totalPages != null && totalPages > 1;
   const canGoPrev = canNavigate && (currentPageNumber ?? 1) > 1;
   const canGoNext = canNavigate && (currentPageNumber ?? 1) < (totalPages ?? 1);
 
@@ -60,6 +93,118 @@ export function PreviewDialog({ open, onOpenChange, type, item, pageNumber, tota
 
   const renderPageContent = () => {
     if (!markdown) return null;
+
+    const markClass = "px-0.5 rounded bg-yellow-200 text-yellow-900 dark:bg-yellow-900/50 dark:text-yellow-200";
+
+    if (isSource && isOnOriginalPage && source && source.text) {
+      const chunkText = source.text.trim();
+      if (!chunkText) return <span>{markdown}</span>;
+
+      let index = -1;
+      let matchLen = chunkText.length;
+
+      index = markdown.indexOf(chunkText);
+
+      if (index === -1 && chunkText.length > 100) {
+        const shortChunk = chunkText.slice(0, 100);
+        index = markdown.indexOf(shortChunk);
+        if (index !== -1) {
+          matchLen = Math.min(chunkText.length, markdown.length - index);
+        }
+      }
+
+      if (index === -1) {
+        const lowerMarkdown = markdown.toLowerCase();
+        const lowerChunk = chunkText.toLowerCase();
+        index = lowerMarkdown.indexOf(lowerChunk);
+        if (index !== -1) matchLen = chunkText.length;
+      }
+
+      if (index === -1) {
+        const normalizeWs = (s: string) => s.replace(/\s+/g, " ").trim();
+        const normMarkdown = normalizeWs(markdown);
+        const normChunk = normalizeWs(chunkText);
+        const normIndex = normMarkdown.indexOf(normChunk);
+        if (normIndex !== -1) {
+          let origPos = 0;
+          let normPos = 0;
+          // Skip leading whitespace that was trimmed in normalization
+          while (origPos < markdown.length && /\s/.test(markdown[origPos])) origPos++;
+          while (normPos < normIndex && origPos < markdown.length) {
+            if (/\s/.test(markdown[origPos])) {
+              while (origPos < markdown.length && /\s/.test(markdown[origPos])) origPos++;
+              normPos++; // collapsed to single space in normalized form
+            } else {
+              origPos++;
+              normPos++;
+            }
+          }
+          index = origPos;
+          let endNormPos = normPos;
+          let endOrigPos = origPos;
+          while (endNormPos < normIndex + normChunk.length && endOrigPos < markdown.length) {
+            if (/\s/.test(markdown[endOrigPos])) {
+              while (endOrigPos < markdown.length && /\s/.test(markdown[endOrigPos])) endOrigPos++;
+              endNormPos++;
+            } else {
+              endOrigPos++;
+              endNormPos++;
+            }
+          }
+          matchLen = endOrigPos - origPos;
+        }
+      }
+
+      if (index === -1) {
+        const normalizeAll = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+        const normMarkdown = normalizeAll(markdown);
+        const normChunk = normalizeAll(chunkText);
+        const normIndex = normMarkdown.indexOf(normChunk);
+        if (normIndex !== -1) {
+          const mdLower = markdown.toLowerCase();
+          let origPos = 0;
+          let normPos = 0;
+          while (origPos < mdLower.length && /\s/.test(mdLower[origPos])) origPos++;
+          while (normPos < normIndex && origPos < mdLower.length) {
+            if (/\s/.test(mdLower[origPos])) {
+              while (origPos < mdLower.length && /\s/.test(mdLower[origPos])) origPos++;
+              normPos++;
+            } else {
+              origPos++;
+              normPos++;
+            }
+          }
+          index = origPos;
+          let endNormPos = normPos;
+          let endOrigPos = origPos;
+          while (endNormPos < normIndex + normChunk.length && endOrigPos < markdown.length) {
+            if (/\s/.test(markdown[endOrigPos])) {
+              while (endOrigPos < markdown.length && /\s/.test(markdown[endOrigPos])) endOrigPos++;
+              endNormPos++;
+            } else {
+              endOrigPos++;
+              endNormPos++;
+            }
+          }
+          matchLen = endOrigPos - origPos;
+        }
+      }
+
+      if (index !== -1 && matchLen > 0) {
+        const before = markdown.slice(0, index);
+        const highlighted = markdown.slice(index, index + matchLen);
+        const after = markdown.slice(index + matchLen);
+        return (
+          <>
+            <span>{before}</span>
+            <mark ref={highlightRef} className={markClass}>
+              {highlighted}
+            </mark>
+            <span>{after}</span>
+          </>
+        );
+      }
+    }
 
     if (isOnOriginalPage && highlight && highlight.start_offset !== undefined && highlight.end_offset !== undefined) {
       const before = markdown.slice(0, highlight.start_offset);
@@ -83,7 +228,14 @@ export function PreviewDialog({ open, onOpenChange, type, item, pageNumber, tota
       <DialogContent className="max-w-6xl min-w-4xl max-h-[85vh] flex flex-col">
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
-            {isHighlight ? (
+            {isSource ? (
+              <>
+                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                  <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <span className="truncate">{source?.title || "Document"}</span>
+              </>
+            ) : isHighlight ? (
               <>
                 <Highlighter className="h-5 w-5" />
                 Highlight Preview
@@ -100,8 +252,28 @@ export function PreviewDialog({ open, onOpenChange, type, item, pageNumber, tota
               </>
             )}
           </DialogTitle>
-          <DialogDescription>Page {pageNumber ?? "?"}</DialogDescription>
+          <DialogDescription className="flex items-center gap-3">
+            {isSource && effectivePageNumber != null && (
+              <span className="flex items-center gap-1">
+                <Hash className="h-3.5 w-3.5" />
+                Page {effectivePageNumber}
+              </span>
+            )}
+            {isSource && source?.score != null && (
+              <Badge variant="secondary" className="text-xs tabular-nums">
+                {Math.round(source.score * 100)}% Match
+              </Badge>
+            )}
+            {!isSource && <>Page {effectivePageNumber ?? "?"}</>}
+          </DialogDescription>
         </DialogHeader>
+        {isSource && source?.text && (
+          <div className="shrink-0 mb-2">
+            <div className="p-3 rounded-lg bg-yellow-100 dark:bg-yellow-900/30">
+              <p className="text-sm font-medium italic">"{source.text.length > 300 ? source.text.slice(0, 300) + "\u2026" : source.text}"</p>
+            </div>
+          </div>
+        )}
         {isHighlight && highlight && (
           <div className="shrink-0 mb-2">
             <div className={cn("p-3 rounded-lg", HIGHLIGHT_PREVIEW_CLASSES[highlight.color || HighlightsColorOptions.yellow])}>
@@ -156,10 +328,19 @@ export function PreviewDialog({ open, onOpenChange, type, item, pageNumber, tota
               </Button>
             </div>
           )}
-          <Button onClick={onNavigate} className="gap-2">
-            <ExternalLink className="h-4 w-4" />
-            Go to page
-          </Button>
+          {isSource && source?.upload_id ? (
+            <Button asChild className="gap-2">
+              <Link to="/workspace" search={{ id: source.upload_id, type: "upload" }} onClick={() => onOpenChange(false)}>
+                <ExternalLink className="h-4 w-4" />
+                Open in Reader
+              </Link>
+            </Button>
+          ) : onNavigate ? (
+            <Button onClick={onNavigate} className="gap-2">
+              <ExternalLink className="h-4 w-4" />
+              Go to page
+            </Button>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>

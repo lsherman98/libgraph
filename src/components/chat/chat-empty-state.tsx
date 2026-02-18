@@ -2,21 +2,9 @@ import { Sparkles, Search } from "lucide-react";
 
 interface ChatEmptyStateProps {
   mode: "chat" | "search";
-  onSuggestionClick: (suggestion: string) => void;
 }
 
-const CHAT_SUGGESTIONS = [
-  "What are the key themes across my documents?",
-  "Summarize the main arguments",
-  "What do my sources say about this topic?",
-  "Find connections between concepts",
-];
-
-const SEARCH_SUGGESTIONS = ["Specific details about...", "Find mentions of...", "What does X say about Y?", "Search for data on..."];
-
-export function ChatEmptyState({ mode, onSuggestionClick }: ChatEmptyStateProps) {
-  const suggestions = mode === "chat" ? CHAT_SUGGESTIONS : SEARCH_SUGGESTIONS;
-
+export function ChatEmptyState({ mode }: ChatEmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center h-full px-4 text-center">
       <div className="max-w-lg w-full space-y-6">
@@ -30,17 +18,6 @@ export function ChatEmptyState({ mode, onSuggestionClick }: ChatEmptyStateProps)
               ? "Ask questions about your documents and get answers with sources. Use filters to narrow your search."
               : "Find specific passages and information across your entire library instantly."}
           </p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-w-md mx-auto">
-          {suggestions.map((suggestion) => (
-            <button
-              key={suggestion}
-              onClick={() => onSuggestionClick(suggestion)}
-              className="text-left text-sm px-4 py-3 rounded-xl border border-border bg-card hover:bg-accent/50 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {suggestion}
-            </button>
-          ))}
         </div>
       </div>
     </div>

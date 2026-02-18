@@ -16,8 +16,18 @@ func Init(app *pocketbase.PocketBase) error {
 		se.Router.POST("/api/chat", func(e *core.RequestEvent) error {
 			body := ChatRequest{}
 			if err := e.BindBody(&body); err != nil {
+				app.Logger().Error("[chat] failed to bind request body", "error", err)
 				return e.BadRequestError("invalid request body", err)
 			}
+
+			app.Logger().Info("[chat] incoming request",
+				"mode", body.Mode,
+				"message", body.Message,
+				"chatID", body.ChatID,
+				"hasFilters", body.Filters != nil,
+				"hasLLMParams", body.LLMParameters != nil,
+				"hasRetrievalParams", body.RetrievalParameters != nil,
+			)
 
 			if body.Message == "" {
 				return e.BadRequestError("message is required", nil)
@@ -36,7 +46,24 @@ func Init(app *pocketbase.PocketBase) error {
 
 			var searchFilters *llama.SearchFilters
 			if body.Filters != nil {
+				app.Logger().Info("[chat] building search filters",
+					"tags", body.Filters.Tags,
+					"people", body.Filters.People,
+					"publications", body.Filters.Publications,
+					"topics", body.Filters.Topics,
+					"uploads", body.Filters.Uploads,
+					"collections", body.Filters.Collections,
+					"types", body.Filters.Types,
+					"condition", body.Filters.Condition,
+				)
 				searchFilters = buildSearchFilters(app, body.Filters)
+			}
+
+			if searchFilters != nil {
+				filtersJSON, _ := json.Marshal(searchFilters)
+				app.Logger().Info("[chat] resolved search filters", "filters", string(filtersJSON))
+			} else {
+				app.Logger().Info("[chat] no search filters applied")
 			}
 
 			chatID := body.ChatID
@@ -69,7 +96,7 @@ func Init(app *pocketbase.PocketBase) error {
 			history, err := loadChatHistory(app, chatID)
 			if err != nil {
 				app.Logger().Error("failed to load chat history", "error", err)
-				history = nil
+				return e.InternalServerError("failed to load chat history", err)
 			}
 
 			messages := make([]llama.Message, 0, len(history)+1)
@@ -96,18 +123,43 @@ func Init(app *pocketbase.PocketBase) error {
 				retrievalParams := buildRetrievalParams(body.RetrievalParameters, searchFilters)
 				retrieveReq := retrieveRequestFromParams(body.Message, retrievalParams)
 
+				reqJSON, _ := json.Marshal(retrieveReq)
+				app.Logger().Info("[chat/search] sending retrieve request", "body", string(reqJSON))
+
 				resp, err := llamaClient.Retrieve(retrieveReq)
 				if err != nil {
-					app.Logger().Error("retrieve request failed:", "error", err)
+					app.Logger().Error("[chat/search] retrieve request failed", "error", err)
 					return e.InternalServerError("search request failed", err)
 				}
 
+				app.Logger().Info("[chat/search] retrieve response",
+					"nodeCount", len(resp.Nodes),
+				)
+				for i, node := range resp.Nodes {
+					app.Logger().Info("[chat/search] node",
+						"index", i,
+						"id", node.ID,
+						"score", node.Score,
+						"textLen", len(node.Text),
+					)
+				}
+
 				sources := sourcesFromNodes(resp.Nodes)
+
+				app.Logger().Info("[chat/search] mapped sources", "sourceCount", len(sources))
 
 				assistantMsgID, err := saveMessage(app, chatID, userID, "assistant", "", sources)
 				if err != nil {
 					return e.InternalServerError("failed to save assistant message", err)
 				}
+
+				respJSON, _ := json.Marshal(ChatResponse{
+					ChatID:             chatID,
+					Sources:            sources,
+					UserMessageID:      userMsgID,
+					AssistantMessageID: assistantMsgID,
+				})
+				app.Logger().Info("[chat/search] returning response", "response", string(respJSON))
 
 				return e.JSON(http.StatusOK, ChatResponse{
 					ChatID:             chatID,

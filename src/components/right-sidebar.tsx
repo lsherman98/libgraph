@@ -1,7 +1,8 @@
 import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 import { AnnotationsPanel } from "@/components/reader/annotations-panel";
 import { HighlightEditorPanel } from "@/components/reader/highlight-editor-panel";
-import { BookmarkEditorPanel, NoteEditorPanel } from "@/components/reader/bookmark-note-editor-panel";
+import { BookmarkEditorPanel } from "@/components/reader/bookmark-note-editor-panel";
+import { NoteEditorPanel } from "@/components/reader/note-editor-panel";
 import { Highlighter, Layers, PenLine, Bookmark, BookMarked, StickyNote, Pencil } from "lucide-react";
 import { useWorkspaceTabsStore, type WriterTab, type ReaderTab } from "@/lib/stores/workspace-tabs-store";
 import { useWritingProject, useHighlights, useBookmarks, useNotes } from "@/lib/api/queries";

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { FileText } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ChatSource } from "@/lib/types";
 
 interface CitationContentProps {
@@ -54,11 +55,20 @@ export function CitationContent({ content, sources, citationMap, onSourceClick }
 
         return (
           <Popover key={i}>
-            <PopoverTrigger asChild>
-              <button className="inline-flex items-center justify-center h-4 min-w-4 px-1 text-[10px] font-semibold rounded bg-primary/15 text-primary hover:bg-primary/25 transition-colors align-super cursor-pointer leading-none ml-0.5">
-                {num}
-              </button>
-            </PopoverTrigger>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <PopoverTrigger asChild>
+                    <button className="inline-flex items-center justify-center h-4 min-w-4 px-1 text-[10px] font-semibold rounded bg-primary/15 text-primary hover:bg-primary/25 transition-colors align-super cursor-pointer leading-none ml-0.5">
+                      {num}
+                    </button>
+                  </PopoverTrigger>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  {source?.title || "Document"}{source?.page_number ? ` · p.${source.page_number}` : ""}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
             <PopoverContent side="top" align="start" className="w-96 max-h-64 overflow-y-auto p-3">
               {source ? (
                 <div className="space-y-2">

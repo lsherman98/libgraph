@@ -1,5 +1,5 @@
 import { useChats } from "@/lib/api/queries";
-import { useDeleteChat, useUpdateChat } from "@/lib/api/mutations";
+import { useUpdateChat } from "@/lib/api/mutations";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -14,12 +14,12 @@ interface ChatHistorySidebarProps {
   activeChatId?: string;
   onSelectChat: (chatId: string) => void;
   onNewChat: () => void;
+  onDeleteChat: (chatId: string) => void;
   mode?: "chat" | "search";
 }
 
-export function ChatHistorySidebar({ activeChatId, onSelectChat, onNewChat, mode }: ChatHistorySidebarProps) {
+export function ChatHistorySidebar({ activeChatId, onSelectChat, onNewChat, onDeleteChat, mode }: ChatHistorySidebarProps) {
   const { data: chats, isLoading } = useChats(mode);
-  const deleteChat = useDeleteChat();
   const updateChat = useUpdateChat();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -38,10 +38,7 @@ export function ChatHistorySidebar({ activeChatId, onSelectChat, onNewChat, mode
   };
 
   const handleDelete = (chatId: string) => {
-    deleteChat.mutate(chatId);
-    if (activeChatId === chatId) {
-      onNewChat();
-    }
+    onDeleteChat(chatId);
   };
 
   const groupedChats = groupChatsByTime(chats || []);
@@ -85,25 +82,25 @@ export function ChatHistorySidebar({ activeChatId, onSelectChat, onNewChat, mode
                         />
                       </div>
                     ) : (
-                      <button
-                        onClick={() => onSelectChat(chat.id)}
+                      <div
                         className={cn(
-                          "w-full min-w-0 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-left transition-colors overflow-hidden",
+                          "w-full min-w-0 flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-left transition-colors overflow-hidden cursor-pointer",
                           activeChatId === chat.id
                             ? "bg-accent text-accent-foreground"
                             : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                         )}
                       >
-                        <MessageSquare className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate flex-1">
-                          {(chat.title || "Untitled").length > 25 ? (chat.title || "Untitled").slice(0, 25) + "…" : chat.title || "Untitled"}
-                        </span>
+                        <div className="flex items-center gap-2 min-w-0 flex-1" onClick={() => onSelectChat(chat.id)}>
+                          <MessageSquare className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate flex-1">
+                            {(chat.title || "Untitled").length > 25 ? (chat.title || "Untitled").slice(0, 25) + "…" : chat.title || "Untitled"}
+                          </span>
+                        </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <div
                               role="button"
                               tabIndex={0}
-                              onClick={(e) => e.stopPropagation()}
                               className="opacity-0 group-hover:opacity-100 h-6 w-6 shrink-0 flex items-center justify-center rounded hover:bg-accent"
                             >
                               <MoreHorizontal className="h-3.5 w-3.5" />
@@ -120,7 +117,7 @@ export function ChatHistorySidebar({ activeChatId, onSelectChat, onNewChat, mode
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      </button>
+                      </div>
                     )}
                   </div>
                 ))}

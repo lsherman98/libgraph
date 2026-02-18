@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useMessages } from "@/lib/api/queries";
-import { useSendChatMessage } from "@/lib/api/mutations";
+import { useSendChatMessage, useDeleteChat } from "@/lib/api/mutations";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChatHistorySidebar } from "@/components/chat/chat-history-sidebar";
 import { ChatFiltersPanel } from "@/components/chat/chat-filters-panel";
@@ -10,7 +10,7 @@ import { ChatToolbar } from "@/components/chat/chat-toolbar";
 import { ChatEmptyState } from "@/components/chat/chat-empty-state";
 import { ChatInput } from "@/components/chat/chat-input";
 import { MessageBubble, type LocalMessage } from "@/components/chat/message-bubble";
-import { SourcePreviewDialog } from "@/components/chat/source-preview-dialog";
+import { PreviewDialog } from "@/components/workspace/preview-dialog";
 import type { MessagesResponse } from "@/lib/pocketbase-types";
 import type { ChatFilters, ChatSource, LLMParameters, RetrievalParameters } from "@/lib/types";
 
@@ -97,10 +97,19 @@ function ChatPage() {
     chatMutation.mutate(message);
   };
 
+  const deleteChat = useDeleteChat();
+
   const handleNewChat = () => {
     setActiveChatId(undefined);
     setPendingMessages([]);
     setInput("");
+  };
+
+  const handleDeleteChat = (chatId: string) => {
+    deleteChat.mutate(chatId);
+    if (activeChatId === chatId) {
+      handleNewChat();
+    }
   };
 
   const handleSelectChat = (chatId: string) => {
@@ -131,7 +140,15 @@ function ChatPage() {
 
   return (
     <div className="flex h-full w-full">
-      {isSidebarOpen && <ChatHistorySidebar activeChatId={activeChatId} onSelectChat={handleSelectChat} onNewChat={handleNewChat} mode={mode} />}
+      {isSidebarOpen && (
+        <ChatHistorySidebar
+          activeChatId={activeChatId}
+          onSelectChat={handleSelectChat}
+          onNewChat={handleNewChat}
+          onDeleteChat={handleDeleteChat}
+          mode={mode}
+        />
+      )}
       {isFiltersPanelOpen && <ChatFiltersPanel filters={filters} onFiltersChange={setFilters} onClose={() => setIsFiltersPanelOpen(false)} />}
       {isSettingsPanelOpen && (
         <ChatSettingsPanel
@@ -161,7 +178,7 @@ function ChatPage() {
           {isLoadingMessages && activeChatId ? (
             <MessageListSkeleton />
           ) : displayMessages.length === 0 ? (
-            <ChatEmptyState mode={mode} onSuggestionClick={setInput} />
+            <ChatEmptyState mode={mode} />
           ) : (
             <div className="max-w-3xl mx-auto py-6 px-4">
               <div className="space-y-6">
@@ -175,7 +192,7 @@ function ChatPage() {
         </div>
         <ChatInput value={input} onChange={setInput} onSubmit={handleSendMessage} isPending={chatMutation.isPending} mode={mode} />
       </div>
-      <SourcePreviewDialog source={previewSource} open={isPreviewOpen} onOpenChange={setIsPreviewOpen} />
+      <PreviewDialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen} type="source" item={null} source={previewSource} />
     </div>
   );
 }
