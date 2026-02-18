@@ -5,35 +5,17 @@ import { useSendChatMessage, useDeleteChat } from "@/lib/api/mutations";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChatHistorySidebar } from "@/components/chat/chat-history-sidebar";
 import { ChatFiltersPanel } from "@/components/chat/chat-filters-panel";
-import { ChatSettingsPanel } from "@/components/chat/chat-settings-panel";
 import { ChatToolbar } from "@/components/chat/chat-toolbar";
 import { ChatEmptyState } from "@/components/chat/chat-empty-state";
 import { ChatInput } from "@/components/chat/chat-input";
 import { MessageBubble, type LocalMessage } from "@/components/chat/message-bubble";
 import { PreviewDialog } from "@/components/workspace/preview-dialog";
 import type { MessagesResponse } from "@/lib/pocketbase-types";
-import type { ChatFilters, ChatSource, LLMParameters, RetrievalParameters } from "@/lib/types";
+import type { ChatFilters, ChatSource } from "@/lib/types";
 
 export const Route = createFileRoute("/_app/chat/")({
   component: ChatPage,
 });
-
-const DEFAULT_LLM_PARAMS: LLMParameters = {
-  model_name: "GPT_4O_MINI",
-  temperature: 0.1,
-  use_citation: true,
-  use_chain_of_thought_reasoning: false,
-  system_prompt: "",
-};
-
-const DEFAULT_RETRIEVAL_PARAMS: RetrievalParameters = {
-  dense_similarity_top_k: 10,
-  enable_reranking: true,
-  rerank_top_n: 5,
-  retrieval_mode: "chunks",
-  retrieve_page_figure_nodes: false,
-  retrieve_page_screenshot_nodes: false,
-};
 
 function ChatPage() {
   const [activeChatId, setActiveChatId] = useState<string>();
@@ -42,10 +24,7 @@ function ChatPage() {
   const [mode, setMode] = useState<"chat" | "search">("chat");
 
   const [filters, setFilters] = useState<ChatFilters>({});
-  const [llmParams, setLlmParams] = useState<LLMParameters>(DEFAULT_LLM_PARAMS);
-  const [retrievalParams, setRetrievalParams] = useState<RetrievalParameters>(DEFAULT_RETRIEVAL_PARAMS);
   const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(false);
-  const [isSettingsPanelOpen, setIsSettingsPanelOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [previewSource, setPreviewSource] = useState<ChatSource | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -78,8 +57,6 @@ function ChatPage() {
   const chatMutation = useSendChatMessage({
     mode,
     filters,
-    llmParams,
-    retrievalParams,
     activeChatId,
     setActiveChatId,
     setInput,
@@ -150,16 +127,6 @@ function ChatPage() {
         />
       )}
       {isFiltersPanelOpen && <ChatFiltersPanel filters={filters} onFiltersChange={setFilters} onClose={() => setIsFiltersPanelOpen(false)} />}
-      {isSettingsPanelOpen && (
-        <ChatSettingsPanel
-          mode={mode}
-          llmParams={llmParams}
-          onLlmParamsChange={setLlmParams}
-          retrievalParams={retrievalParams}
-          onRetrievalParamsChange={setRetrievalParams}
-          onClose={() => setIsSettingsPanelOpen(false)}
-        />
-      )}
       <div className="flex-1 flex flex-col min-w-0">
         <ChatToolbar
           mode={mode}
@@ -168,8 +135,6 @@ function ChatPage() {
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
           isFiltersPanelOpen={isFiltersPanelOpen}
           onOpenFilters={() => setIsFiltersPanelOpen(true)}
-          isSettingsPanelOpen={isSettingsPanelOpen}
-          onOpenSettings={() => setIsSettingsPanelOpen(true)}
           activeFilterCount={activeFilterCount}
           hasMessages={displayMessages.length > 0}
           onNewChat={handleNewChat}

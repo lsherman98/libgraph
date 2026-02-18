@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PanelLeftClose, MessagesSquare, SlidersHorizontal, Settings2, MessageSquare, Search, RotateCcw } from "lucide-react";
+import { PanelLeftClose, MessagesSquare, SlidersHorizontal, MessageSquare, Search, RotateCcw } from "lucide-react";
 
 interface ChatToolbarProps {
   mode: "chat" | "search";
@@ -10,8 +10,6 @@ interface ChatToolbarProps {
   onToggleSidebar: () => void;
   isFiltersPanelOpen: boolean;
   onOpenFilters: () => void;
-  isSettingsPanelOpen: boolean;
-  onOpenSettings: () => void;
   activeFilterCount: number;
   hasMessages: boolean;
   onNewChat: () => void;
@@ -24,8 +22,6 @@ export function ChatToolbar({
   onToggleSidebar,
   isFiltersPanelOpen,
   onOpenFilters,
-  isSettingsPanelOpen,
-  onOpenSettings,
   activeFilterCount,
   hasMessages,
   onNewChat,
@@ -57,18 +53,6 @@ export function ChatToolbar({
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">Show filters</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-        {!isSettingsPanelOpen && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onOpenSettings}>
-                  <Settings2 className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Pipeline settings</TooltipContent>
             </Tooltip>
           </TooltipProvider>
         )}

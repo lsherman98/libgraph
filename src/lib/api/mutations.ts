@@ -2,7 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createWritingProject, updateWritingProject, deleteWritingProject, createChat, updateChat, deleteChat, createMessage, updateUpload, deleteUpload, createCollection, updateCollection, deleteCollection, sendChatMessage, upsertPreferences, upsertReadingProgress } from "./api";
 import { handleError } from "../utils";
 import { Collections, type Create, type Update } from "../pocketbase-types";
-import type { ChatFilters, LLMParameters, RetrievalParameters } from "../types";
+import type { ChatFilters } from "../types";
 
 export function useUpload() {
     const queryClient = useQueryClient();
@@ -355,8 +355,6 @@ export function useCreateMessage() {
 interface SendChatMessageOptions {
     mode: "chat" | "search";
     filters: ChatFilters;
-    llmParams: LLMParameters;
-    retrievalParams: RetrievalParameters;
     activeChatId: string | undefined;
     setActiveChatId: (id: string) => void;
     setInput: (value: string) => void;
@@ -365,8 +363,6 @@ interface SendChatMessageOptions {
 export function useSendChatMessage({
     mode,
     filters,
-    llmParams,
-    retrievalParams,
     activeChatId,
     setActiveChatId,
     setInput,
@@ -380,8 +376,6 @@ export function useSendChatMessage({
                 mode,
                 activeChatId,
                 filters,
-                mode === "chat" ? llmParams : undefined,
-                retrievalParams,
             );
         },
         onMutate: async (message) => {

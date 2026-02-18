@@ -1,7 +1,7 @@
 import { pb } from "../pocketbase"
 import { Collections, NodesTypeOptions, type Create, type EdgesResponse, type PreferencesResponse, type ReadingProgressResponse, type Update } from "../pocketbase-types"
 import { getUserId } from "../utils"
-import type { ChatFilters, ChatResponseData, EnrichedNodesResponse, FTSSearchResult, LLMParameters, RetrievalParameters } from "../types"
+import type { ChatFilters, ChatResponseData, EnrichedNodesResponse, FTSSearchResult } from "../types"
 
 export async function getPageUrl(id?: string) {
     if (!id) return null;
@@ -389,8 +389,6 @@ export const sendChatMessage = async (
     mode: "chat" | "search" = "chat",
     chatId?: string,
     filters?: ChatFilters,
-    llmParameters?: LLMParameters,
-    retrievalParameters?: RetrievalParameters,
 ) => {
     return await pb.send<ChatResponseData>(`/api/chat`, {
         method: 'POST',
@@ -403,8 +401,6 @@ export const sendChatMessage = async (
             mode,
             chat_id: chatId,
             filters,
-            llm_parameters: llmParameters,
-            retrieval_parameters: retrievalParameters,
         }),
     });
 }
