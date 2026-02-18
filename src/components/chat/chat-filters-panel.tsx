@@ -44,7 +44,7 @@ export function ChatFiltersPanel({ filters, onFiltersChange, onClose }: ChatFilt
   const hasActiveFilters = activeFilterCount > 0;
 
   return (
-    <div className="w-64 shrink-0 border-r border-border bg-muted/30 flex flex-col">
+    <div className="w-64 min-w-0 max-w-64 shrink-0 overflow-hidden border-r border-border bg-muted/30 flex flex-col">
       <div className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
@@ -60,8 +60,8 @@ export function ChatFiltersPanel({ filters, onFiltersChange, onClose }: ChatFilt
         </Button>
       </div>
       <Separator />
-      <ScrollArea className="flex-1">
-        <div className="p-4 space-y-5">
+      <ScrollArea className="flex-1 [&>div>div]:block!">
+        <div className="p-4 space-y-5 overflow-hidden">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Match Mode</label>
             <div className="flex items-center gap-0.5 rounded-md border border-border bg-background p-0.5">
@@ -178,7 +178,7 @@ interface FilterComboboxProps {
 
 function FilterCombobox({ label, values, placeholder, onToggle, options, emptyMessage }: FilterComboboxProps) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-1.5 min-w-0 overflow-hidden">
       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</label>
       <CreatableCombobox
         options={options}

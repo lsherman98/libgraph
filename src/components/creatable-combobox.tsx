@@ -53,15 +53,20 @@ export function CreatableCombobox({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" role="combobox" aria-expanded={open} className={cn("w-full justify-between", className)}>
-          <span className="truncate">
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className={cn("w-full justify-between overflow-hidden min-w-0 shrink", className)}
+        >
+          <span className="truncate min-w-0">
             {(isMulti && Array.isArray(value) && value.length > 0) || (!isMulti && value) ? getSelectedLabels() : placeholder}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-75 p-0" align="start">
-        <Command>
+      <PopoverContent className="w-75 overflow-hidden p-0" align="start">
+        <Command className="max-w-full">
           <CommandInput placeholder={placeholder} value={inputValue} onValueChange={setInputValue} />
           <CommandList>
             <CommandEmpty>{emptyText}</CommandEmpty>
@@ -70,6 +75,7 @@ export function CreatableCombobox({
                 <CommandItem
                   key={option.value}
                   value={option.label}
+                  className="[&>span]:whitespace-normal"
                   onSelect={() => {
                     onSelect(option.value);
                     if (!isMulti) setOpen(false);
@@ -77,13 +83,13 @@ export function CreatableCombobox({
                 >
                   <Check
                     className={cn(
-                      "mr-2 h-4 w-4",
+                      "mr-2 h-4 w-4 shrink-0",
                       (isMulti && Array.isArray(value) && value.includes(option.value)) || (!isMulti && value === option.value)
                         ? "opacity-100"
                         : "opacity-0",
                     )}
                   />
-                  {option.label}
+                  <span className="min-w-0 break-words whitespace-normal">{option.label}</span>
                 </CommandItem>
               ))}
             </CommandGroup>

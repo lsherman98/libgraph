@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PanelLeftClose, PanelLeft, SlidersHorizontal, Settings2, MessageSquare, Search, RotateCcw } from "lucide-react";
+import { PanelLeftClose, MessagesSquare, SlidersHorizontal, Settings2, MessageSquare, Search, RotateCcw } from "lucide-react";
 
 interface ChatToolbarProps {
   mode: "chat" | "search";
@@ -37,7 +37,7 @@ export function ChatToolbar({
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onToggleSidebar}>
-                {isSidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeft className="h-4 w-4" />}
+                {isSidebarOpen ? <PanelLeftClose className="h-4 w-4" /> : <MessagesSquare className="h-4 w-4" />}
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">{isSidebarOpen ? "Hide chat history" : "Show chat history"}</TooltipContent>
