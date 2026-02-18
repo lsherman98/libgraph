@@ -13,12 +13,13 @@ import type { ChatSource } from "@/lib/types";
 export interface PreviewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  type: "highlight" | "bookmark" | "note" | "source";
+  type: "highlight" | "bookmark" | "note" | "source" | "upload";
   item: HighlightsRecord | BookmarksRecord | NotesRecord | null;
   source?: ChatSource | null;
   pageNumber?: number;
   totalPages?: number;
   uploadId?: string;
+  uploadTitle?: string;
   onNavigate?: () => void;
 }
 
@@ -31,11 +32,13 @@ export function PreviewDialog({
   pageNumber,
   totalPages: totalPagesProp,
   uploadId,
+  uploadTitle,
   onNavigate,
 }: PreviewDialogProps) {
   const isSource = type === "source";
+  const isUpload = type === "upload";
   const effectiveUploadId = isSource ? source?.upload_id : uploadId;
-  const effectivePageNumber = isSource ? source?.page_number : pageNumber;
+  const effectivePageNumber = isSource ? source?.page_number : isUpload ? (pageNumber ?? 1) : pageNumber;
 
   const [currentPageNumber, setCurrentPageNumber] = useState<number | undefined>(effectivePageNumber);
   const isOnOriginalPage = currentPageNumber != null && currentPageNumber === effectivePageNumber;
@@ -47,15 +50,15 @@ export function PreviewDialog({
   const { data: pagesData } = usePages(open && effectiveUploadId ? effectiveUploadId : undefined, 1, 1);
   const totalPages = totalPagesProp ?? pagesData?.totalItems;
 
-  const originalPageId = isSource ? undefined : item?.page;
-  const needsPageByNumber = isSource || !isOnOriginalPage;
+  const originalPageId = isSource || isUpload ? undefined : item?.page;
+  const needsPageByNumber = isSource || isUpload || !isOnOriginalPage;
   const validPageNumber = currentPageNumber != null && currentPageNumber > 0;
   const { data: fetchedPage } = usePageByNumber(
     needsPageByNumber && validPageNumber && effectiveUploadId ? effectiveUploadId : "",
     needsPageByNumber && validPageNumber ? currentPageNumber : 0,
   );
 
-  const activePageId = isSource ? fetchedPage?.id : isOnOriginalPage ? originalPageId : fetchedPage?.id;
+  const activePageId = isSource || isUpload ? fetchedPage?.id : isOnOriginalPage ? originalPageId : fetchedPage?.id;
   const { data: markdown, isLoading } = usePageMarkdown(activePageId);
 
   const highlightRef = useRef<HTMLElement>(null);
@@ -69,7 +72,7 @@ export function PreviewDialog({
     }
   }, [markdown, source?.text]);
 
-  if (!isSource && !item) return null;
+  if (!isSource && !isUpload && !item) return null;
   if (isSource && !source) return null;
 
   const isHighlight = type === "highlight";
@@ -129,7 +132,7 @@ export function PreviewDialog({
           while (normPos < normIndex && origPos < markdown.length) {
             if (/\s/.test(markdown[origPos])) {
               while (origPos < markdown.length && /\s/.test(markdown[origPos])) origPos++;
-              normPos++; 
+              normPos++;
             } else {
               origPos++;
               normPos++;
@@ -224,7 +227,14 @@ export function PreviewDialog({
       <DialogContent className="max-w-6xl min-w-4xl max-h-[85vh] flex flex-col">
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
-            {isSource ? (
+            {isUpload ? (
+              <>
+                <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                  <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <span className="truncate">{uploadTitle || "Document"}</span>
+              </>
+            ) : isSource ? (
               <>
                 <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
                   <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
@@ -260,7 +270,13 @@ export function PreviewDialog({
                 {Math.round(source.score * 100)}% Match
               </Badge>
             )}
-            {!isSource && <>Page {effectivePageNumber ?? "?"}</>}
+            {isUpload && effectivePageNumber != null && (
+              <span className="flex items-center gap-1">
+                <Hash className="h-3.5 w-3.5" />
+                Page {effectivePageNumber}
+              </span>
+            )}
+            {!isSource && !isUpload && <>Page {effectivePageNumber ?? "?"}</>}
           </DialogDescription>
         </DialogHeader>
         {isSource && source?.text && (
@@ -324,9 +340,13 @@ export function PreviewDialog({
               </Button>
             </div>
           )}
-          {isSource && source?.upload_id ? (
+          {(isSource && source?.upload_id) || (isUpload && effectiveUploadId) ? (
             <Button asChild className="gap-2">
-              <Link to="/workspace" search={{ id: source.upload_id, type: "upload" }} onClick={() => onOpenChange(false)}>
+              <Link
+                to="/workspace"
+                search={{ id: (isUpload ? effectiveUploadId : source?.upload_id)!, type: "upload" }}
+                onClick={() => onOpenChange(false)}
+              >
                 <ExternalLink className="h-4 w-4" />
                 Open in Reader
               </Link>

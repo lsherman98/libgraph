@@ -4,20 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  FileText,
-  User,
-  Tag,
-  FolderOpen,
-  Highlighter,
-  Bookmark,
-  FileIcon,
-  ExternalLink,
-  Calendar,
-  Hash,
-  MessageSquare,
-  Palette,
-} from "lucide-react";
+import { FileText, User, Tag, FolderOpen, Highlighter, Bookmark, FileIcon, ExternalLink, Calendar, Hash, MessageSquare, Palette } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import {
@@ -35,57 +22,50 @@ import {
 import type { EnrichedNodesResponse, NodeRecordData } from "@/lib/types";
 
 // Type configuration for icons and colors
-const typeConfig: Record<NodesTypeOptions, { icon: React.ElementType; color: string; bgColor: string; label: string }> =
-  {
-    [NodesTypeOptions.upload]: {
-      icon: FileText,
-      color: "text-blue-600 dark:text-blue-400",
-      bgColor: "bg-blue-100 dark:bg-blue-900/30",
-      label: "Upload",
-    },
-    [NodesTypeOptions.author]: {
-      icon: User,
-      color: "text-purple-600 dark:text-purple-400",
-      bgColor: "bg-purple-100 dark:bg-purple-900/30",
-      label: "Person",
-    },
-    [NodesTypeOptions.publication]: {
-      icon: FileText,
-      color: "text-sky-600 dark:text-sky-400",
-      bgColor: "bg-sky-100 dark:bg-sky-900/30",
-      label: "Publication",
-    },
-    [NodesTypeOptions.tag]: {
-      icon: Tag,
-      color: "text-green-600 dark:text-green-400",
-      bgColor: "bg-green-100 dark:bg-green-900/30",
-      label: "Tag",
-    },
-    [NodesTypeOptions.topic]: {
-      icon: FolderOpen,
-      color: "text-orange-600 dark:text-orange-400",
-      bgColor: "bg-orange-100 dark:bg-orange-900/30",
-      label: "Topic",
-    },
-    [NodesTypeOptions.highlight]: {
-      icon: Highlighter,
-      color: "text-yellow-600 dark:text-yellow-400",
-      bgColor: "bg-yellow-100 dark:bg-yellow-900/30",
-      label: "Highlight",
-    },
-    [NodesTypeOptions.bookmark]: {
-      icon: Bookmark,
-      color: "text-red-600 dark:text-red-400",
-      bgColor: "bg-red-100 dark:bg-red-900/30",
-      label: "Bookmark",
-    },
-    [NodesTypeOptions.note]: {
-      icon: MessageSquare,
-      color: "text-indigo-600 dark:text-indigo-400",
-      bgColor: "bg-indigo-100 dark:bg-indigo-900/30",
-      label: "Note",
-    },
-  };
+const typeConfig: Record<NodesTypeOptions, { icon: React.ElementType; color: string; bgColor: string; label: string }> = {
+  [NodesTypeOptions.upload]: {
+    icon: FileText,
+    color: "text-blue-600 dark:text-blue-400",
+    bgColor: "bg-blue-100 dark:bg-blue-900/30",
+    label: "Upload",
+  },
+  [NodesTypeOptions.author]: {
+    icon: User,
+    color: "text-purple-600 dark:text-purple-400",
+    bgColor: "bg-purple-100 dark:bg-purple-900/30",
+    label: "Person",
+  },
+  [NodesTypeOptions.tag]: {
+    icon: Tag,
+    color: "text-green-600 dark:text-green-400",
+    bgColor: "bg-green-100 dark:bg-green-900/30",
+    label: "Tag",
+  },
+  [NodesTypeOptions.topic]: {
+    icon: FolderOpen,
+    color: "text-orange-600 dark:text-orange-400",
+    bgColor: "bg-orange-100 dark:bg-orange-900/30",
+    label: "Topic",
+  },
+  [NodesTypeOptions.highlight]: {
+    icon: Highlighter,
+    color: "text-yellow-600 dark:text-yellow-400",
+    bgColor: "bg-yellow-100 dark:bg-yellow-900/30",
+    label: "Highlight",
+  },
+  [NodesTypeOptions.bookmark]: {
+    icon: Bookmark,
+    color: "text-red-600 dark:text-red-400",
+    bgColor: "bg-red-100 dark:bg-red-900/30",
+    label: "Bookmark",
+  },
+  [NodesTypeOptions.note]: {
+    icon: MessageSquare,
+    color: "text-indigo-600 dark:text-indigo-400",
+    bgColor: "bg-indigo-100 dark:bg-indigo-900/30",
+    label: "Note",
+  },
+};
 
 // Highlight color configuration
 const highlightColors: Record<HighlightsColorOptions, string> = {
@@ -253,12 +233,7 @@ function PersonDetail({ data }: { data: PeopleResponse }) {
       {data.source && (
         <div>
           <span className="text-sm text-muted-foreground">Source: </span>
-          <a
-            href={data.source}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-primary hover:underline"
-          >
+          <a href={data.source} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
             {data.source}
           </a>
         </div>
@@ -376,8 +351,6 @@ function renderRecordDetail(type: NodesTypeOptions, recordData: NodeRecordData) 
       return <BookmarkDetail data={recordData as BookmarksResponse} />;
     case NodesTypeOptions.author:
       return <PersonDetail data={recordData as PeopleResponse} />;
-    case NodesTypeOptions.publication:
-      return <PublicationDetail data={recordData as PublicationsResponse} />;
     case NodesTypeOptions.tag:
       return <TagDetail data={recordData as TagsResponse} />;
     case NodesTypeOptions.topic:

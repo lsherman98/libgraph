@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from "react";
 import { useGraphData } from "@/lib/api/queries";
 import type { EdgesResponse } from "@/lib/pocketbase-types";
 import { NodesTypeOptions, EdgesTypeOptions } from "@/lib/pocketbase-types";
+import type { HighlightsRecord, BookmarksRecord, NotesRecord } from "@/lib/pocketbase-types";
 import type { EnrichedNodesResponse } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -17,20 +18,15 @@ import {
   MessageSquare,
   Eye,
   EyeOff,
-  LayoutGrid,
-  Network,
   ChevronDown,
   ChevronRight,
   Filter,
+  PanelLeftClose,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { NodeDetailDialog } from "./node-detail-dialog";
-import { ForceGraphView } from "./force-graph-view";
-import { DagreGraphView } from "./dagre-graph-view";
+import { ForceGraphView, type NodePreviewRequest } from "./force-graph-view";
+import { PreviewDialog } from "@/components/workspace/preview-dialog";
 
-type LayoutMode = "force" | "dagre";
-
-// Type configuration for filter panel
 const nodeTypeConfig: Record<NodesTypeOptions, { icon: React.ElementType; color: string; label: string }> = {
   [NodesTypeOptions.upload]: { icon: FileText, color: "#3b82f6", label: "Uploads" },
   [NodesTypeOptions.author]: { icon: User, color: "#9333ea", label: "Authors" },
@@ -57,31 +53,52 @@ export function GraphCanvas() {
   const { data: graphData, isLoading, error } = useGraphData();
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
-  const [layoutMode, setLayoutMode] = useState<LayoutMode>("force");
   const [hiddenNodeTypes, setHiddenNodeTypes] = useState<Set<NodesTypeOptions>>(new Set());
   const [hiddenEdgeTypes, setHiddenEdgeTypes] = useState<Set<EdgesTypeOptions>>(new Set());
   const [showNodeFilters, setShowNodeFilters] = useState(true);
   const [showEdgeFilters, setShowEdgeFilters] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Get selected node data
-  const selectedNode = useMemo((): EnrichedNodesResponse | null => {
-    if (!selectedNodeId || !graphData?.nodes) return null;
-    const node = (graphData.nodes as EnrichedNodesResponse[]).find((n) => n.id === selectedNodeId);
-    return node || null;
-  }, [selectedNodeId, graphData?.nodes]);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewType, setPreviewType] = useState<"highlight" | "bookmark" | "note" | "source" | "upload">("upload");
+  const [previewItem, setPreviewItem] = useState<HighlightsRecord | BookmarksRecord | NotesRecord | null>(null);
+  const [previewUploadId, setPreviewUploadId] = useState<string | undefined>();
+  const [previewUploadTitle, setPreviewUploadTitle] = useState<string | undefined>();
+  const [previewPageNumber, setPreviewPageNumber] = useState<number | undefined>();
 
-  const handleSelectNode = useCallback((nodeId: string) => {
-    if (nodeId) {
-      setSelectedNodeId(nodeId);
-      setDetailDialogOpen(true);
+  const handleSelectNode = useCallback(
+    (nodeId: string) => {
+      if (!nodeId || nodeId === selectedNodeId) {
+        setSelectedNodeId(null);
+      } else {
+        setSelectedNodeId(nodeId);
+      }
+    },
+    [selectedNodeId],
+  );
+
+  const handlePreviewNode = useCallback((request: NodePreviewRequest) => {
+    const { nodeType, uploadId, uploadTitle, pageNumber, recordData } = request;
+
+    if (nodeType === NodesTypeOptions.upload) {
+      setPreviewType("upload");
+      setPreviewItem(null);
+      setPreviewUploadId(uploadId);
+      setPreviewUploadTitle(uploadTitle);
+      setPreviewPageNumber(1);
+    } else if (nodeType === NodesTypeOptions.highlight || nodeType === NodesTypeOptions.bookmark || nodeType === NodesTypeOptions.note) {
+      setPreviewType(nodeType as "highlight" | "bookmark" | "note");
+      setPreviewItem((recordData as HighlightsRecord | BookmarksRecord | NotesRecord) ?? null);
+      setPreviewUploadId(uploadId);
+      setPreviewUploadTitle(undefined);
+      setPreviewPageNumber(pageNumber);
     } else {
-      setSelectedNodeId(null);
-      setDetailDialogOpen(false);
+      return;
     }
+
+    setPreviewOpen(true);
   }, []);
 
-  // Count nodes by type
   const nodeTypeCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     const allNodes = (graphData?.nodes as EnrichedNodesResponse[]) || [];
@@ -92,7 +109,6 @@ export function GraphCanvas() {
     return counts;
   }, [graphData?.nodes]);
 
-  // Count edges by type
   const edgeTypeCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     const allEdges = (graphData?.edges as EdgesResponse[]) || [];
@@ -157,184 +173,155 @@ export function GraphCanvas() {
 
   return (
     <div className="flex-1 h-full flex overflow-hidden">
-      {/* Left sidebar – filter controls */}
-      <div className="w-64 border-r flex flex-col bg-background overflow-y-auto shrink-0">
-        {/* Layout mode toggle */}
-        <div className="p-3 border-b space-y-2">
-          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Layout</span>
-          <div className="flex gap-1">
-            <Button
-              variant={layoutMode === "force" ? "default" : "outline"}
-              size="sm"
-              className="flex-1 text-xs"
-              onClick={() => setLayoutMode("force")}
-            >
-              <Network className="h-3.5 w-3.5 mr-1" />
-              Force
-            </Button>
-            <Button
-              variant={layoutMode === "dagre" ? "default" : "outline"}
-              size="sm"
-              className="flex-1 text-xs"
-              onClick={() => setLayoutMode("dagre")}
-            >
-              <LayoutGrid className="h-3.5 w-3.5 mr-1" />
-              Dagre
+      {sidebarOpen && (
+        <div className="w-64 border-r flex flex-col bg-background overflow-y-auto shrink-0">
+          <div className="flex items-center justify-between px-3 py-2 border-b">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Filters</span>
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSidebarOpen(false)}>
+              <PanelLeftClose className="h-3.5 w-3.5" />
             </Button>
           </div>
-        </div>
+          <div className="p-3 border-b space-y-2">
+            <button
+              className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-full hover:text-foreground transition-colors"
+              onClick={() => setShowNodeFilters(!showNodeFilters)}
+            >
+              {showNodeFilters ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              <Filter className="h-3 w-3" />
+              Node Types
+            </button>
+            {showNodeFilters && (
+              <>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2" onClick={showAllNodes}>
+                    Show all
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2" onClick={hideAllNodes}>
+                    Hide all
+                  </Button>
+                </div>
+                <div className="space-y-0.5">
+                  {Object.values(NodesTypeOptions).map((type) => {
+                    const cfg = nodeTypeConfig[type];
+                    const Icon = cfg.icon;
+                    const isHidden = hiddenNodeTypes.has(type);
+                    const count = nodeTypeCounts[type] || 0;
 
-        {/* Node type filters */}
-        <div className="p-3 border-b space-y-2">
-          <button
-            className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-full hover:text-foreground transition-colors"
-            onClick={() => setShowNodeFilters(!showNodeFilters)}
-          >
-            {showNodeFilters ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            <Filter className="h-3 w-3" />
-            Node Types
-          </button>
-
-          {showNodeFilters && (
-            <>
-              <div className="flex gap-1">
-                <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2" onClick={showAllNodes}>
-                  Show all
-                </Button>
-                <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2" onClick={hideAllNodes}>
-                  Hide all
-                </Button>
-              </div>
-              <div className="space-y-0.5">
-                {Object.values(NodesTypeOptions).map((type) => {
-                  const cfg = nodeTypeConfig[type];
-                  const Icon = cfg.icon;
-                  const isHidden = hiddenNodeTypes.has(type);
-                  const count = nodeTypeCounts[type] || 0;
-
-                  return (
-                    <button
-                      key={type}
-                      onClick={() => toggleNodeType(type)}
-                      className={cn(
-                        "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs transition-all hover:bg-accent",
-                        isHidden && "opacity-40",
-                      )}
-                    >
-                      <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: cfg.color }} />
-                      <span className="flex-1 text-left truncate">{cfg.label}</span>
-                      <Badge variant="secondary" className="text-[10px] h-4 px-1 min-w-5 justify-center">
-                        {count}
-                      </Badge>
-                      {isHidden ? (
-                        <EyeOff className="h-3 w-3 text-muted-foreground shrink-0" />
-                      ) : (
-                        <Eye className="h-3 w-3 text-muted-foreground shrink-0" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Edge type filters */}
-        <div className="p-3 space-y-2">
-          <button
-            className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-full hover:text-foreground transition-colors"
-            onClick={() => setShowEdgeFilters(!showEdgeFilters)}
-          >
-            {showEdgeFilters ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-            <Filter className="h-3 w-3" />
-            Edge Types
-          </button>
-
-          {showEdgeFilters && (
-            <>
-              <div className="flex gap-1">
-                <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2" onClick={showAllEdges}>
-                  Show all
-                </Button>
-                <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2" onClick={hideAllEdges}>
-                  Hide all
-                </Button>
-              </div>
-              <div className="space-y-0.5">
-                {Object.values(EdgesTypeOptions).map((type) => {
-                  const cfg = edgeTypeConfig[type];
-                  const isHidden = hiddenEdgeTypes.has(type);
-                  const count = edgeTypeCounts[type] || 0;
-
-                  return (
-                    <button
-                      key={type}
-                      onClick={() => toggleEdgeType(type)}
-                      className={cn(
-                        "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs transition-all hover:bg-accent",
-                        isHidden && "opacity-40",
-                      )}
-                    >
-                      <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: cfg.color }} />
-                      <span className="flex-1 text-left truncate">{cfg.label}</span>
-                      <Badge variant="secondary" className="text-[10px] h-4 px-1 min-w-5 justify-center">
-                        {count}
-                      </Badge>
-                      {isHidden ? (
-                        <EyeOff className="h-3 w-3 text-muted-foreground shrink-0" />
-                      ) : (
-                        <Eye className="h-3 w-3 text-muted-foreground shrink-0" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
-          )}
-        </div>
-
-        <Separator />
-
-        {/* Stats */}
-        <div className="p-3 text-xs text-muted-foreground space-y-1 mt-auto">
-          <div>
-            {allNodes.length - hiddenNodeTypes.size * 0} nodes visible /{" "}
-            {allNodes.filter((n) => !hiddenNodeTypes.has(n.type as NodesTypeOptions)).length} shown
+                    return (
+                      <button
+                        key={type}
+                        onClick={() => toggleNodeType(type)}
+                        className={cn(
+                          "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs transition-all hover:bg-accent",
+                          isHidden && "opacity-40",
+                        )}
+                      >
+                        <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: cfg.color }} />
+                        <span className="flex-1 text-left truncate">{cfg.label}</span>
+                        <Badge variant="secondary" className="text-[10px] h-4 px-1 min-w-5 justify-center">
+                          {count}
+                        </Badge>
+                        {isHidden ? (
+                          <EyeOff className="h-3 w-3 text-muted-foreground shrink-0" />
+                        ) : (
+                          <Eye className="h-3 w-3 text-muted-foreground shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
-          <div>{allEdges.filter((e) => !hiddenEdgeTypes.has(e.type as EdgesTypeOptions)).length} edges shown</div>
-        </div>
-      </div>
+          <div className="p-3 space-y-2">
+            <button
+              className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-full hover:text-foreground transition-colors"
+              onClick={() => setShowEdgeFilters(!showEdgeFilters)}
+            >
+              {showEdgeFilters ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              <Filter className="h-3 w-3" />
+              Edge Types
+            </button>
+            {showEdgeFilters && (
+              <>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2" onClick={showAllEdges}>
+                    Show all
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2" onClick={hideAllEdges}>
+                    Hide all
+                  </Button>
+                </div>
+                <div className="space-y-0.5">
+                  {Object.values(EdgesTypeOptions).map((type) => {
+                    const cfg = edgeTypeConfig[type];
+                    const isHidden = hiddenEdgeTypes.has(type);
+                    const count = edgeTypeCounts[type] || 0;
 
-      {/* Main graph area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {layoutMode === "force" ? (
-          <ForceGraphView
-            nodes={allNodes}
-            edges={allEdges}
-            selectedNodeId={selectedNodeId}
-            onSelectNode={handleSelectNode}
-            hiddenNodeTypes={hiddenNodeTypes}
-            hiddenEdgeTypes={hiddenEdgeTypes}
-          />
-        ) : (
-          <DagreGraphView
-            nodes={allNodes}
-            edges={allEdges}
-            selectedNodeId={selectedNodeId}
-            onSelectNode={handleSelectNode}
-            hiddenNodeTypes={hiddenNodeTypes}
-            hiddenEdgeTypes={hiddenEdgeTypes}
-          />
+                    return (
+                      <button
+                        key={type}
+                        onClick={() => toggleEdgeType(type)}
+                        className={cn(
+                          "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs transition-all hover:bg-accent",
+                          isHidden && "opacity-40",
+                        )}
+                      >
+                        <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: cfg.color }} />
+                        <span className="flex-1 text-left truncate">{cfg.label}</span>
+                        <Badge variant="secondary" className="text-[10px] h-4 px-1 min-w-5 justify-center">
+                          {count}
+                        </Badge>
+                        {isHidden ? (
+                          <EyeOff className="h-3 w-3 text-muted-foreground shrink-0" />
+                        ) : (
+                          <Eye className="h-3 w-3 text-muted-foreground shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+          <Separator />
+          <div className="p-3 text-xs text-muted-foreground space-y-1 mt-auto">
+            <div>
+              {allNodes.length - hiddenNodeTypes.size * 0} nodes visible /{" "}
+              {allNodes.filter((n) => !hiddenNodeTypes.has(n.type as NodesTypeOptions)).length} shown
+            </div>
+            <div>{allEdges.filter((e) => !hiddenEdgeTypes.has(e.type as EdgesTypeOptions)).length} edges shown</div>
+          </div>
+        </div>
+      )}
+      <div className="flex-1 flex flex-col overflow-hidden relative">
+        {!sidebarOpen && (
+          <Button
+            variant="outline"
+            size="icon"
+            className="absolute top-2 left-2 z-10 h-8 w-8 bg-background/80 backdrop-blur-sm"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Filter className="h-4 w-4" />
+          </Button>
         )}
-
-        {/* Node detail dialog */}
-        <NodeDetailDialog
-          node={selectedNode}
-          open={detailDialogOpen}
-          onOpenChange={(open) => {
-            setDetailDialogOpen(open);
-            if (!open) setSelectedNodeId(null);
-          }}
+        <ForceGraphView
+          nodes={allNodes}
+          edges={allEdges}
+          selectedNodeId={selectedNodeId}
+          onSelectNode={handleSelectNode}
+          onPreviewNode={handlePreviewNode}
+          hiddenNodeTypes={hiddenNodeTypes}
+          hiddenEdgeTypes={hiddenEdgeTypes}
+        />
+        <PreviewDialog
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          type={previewType}
+          item={previewItem}
+          uploadId={previewUploadId}
+          uploadTitle={previewUploadTitle}
+          pageNumber={previewPageNumber}
         />
       </div>
     </div>
