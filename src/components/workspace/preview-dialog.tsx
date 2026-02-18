@@ -10,9 +10,6 @@ import { HIGHLIGHT_PREVIEW_CLASSES } from "@/lib/constants/highlight-colors";
 import { Link } from "@tanstack/react-router";
 import type { ChatSource } from "@/lib/types";
 
-/** @deprecated Use HIGHLIGHT_PREVIEW_CLASSES from @/lib/constants/highlight-colors instead */
-// export const highlightColorClasses = HIGHLIGHT_PREVIEW_CLASSES;
-
 export interface PreviewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -128,12 +125,11 @@ export function PreviewDialog({
         if (normIndex !== -1) {
           let origPos = 0;
           let normPos = 0;
-          // Skip leading whitespace that was trimmed in normalization
           while (origPos < markdown.length && /\s/.test(markdown[origPos])) origPos++;
           while (normPos < normIndex && origPos < markdown.length) {
             if (/\s/.test(markdown[origPos])) {
               while (origPos < markdown.length && /\s/.test(markdown[origPos])) origPos++;
-              normPos++; // collapsed to single space in normalized form
+              normPos++; 
             } else {
               origPos++;
               normPos++;

@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { SlidersHorizontal, RotateCcw, X, Library } from "lucide-react";
+import { CreatableCombobox } from "@/components/creatable-combobox";
+import { SlidersHorizontal, RotateCcw, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { UploadsTypeOptions } from "@/lib/pocketbase-types";
 import type { ChatFilters } from "@/lib/types";
@@ -23,14 +23,16 @@ export function ChatFiltersPanel({ filters, onFiltersChange, onClose }: ChatFilt
   const { data: uploads } = useUploads();
   const { data: collections } = useCollections();
 
-  const handleFilterChange = (key: keyof ChatFilters, value: string) => {
+  const handleFilterToggle = (key: keyof ChatFilters, value: string) => {
     if (key === "condition") return;
-    if (value === "all") {
-      const next = { ...filters };
-      delete next[key];
-      onFiltersChange(next);
+    const current = (filters[key] as string[] | undefined) || [];
+    const next = current.includes(value) ? current.filter((v) => v !== value) : [...current, value];
+    if (next.length === 0) {
+      const updated = { ...filters };
+      delete updated[key];
+      onFiltersChange(updated);
     } else {
-      onFiltersChange({ ...filters, [key]: [value] });
+      onFiltersChange({ ...filters, [key]: next });
     }
   };
 
@@ -62,90 +64,86 @@ export function ChatFiltersPanel({ filters, onFiltersChange, onClose }: ChatFilt
         <div className="p-4 space-y-5">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Match Mode</label>
-            <div className="flex items-center gap-1 rounded-lg border border-border bg-background p-1">
+            <div className="flex items-center gap-0.5 rounded-md border border-border bg-background p-0.5">
               <button
                 type="button"
                 className={cn(
-                  "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                  "flex-1 rounded px-2 py-1 text-[11px] font-medium transition-colors",
                   (filters.condition || "or") === "or"
                     ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground",
                 )}
                 onClick={() => onFiltersChange({ ...filters, condition: "or" })}
               >
-                Match Any (OR)
+                OR
               </button>
               <button
                 type="button"
                 className={cn(
-                  "flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                  "flex-1 rounded px-2 py-1 text-[11px] font-medium transition-colors",
                   filters.condition === "and" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                 )}
                 onClick={() => onFiltersChange({ ...filters, condition: "and" })}
               >
-                Match All (AND)
+                AND
               </button>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              {(filters.condition || "or") === "or" ? "Results match any selected filter." : "Results must match all selected filters."}
+              {(filters.condition || "or") === "or" ? "Results match any filter." : "Results must match all filters."}
             </p>
           </div>
-          <FilterSelect
+          <FilterCombobox
             label="Collection"
-            value={filters.collections?.[0]}
+            values={filters.collections}
             placeholder="All collections"
-            onValueChange={(value) => handleFilterChange("collections", value)}
-            options={collections?.map((c) => ({
-              value: c.id,
-              label: c.name || "Untitled",
-              icon: <Library className="h-3.5 w-3.5 text-muted-foreground" />,
-            }))}
-            emptyMessage="No collections yet. Create one in Library → Collections."
+            onToggle={(value) => handleFilterToggle("collections", value)}
+            options={collections?.map((c) => ({ value: c.id, label: c.name || "Untitled" })) ?? []}
+            emptyMessage="No collections yet."
           />
-          <FilterSelect
+          <FilterCombobox
             label="Subject"
-            value={filters.subjects?.[0]}
+            values={filters.people}
             placeholder="All subjects"
-            onValueChange={(value) => handleFilterChange("subjects", value)}
-            options={people?.map((p) => ({ value: p.id, label: p.name || "Unnamed" }))}
+            onToggle={(value) => handleFilterToggle("people", value)}
+            options={people?.map((p) => ({ value: p.id, label: p.name || "Unnamed" })) ?? []}
           />
-          <FilterSelect
+          <FilterCombobox
             label="Publication"
-            value={filters.publications?.[0]}
+            values={filters.publications}
             placeholder="All publications"
-            onValueChange={(value) => handleFilterChange("publications", value)}
-            options={publications?.map((p) => ({ value: p.id, label: p.name || "Unnamed" }))}
+            onToggle={(value) => handleFilterToggle("publications", value)}
+            options={publications?.map((p) => ({ value: p.id, label: p.name || "Unnamed" })) ?? []}
           />
-          <FilterSelect
+          <FilterCombobox
             label="Topic"
-            value={filters.topics?.[0]}
+            values={filters.topics}
             placeholder="All topics"
-            onValueChange={(value) => handleFilterChange("topics", value)}
-            options={topics?.map((t) => ({ value: t.id, label: t.title || "Unnamed" }))}
+            onToggle={(value) => handleFilterToggle("topics", value)}
+            options={topics?.map((t) => ({ value: t.id, label: t.title || "Unnamed" })) ?? []}
           />
-          <FilterSelect
+          <FilterCombobox
             label="Tag"
-            value={filters.tags?.[0]}
+            values={filters.tags}
             placeholder="All tags"
-            onValueChange={(value) => handleFilterChange("tags", value)}
-            options={tags?.map((t) => ({ value: t.id, label: t.title || "Unnamed" }))}
+            onToggle={(value) => handleFilterToggle("tags", value)}
+            options={tags?.map((t) => ({ value: t.id, label: t.title || "Unnamed" })) ?? []}
           />
-          <FilterSelect
+          <FilterCombobox
             label="Type"
-            value={filters.types?.[0]}
+            values={filters.types}
             placeholder="All types"
-            onValueChange={(value) => handleFilterChange("types", value)}
+            onToggle={(value) => handleFilterToggle("types", value)}
             options={Object.values(UploadsTypeOptions).map((type) => ({
               value: type,
               label: type.charAt(0).toUpperCase() + type.slice(1),
             }))}
           />
-          <FilterSelect
+          <FilterCombobox
             label="Document"
-            value={filters.uploads?.[0]}
+            values={filters.uploads}
             placeholder="All documents"
-            onValueChange={(value) => handleFilterChange("uploads", value)}
-            options={uploads?.map((u) => ({ value: u.id, label: u.title || "Untitled" }))}
+            onToggle={(value) => handleFilterToggle("uploads", value)}
+            options={uploads?.map((u) => ({ value: u.id, label: u.title || "Untitled" })) ?? []}
           />
         </div>
       </ScrollArea>
@@ -169,46 +167,28 @@ export function ChatFiltersPanel({ filters, onFiltersChange, onClose }: ChatFilt
   );
 }
 
-interface FilterSelectOption {
-  value: string;
+interface FilterComboboxProps {
   label: string;
-  icon?: React.ReactNode;
-}
-
-interface FilterSelectProps {
-  label: string;
-  value: string | undefined;
+  values: string[] | undefined;
   placeholder: string;
-  onValueChange: (value: string) => void;
-  options?: FilterSelectOption[];
+  onToggle: (value: string) => void;
+  options: { value: string; label: string }[];
   emptyMessage?: string;
 }
 
-function FilterSelect({ label, value, placeholder, onValueChange, options, emptyMessage }: FilterSelectProps) {
+function FilterCombobox({ label, values, placeholder, onToggle, options, emptyMessage }: FilterComboboxProps) {
   return (
     <div className="space-y-1.5">
       <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</label>
-      <Select value={value || "all"} onValueChange={onValueChange}>
-        <SelectTrigger className="h-9 text-sm">
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="all">{placeholder}</SelectItem>
-          {options?.map((opt) => (
-            <SelectItem key={opt.value} value={opt.value}>
-              {opt.icon ? (
-                <div className="flex items-center gap-2">
-                  {opt.icon}
-                  {opt.label}
-                </div>
-              ) : (
-                opt.label
-              )}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {emptyMessage && options?.length === 0 && <p className="text-[11px] text-muted-foreground">{emptyMessage}</p>}
+      <CreatableCombobox
+        options={options}
+        value={values ?? []}
+        onSelect={onToggle}
+        placeholder={placeholder}
+        emptyText={emptyMessage ?? "No results found."}
+        isMulti
+        className="h-9 text-sm"
+      />
     </div>
   );
 }

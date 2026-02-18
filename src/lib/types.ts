@@ -149,7 +149,7 @@ export interface ChatSource {
 export interface ChatFilters {
     condition?: 'and' | 'or';
     tags?: string[];
-    subjects?: string[];
+    people?: string[];
     publications?: string[];
     types?: string[];
     topics?: string[];

@@ -20,15 +20,6 @@ func Init(app *pocketbase.PocketBase) error {
 				return e.BadRequestError("invalid request body", err)
 			}
 
-			app.Logger().Info("[chat] incoming request",
-				"mode", body.Mode,
-				"message", body.Message,
-				"chatID", body.ChatID,
-				"hasFilters", body.Filters != nil,
-				"hasLLMParams", body.LLMParameters != nil,
-				"hasRetrievalParams", body.RetrievalParameters != nil,
-			)
-
 			if body.Message == "" {
 				return e.BadRequestError("message is required", nil)
 			}

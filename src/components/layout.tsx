@@ -16,7 +16,6 @@ export default function Layout({ children }: PropsWithChildren) {
   const workspaceTabs = useWorkspaceTabsStore((state) => state.tabs);
   const location = useLocation();
 
-  // Show tabs header when on workspace route with tabs, otherwise show app header
   const isWorkspaceRoute = location.pathname.startsWith("/workspace");
   const showAppHeader = !isReadingMode && !(isWorkspaceRoute && workspaceTabs.length > 0);
 

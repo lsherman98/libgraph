@@ -3,15 +3,7 @@ import { Check, ChevronsUpDown, Plus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-  CommandSeparator,
-} from "@/components/ui/command";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface Option {
@@ -23,7 +15,7 @@ interface CreatableComboboxProps {
   options: Option[];
   value?: string | string[];
   onSelect: (value: string) => void;
-  onCreate: (value: string) => void;
+  onCreate?: (value: string) => void;
   placeholder?: string;
   emptyText?: string;
   isMulti?: boolean;
@@ -51,7 +43,7 @@ export function CreatableCombobox({
   };
 
   const handleCreate = () => {
-    if (inputValue) {
+    if (inputValue && onCreate) {
       onCreate(inputValue);
       setInputValue("");
       if (!isMulti) setOpen(false);
@@ -61,16 +53,9 @@ export function CreatableCombobox({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className={cn("w-full justify-between", className)}
-        >
+        <Button variant="outline" role="combobox" aria-expanded={open} className={cn("w-full justify-between", className)}>
           <span className="truncate">
-            {(isMulti && Array.isArray(value) && value.length > 0) || (!isMulti && value)
-              ? getSelectedLabels()
-              : placeholder}
+            {(isMulti && Array.isArray(value) && value.length > 0) || (!isMulti && value) ? getSelectedLabels() : placeholder}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
@@ -93,8 +78,7 @@ export function CreatableCombobox({
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      (isMulti && Array.isArray(value) && value.includes(option.value)) ||
-                        (!isMulti && value === option.value)
+                      (isMulti && Array.isArray(value) && value.includes(option.value)) || (!isMulti && value === option.value)
                         ? "opacity-100"
                         : "opacity-0",
                     )}
@@ -103,7 +87,7 @@ export function CreatableCombobox({
                 </CommandItem>
               ))}
             </CommandGroup>
-            {inputValue && !options.some((opt) => opt.label.toLowerCase() === inputValue.toLowerCase()) && (
+            {onCreate && inputValue && !options.some((opt) => opt.label.toLowerCase() === inputValue.toLowerCase()) && (
               <>
                 <CommandSeparator />
                 <CommandGroup>
