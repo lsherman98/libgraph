@@ -1,6 +1,5 @@
 import { pb } from "../pocketbase"
-import { Collections, NodesTypeOptions, type Create, type EdgesResponse, type PreferencesResponse, type ReadingProgressResponse, type Update } from "../pocketbase-types"
-import { getUserId } from "../utils"
+import { Collections, NodesTypeOptions, type Create, type EdgesResponse, type Update } from "../pocketbase-types"
 import type { ChatFilters, ChatResponseData, EnrichedNodesResponse, FTSSearchResult } from "../types"
 
 export async function getPageUrl(id?: string) {

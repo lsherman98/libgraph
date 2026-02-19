@@ -1,24 +1,16 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useWritingProjects } from "@/lib/api/queries";
-import { useCreateWritingProject, useDeleteWritingProject } from "@/lib/api/mutations";
+import { useCreateWritingProject, useDeleteWritingProject, useUpdateWritingProject } from "@/lib/api/mutations";
 import { WritingProjectsStatusOptions } from "@/lib/pocketbase-types";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { PenLine, Plus, Trash2 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { getUserId } from "@/lib/utils";
@@ -65,6 +57,7 @@ export function ProjectsTab() {
   const navigate = useNavigate();
   const { data: projects, isLoading } = useWritingProjects();
   const createProject = useCreateWritingProject();
+  const updateProject = useUpdateWritingProject();
   const deleteProject = useDeleteWritingProject();
 
   const [newProjectOpen, setNewProjectOpen] = useState(false);
@@ -154,13 +147,25 @@ export function ProjectsTab() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="capitalize">
-                      {project.status}
-                    </Badge>
+                    <Select
+                      value={project.status}
+                      onValueChange={(value: WritingProjectsStatusOptions) => {
+                        updateProject.mutate({ id: project.id, data: { status: value } });
+                      }}
+                    >
+                      <SelectTrigger className="w-30 h-8 capitalize" onClick={(e) => e.stopPropagation()}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent onClick={(e) => e.stopPropagation()}>
+                        {Object.values(WritingProjectsStatusOptions).map((status) => (
+                          <SelectItem key={status} value={status} className="capitalize">
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDistanceToNow(new Date(project.updated), { addSuffix: true })}
-                  </TableCell>
+                  <TableCell className="text-muted-foreground">{formatDistanceToNow(new Date(project.updated), { addSuffix: true })}</TableCell>
                   <TableCell>
                     <Button
                       variant="ghost"

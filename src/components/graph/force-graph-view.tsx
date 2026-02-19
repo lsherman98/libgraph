@@ -89,7 +89,7 @@ function getNodeDisplayLabel(node: EnrichedNodesResponse): string {
     }
   }
 
-  return node.record_id || node.id;
+  return node.id;
 }
 
 function escapeHtml(str: string): string {
@@ -182,8 +182,6 @@ function buildExpandedHTML(enrichedNode: EnrichedNodesResponse, isDark: boolean)
         break;
       }
     }
-  } else {
-    if (enrichedNode.record_id) details.push(`Record: ${enrichedNode.record_id.slice(0, 8)}\u2026`);
   }
 
   if (!hasAction && enrichedNode.record_id && type === NodesTypeOptions.upload) {
@@ -236,6 +234,46 @@ interface GraphEdge extends d3.SimulationLinkDatum<GraphNode> {
   type?: EdgesTypeOptions;
 }
 
+/**
+ * Compute all node IDs that should be hidden: nodes whose type is directly
+ * hidden PLUS any node whose every neighbour is already hidden (cascading).
+ */
+function computeHiddenNodeIds(
+  hiddenTypes: Set<NodesTypeOptions>,
+  nodeTypeMap: Map<string, NodesTypeOptions>,
+  adjacencyMap: Map<string, Set<string>>,
+): Set<string> {
+  // Seed: all nodes whose type is directly filtered out
+  const hidden = new Set<string>();
+  for (const [id, type] of nodeTypeMap) {
+    if (hiddenTypes.has(type)) hidden.add(id);
+  }
+
+  // Iteratively hide nodes whose ALL neighbours are hidden (fixed-point)
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [id] of nodeTypeMap) {
+      if (hidden.has(id)) continue;
+      const neighbours = adjacencyMap.get(id);
+      if (!neighbours || neighbours.size === 0) continue;
+      let allHidden = true;
+      for (const nid of neighbours) {
+        if (!hidden.has(nid)) {
+          allHidden = false;
+          break;
+        }
+      }
+      if (allHidden) {
+        hidden.add(id);
+        changed = true;
+      }
+    }
+  }
+
+  return hidden;
+}
+
 export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode, onPreviewNode, hiddenNodeTypes, hiddenEdgeTypes }: ForceGraphViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -245,15 +283,25 @@ export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode, onP
 
   const nodeDataMapRef = useRef<Map<string, EnrichedNodesResponse>>(new Map());
 
+  // Refs for D3 selections to support filter visibility without re-simulation
+  const nodeSelectionRef = useRef<d3.Selection<any, GraphNode, any, unknown> | null>(null);
+  const linkSelectionRef = useRef<d3.Selection<any, GraphEdge, any, unknown> | null>(null);
+  const nodeTypeMapRef = useRef<Map<string, NodesTypeOptions>>(new Map());
+  const adjacencyMapRef = useRef<Map<string, Set<string>>>(new Map());
+  const hiddenNodeTypesRef = useRef(hiddenNodeTypes);
+  const hiddenEdgeTypesRef = useRef(hiddenEdgeTypes);
+  hiddenNodeTypesRef.current = hiddenNodeTypes;
+  hiddenEdgeTypesRef.current = hiddenEdgeTypes;
+
   useEffect(() => {
     nodeDataMapRef.current = new Map(nodes.map((n) => [n.id, n]));
   }, [nodes]);
 
+  // Build graph data from ALL nodes/edges — no filtering here
   useEffect(() => {
-    const visibleNodes = nodes.filter((n) => !hiddenNodeTypes.has(n.type as NodesTypeOptions));
-    const visibleNodeIds = new Set(visibleNodes.map((n) => n.id));
+    const allNodeIds = new Set(nodes.map((n) => n.id));
 
-    const graphNodes: GraphNode[] = visibleNodes.map((node) => {
+    const graphNodes: GraphNode[] = nodes.map((node) => {
       const label = getNodeDisplayLabel(node);
       const truncatedLabel = label.length > 12 ? label.slice(0, 12) + "…" : label;
       return {
@@ -268,15 +316,46 @@ export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode, onP
     });
 
     const graphEdges: GraphEdge[] = edges
-      .filter((e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target) && !hiddenEdgeTypes.has(e.type as EdgesTypeOptions))
+      .filter((e) => allNodeIds.has(e.source) && allNodeIds.has(e.target))
       .map((edge) => ({
         source: edge.source,
         target: edge.target,
         type: edge.type as EdgesTypeOptions,
       }));
 
+    nodeTypeMapRef.current = new Map(graphNodes.map((n) => [n.id, n.type]));
+
+    // Build adjacency map for cascading filter visibility
+    const adjMap = new Map<string, Set<string>>();
+    for (const n of graphNodes) adjMap.set(n.id, new Set());
+    for (const e of graphEdges) {
+      const s = typeof e.source === "string" ? e.source : (e.source as GraphNode).id;
+      const t = typeof e.target === "string" ? e.target : (e.target as GraphNode).id;
+      adjMap.get(s)?.add(t);
+      adjMap.get(t)?.add(s);
+    }
+    adjacencyMapRef.current = adjMap;
+
     setGraphData({ nodes: graphNodes, edges: graphEdges });
-  }, [nodes, edges, hiddenNodeTypes, hiddenEdgeTypes]);
+  }, [nodes, edges]);
+
+  // Update visibility when filters change without rebuilding the simulation
+  useEffect(() => {
+    if (!nodeSelectionRef.current || !linkSelectionRef.current) return;
+
+    const hiddenIds = computeHiddenNodeIds(hiddenNodeTypes, nodeTypeMapRef.current, adjacencyMapRef.current);
+
+    nodeSelectionRef.current.style("display", (d: GraphNode) => (hiddenIds.has(d.id) ? "none" : null));
+
+    linkSelectionRef.current.style("display", (d: GraphEdge) => {
+      const sourceId = typeof d.source === "string" ? d.source : (d.source as GraphNode).id;
+      const targetId = typeof d.target === "string" ? d.target : (d.target as GraphNode).id;
+      if (hiddenIds.has(sourceId)) return "none";
+      if (hiddenIds.has(targetId)) return "none";
+      if (d.type && hiddenEdgeTypes.has(d.type)) return "none";
+      return null;
+    });
+  }, [hiddenNodeTypes, hiddenEdgeTypes]);
 
   useEffect(() => {
     if (!svgRef.current || !containerRef.current || graphData.nodes.length === 0) return;
@@ -377,7 +456,7 @@ export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode, onP
     node.each(function (d) {
       const cfg = typeConfig[d.type];
       if (!cfg) return;
-      const iconGroup = d3.select(this).append("g").attr("transform", "translate(-8, -12) scale(0.7)");
+      const iconGroup = d3.select(this).append("g").attr("transform", "translate(-8.4, -8.4) scale(0.7)");
 
       iconGroup
         .append("path")
@@ -465,6 +544,22 @@ export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode, onP
         });
     }
 
+    // Store refs for filter visibility updates
+    nodeSelectionRef.current = node;
+    linkSelectionRef.current = link;
+
+    // Apply current filter visibility without affecting simulation
+    const hiddenIds = computeHiddenNodeIds(hiddenNodeTypesRef.current, nodeTypeMapRef.current, adjacencyMapRef.current);
+    node.style("display", (d: GraphNode) => (hiddenIds.has(d.id) ? "none" : null));
+    link.style("display", (d: GraphEdge) => {
+      const sourceId = typeof d.source === "string" ? d.source : (d.source as GraphNode).id;
+      const targetId = typeof d.target === "string" ? d.target : (d.target as GraphNode).id;
+      if (hiddenIds.has(sourceId)) return "none";
+      if (hiddenIds.has(targetId)) return "none";
+      if (d.type && hiddenEdgeTypesRef.current.has(d.type)) return "none";
+      return null;
+    });
+
     simulation.on("tick", () => {
       link
         .attr("x1", (d) => (d.source as GraphNode).x!)
@@ -495,6 +590,8 @@ export function ForceGraphView({ nodes, edges, selectedNodeId, onSelectNode, onP
 
     return () => {
       simulation.stop();
+      nodeSelectionRef.current = null;
+      linkSelectionRef.current = null;
     };
   }, [graphData, onSelectNode, theme, selectedNodeId]);
 
