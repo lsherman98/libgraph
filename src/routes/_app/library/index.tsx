@@ -23,14 +23,13 @@ function RouteComponent() {
   const { tab } = Route.useSearch();
 
   return (
-    <div className="p-6 w-full">
+    <div className="p-6 w-full flex flex-col min-h-0 h-full">
       <Tabs
         value={tab}
-        onValueChange={(value) =>
-          navigate({ to: "/library", search: { tab: value as "documents" | "projects" | "collections" } })
-        }
+        onValueChange={(value) => navigate({ to: "/library", search: { tab: value as "documents" | "projects" | "collections" } })}
+        className="flex flex-col min-h-0 flex-1"
       >
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 shrink-0">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Library</h1>
             <p className="text-muted-foreground mt-1">Manage your documents and writing projects</p>
@@ -52,13 +51,13 @@ function RouteComponent() {
             </TabsList>
           </div>
         </div>
-        <TabsContent value="documents" className="mt-0">
+        <TabsContent value="documents" className="mt-0 flex flex-col min-h-0 flex-1">
           <DocumentsTab />
         </TabsContent>
-        <TabsContent value="collections" className="mt-0">
+        <TabsContent value="collections" className="mt-0 overflow-y-auto flex-1 min-h-0">
           <CollectionsTab />
         </TabsContent>
-        <TabsContent value="projects" className="mt-0">
+        <TabsContent value="projects" className="mt-0 overflow-y-auto flex-1 min-h-0">
           <ProjectsTab />
         </TabsContent>
       </Tabs>

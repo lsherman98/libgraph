@@ -12,14 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FileText, Upload, Search, Library, X } from "lucide-react";
 import { EditUploadDialog } from "@/components/upload/edit-upload-dialog";
@@ -72,10 +65,7 @@ export function DocumentsTab() {
   const [filters, setFilters] = useState<UploadFilters>({});
   const debouncedSearch = useDebounce(filters.search, 300);
 
-  const queryFilters = useMemo<UploadFilters>(
-    () => ({ ...filters, search: debouncedSearch }),
-    [filters, debouncedSearch],
-  );
+  const queryFilters = useMemo<UploadFilters>(() => ({ ...filters, search: debouncedSearch }), [filters, debouncedSearch]);
 
   const { data: uploads, isLoading } = useUploads(queryFilters);
   const { data: tags } = useTags();
@@ -91,9 +81,7 @@ export function DocumentsTab() {
   const [collectionName, setCollectionName] = useState("");
   const [collectionDescription, setCollectionDescription] = useState("");
 
-  const hasActiveFilters =
-    Object.keys(filters).filter((k) => k !== "sortBy" && k !== "sortOrder" && filters[k as keyof UploadFilters])
-      .length > 0;
+  const hasActiveFilters = Object.keys(filters).filter((k) => k !== "sortBy" && k !== "sortOrder" && filters[k as keyof UploadFilters]).length > 0;
 
   const successUploads = uploads?.filter((u) => u.status === "SUCCESS") || [];
   const allSelected = successUploads.length > 0 && successUploads.every((u) => selectedIds.has(u.id));
@@ -138,8 +126,8 @@ export function DocumentsTab() {
   };
 
   return (
-    <>
-      <div className="flex items-center justify-between mb-4 gap-4">
+    <div className="flex flex-col min-h-0 flex-1">
+      <div className="flex items-center justify-between mb-4 gap-4 shrink-0">
         <div className="flex-1">
           <AdvancedFilters
             filters={filters}
@@ -194,44 +182,42 @@ export function DocumentsTab() {
           <DocumentsEmptyState />
         )
       ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10 pr-0">
-                  <Checkbox
-                    checked={allSelected ? true : someSelected ? "indeterminate" : false}
-                    onCheckedChange={toggleSelectAll}
-                    aria-label="Select all documents"
+        <Card className="overflow-hidden flex flex-col min-h-0 flex-1">
+          <div className="overflow-y-auto flex-1 min-h-0">
+            <Table className="table-fixed">
+              <TableHeader className="sticky top-0 z-10 bg-card">
+                <TableRow>
+                  <TableHead className="w-10 pr-0">
+                    <Checkbox
+                      checked={allSelected ? true : someSelected ? "indeterminate" : false}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Select all documents"
+                    />
+                  </TableHead>
+                  <TableHead className="w-[40%]">Document</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Created</TableHead>
+                  <TableHead className="w-12.5"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {uploads?.map((upload) => (
+                  <DocumentRow
+                    key={upload.id}
+                    upload={upload}
+                    selected={selectedIds.has(upload.id)}
+                    onSelect={(checked) => toggleSelect(upload.id, checked)}
+                    onEdit={() => setEditingUpload(upload)}
+                    onDelete={() => {
+                      if (confirm("Are you sure you want to delete this document? This will also remove its graph data and indexed content.")) {
+                        deleteUploadMutation.mutate(upload.id);
+                      }
+                    }}
                   />
-                </TableHead>
-                <TableHead className="w-[40%]">Document</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="w-12.5"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {uploads?.map((upload) => (
-                <DocumentRow
-                  key={upload.id}
-                  upload={upload}
-                  selected={selectedIds.has(upload.id)}
-                  onSelect={(checked) => toggleSelect(upload.id, checked)}
-                  onEdit={() => setEditingUpload(upload)}
-                  onDelete={() => {
-                    if (
-                      confirm(
-                        "Are you sure you want to delete this document? This will also remove its graph data and indexed content.",
-                      )
-                    ) {
-                      deleteUploadMutation.mutate(upload.id);
-                    }
-                  }}
-                />
-              ))}
-            </TableBody>
-          </Table>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </Card>
       )}
       <Dialog
@@ -297,6 +283,6 @@ export function DocumentsTab() {
           if (!open) setEditingUpload(null);
         }}
       />
-    </>
+    </div>
   );
 }
