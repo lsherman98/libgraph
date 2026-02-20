@@ -15,10 +15,8 @@ func Init(app *pocketbase.PocketBase, collections ...string) error {
 		target := e.Collection.Name
 		for _, col := range collections {
 			if col == target {
-				err := createCollectionFts(app, target)
-				if err != nil {
-					app.Logger().Error(fmt.Sprint(err))
-					return err
+				if err := deleteCollection(app, target); err != nil {
+					app.Logger().Error("failed to clean up FTS table after collection delete", "collection", target, "error", err)
 				}
 			}
 		}
@@ -29,14 +27,12 @@ func Init(app *pocketbase.PocketBase, collections ...string) error {
 		target := e.Collection.Name
 		for _, col := range collections {
 			if col == target {
-				err := deleteCollection(app, target)
-				if err != nil {
-					app.Logger().Error(fmt.Sprint(err))
+				if err := deleteCollection(app, target); err != nil {
+					app.Logger().Error("failed to delete FTS table on collection update", "collection", target, "error", err)
 					return err
 				}
-				err = createCollectionFts(app, target)
-				if err != nil {
-					app.Logger().Error(fmt.Sprint(err))
+				if err := createCollectionFts(app, target); err != nil {
+					app.Logger().Error("failed to create FTS table on collection update", "collection", target, "error", err)
 					return err
 				}
 			}
@@ -48,9 +44,8 @@ func Init(app *pocketbase.PocketBase, collections ...string) error {
 		target := e.Collection.Name
 		for _, col := range collections {
 			if col == target {
-				err := deleteCollection(app, target)
-				if err != nil {
-					app.Logger().Error(fmt.Sprint(err))
+				if err := deleteCollection(app, target); err != nil {
+					app.Logger().Error("failed to delete FTS table on collection delete request", "collection", target, "error", err)
 					return err
 				}
 			}
@@ -60,9 +55,8 @@ func Init(app *pocketbase.PocketBase, collections ...string) error {
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		for _, target := range collections {
-			err := createCollectionFts(app, target)
-			if err != nil {
-				app.Logger().Error(fmt.Sprint(err))
+			if err := createCollectionFts(app, target); err != nil {
+				app.Logger().Error("failed to create FTS table on serve", "collection", target, "error", err)
 				return err
 			}
 		}
@@ -70,8 +64,7 @@ func Init(app *pocketbase.PocketBase, collections ...string) error {
 		se.Router.GET("/api/collections/{collectionIdOrName}/records/full-text-search", func(e *core.RequestEvent) error {
 			target := e.Request.PathValue("collectionIdOrName")
 			if _, err := app.FindCollectionByNameOrId(target); err != nil {
-				app.Logger().Error(fmt.Sprint(err))
-				return err
+				return e.BadRequestError("collection not found", err)
 			}
 			tbl := target
 			q := e.Request.URL.Query().Get("search")
@@ -100,8 +93,8 @@ func Init(app *pocketbase.PocketBase, collections ...string) error {
 				Bind(params).
 				All(&results)
 			if err != nil {
-				app.Logger().Error(fmt.Sprint(err))
-				return err
+				app.Logger().Error("FTS search query failed", "table", tbl, "error", err)
+				return e.InternalServerError("search failed", err)
 			}
 
 			e.Response.Header().Set("Content-Type", "application/json")
@@ -120,9 +113,7 @@ func Init(app *pocketbase.PocketBase, collections ...string) error {
 				items = append(items, m)
 			}
 
-			// TODO: Paging result
 			e.JSON(200, items)
-
 			return nil
 		})
 
@@ -135,17 +126,14 @@ func Init(app *pocketbase.PocketBase, collections ...string) error {
 func createCollectionFts(app *pocketbase.PocketBase, target string) error {
 	collection, err := app.FindCollectionByNameOrId(target)
 	if err != nil {
-		app.Logger().Error(fmt.Sprint(err))
-		return err
+		return fmt.Errorf("failed to find collection %s: %w", target, err)
 	}
 	fields := collectionFields(collection, "id", target)
 	exists, _ := checkIfTableExists(app, target+"_fts")
 
 	if exists {
-		err := deleteCollection(app, target)
-		if err != nil {
-			app.Logger().Error("Failed to delete existing FTS table", "error", err)
-			return err
+		if err := deleteCollection(app, target); err != nil {
+			return fmt.Errorf("failed to delete existing FTS table for %s: %w", target, err)
 		}
 	}
 
@@ -154,12 +142,9 @@ func createCollectionFts(app *pocketbase.PocketBase, target string) error {
 	stmt.WriteString("CREATE VIRTUAL TABLE " + target + "_fts USING FTS5 (")
 	stmt.WriteString("  " + strings.Join(fields, ", ") + ",")
 	stmt.WriteString("  content=" + target + ",")
-	// stmt.WriteString("  content=''")
-	// stmt.WriteString("  content_rowid='id'")
 	stmt.WriteString(");")
 	if _, err := app.DB().NewQuery(stmt.String()).Execute(); err != nil {
-		app.Logger().Error(fmt.Sprint(err))
-		return err
+		return fmt.Errorf("failed to create FTS table for %s: %w", target, err)
 	}
 
 	stmt.Reset()
@@ -168,8 +153,7 @@ func createCollectionFts(app *pocketbase.PocketBase, target string) error {
 	stmt.WriteString("  VALUES (" + strings.Join(surround(fields, "new.", ""), ", ") + ");")
 	stmt.WriteString("END;")
 	if _, err := app.DB().NewQuery(stmt.String()).Execute(); err != nil {
-		app.Logger().Error(fmt.Sprint(err))
-		return err
+		return fmt.Errorf("failed to create FTS insert trigger for %s: %w", target, err)
 	}
 
 	stmt.Reset()
@@ -180,8 +164,7 @@ func createCollectionFts(app *pocketbase.PocketBase, target string) error {
 	stmt.WriteString("  VALUES (" + strings.Join(surround(fields, "new.", ""), ", ") + ");")
 	stmt.WriteString("END;")
 	if _, err := app.DB().NewQuery(stmt.String()).Execute(); err != nil {
-		app.Logger().Error(fmt.Sprint(err))
-		return err
+		return fmt.Errorf("failed to create FTS update trigger for %s: %w", target, err)
 	}
 
 	stmt.Reset()
@@ -190,12 +173,12 @@ func createCollectionFts(app *pocketbase.PocketBase, target string) error {
 	stmt.WriteString("  VALUES ('delete', " + strings.Join(surround(fields, "old.", ""), ", ") + ");")
 	stmt.WriteString("END;")
 	if _, err := app.DB().NewQuery(stmt.String()).Execute(); err != nil {
-		return err
+		return fmt.Errorf("failed to create FTS delete trigger for %s: %w", target, err)
 	}
 
 	err = syncCollection(app, target)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to sync FTS for %s: %w", target, err)
 	}
 
 	return nil
@@ -239,29 +222,19 @@ func checkIfTableExists(app *pocketbase.PocketBase, target string) (bool, error)
 
 	meta := &Meta{}
 
-	var stmt strings.Builder
-	stmt.WriteString("SELECT name FROM sqlite_master ")
-	stmt.WriteString("WHERE type='table' ")
-	stmt.WriteString("AND name = {:table_name};")
-
-	if err := app.DB().NewQuery(stmt.String()).Bind(dbx.Params{"table_name": target}).One(&meta); err != nil {
-		app.Logger().Error(fmt.Sprint(err))
-		return false, err
+	stmt := "SELECT name FROM sqlite_master WHERE type='table' AND name = {:table_name};"
+	if err := app.DB().NewQuery(stmt).Bind(dbx.Params{"table_name": target}).One(&meta); err != nil {
+		return false, nil // Table doesn't exist
 	}
 
-	valid := meta != nil
-	return valid, nil
+	return meta != nil, nil
 }
 
 func syncCollection(app *pocketbase.PocketBase, target string) error {
-	var stmt strings.Builder
-	stmt.WriteString("INSERT INTO " + target + "_fts(" + target + "_fts) VALUES('rebuild');")
-	// stmt.WriteString("INSERT INTO " + target + "_fts SELECT " + strings.Join(fields, ", ") + " FROM " + target)
-	if _, err := app.DB().NewQuery(stmt.String()).Execute(); err != nil {
-		app.Logger().Error(fmt.Sprint(err))
-		return err
+	stmt := "INSERT INTO " + target + "_fts(" + target + "_fts) VALUES('rebuild');"
+	if _, err := app.DB().NewQuery(stmt).Execute(); err != nil {
+		return fmt.Errorf("FTS rebuild failed for %s: %w", target, err)
 	}
-
 	return nil
 }
 

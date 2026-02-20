@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/lsherman98/libgraph/pocketbase/collections"
-	"github.com/lsherman98/libgraph/pocketbase/llama"
 	"github.com/lsherman98/libgraph/pocketbase/mistral"
 	"github.com/lsherman98/libgraph/pocketbase/parser"
 	"github.com/pocketbase/dbx"
@@ -14,6 +13,21 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/filesystem"
 	"github.com/pocketbase/pocketbase/tools/routine"
+)
+
+var (
+	reImage       = regexp.MustCompile(`!\[([^\]]*)\]\([^)]+\)`)
+	reLink        = regexp.MustCompile(`\[([^\]]+)\]\([^)]+\)`)
+	reHTML        = regexp.MustCompile(`<[^>]+>`)
+	reHeading     = regexp.MustCompile(`(?m)^#{1,6}\s+`)
+	reBlockquote  = regexp.MustCompile(`(?m)^>\s*`)
+	reListBullet  = regexp.MustCompile(`(?m)^[\s]*[-*+]\s+`)
+	reListOrdered = regexp.MustCompile(`(?m)^[\s]*\d+\.\s+`)
+	reCodeBlock   = regexp.MustCompile("```[\\s\\S]*?```")
+	reInlineCode  = regexp.MustCompile("`([^`]+)`")
+	reHR          = regexp.MustCompile(`(?m)^[-*_]{3,}\s*$`)
+	reWhitespace  = regexp.MustCompile(`\s+`)
+	reSentence    = regexp.MustCompile(`([.!?])\s+`)
 )
 
 func Init(app *pocketbase.PocketBase) error {
@@ -48,7 +62,7 @@ func handleAudioUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent, u
 
 	upload.Set("status", "PROCESSING")
 	if err := app.Save(upload); err != nil {
-		app.Logger().Error("failed to update upload status:", "error", err)
+		app.Logger().Error("failed to update upload status", "error", err)
 	}
 
 	routine.FireAndForget(func() {
@@ -71,6 +85,7 @@ func handleAudioUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent, u
 
 		pagesCollection, err := app.FindCollectionByNameOrId(collections.Pages)
 		if err != nil {
+			e.App.Logger().Error("failed to find pages collection", "error", err)
 			upload.Set("status", "FAILED")
 			e.App.Save(upload)
 			return
@@ -87,6 +102,7 @@ func handleAudioUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent, u
 			e.App.Save(upload)
 			return
 		}
+
 		newPage.Set("markdown", f)
 		if err = e.App.Save(newPage); err != nil {
 			upload.Set("status", "FAILED")
@@ -102,6 +118,7 @@ func handleAudioUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent, u
 
 		chunksCollection, chunkErr := app.FindCollectionByNameOrId(collections.DocumentChunks)
 		if chunkErr != nil {
+			e.App.Logger().Error("failed to find document_chunks collection", "uploadID", uploadID, "error", chunkErr)
 			return
 		}
 
@@ -122,8 +139,6 @@ func handleAudioUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent, u
 			}
 		}
 
-		// Upload transcript page to LlamaIndex pipeline
-		// uploadPageToPipeline(app, upload, newPage, markdown, title, 1)
 	})
 
 	return nil
@@ -137,13 +152,13 @@ func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent
 
 	upload.Set("status", "PROCESSING")
 	if err := app.Save(upload); err != nil {
-		e.App.Logger().Error("Failed to update upload status:", "error", err)
+		e.App.Logger().Error("failed to update upload status", "error", err)
 	}
 
 	routine.FireAndForget(func() {
 		pagesCollection, err := app.FindCollectionByNameOrId(collections.Pages)
 		if err != nil {
-			e.App.Logger().Error("Failed to find pages collection:", "error", err)
+			e.App.Logger().Error("failed to find pages collection", "error", err)
 			upload.Set("status", "FAILED")
 			app.Save(upload)
 			return
@@ -157,14 +172,14 @@ func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent
 
 			f, err := filesystem.NewFileFromBytes([]byte(page.Markdown), fmt.Sprintf("%s_page_%d.md", title, page.PageNumber))
 			if err != nil {
-				e.App.Logger().Error("Failed to create file from markdown bytes:", "error", err, "page", page.PageNumber)
+				e.App.Logger().Error("failed to create file from markdown bytes", "error", err, "page", page.PageNumber)
 				return err
 			}
 			newPage.Set("markdown", f)
 			if err = app.Save(newPage); err != nil {
-				e.App.Logger().Error("Failed to save new page record:", "error", err, "page", page.PageNumber)
+				e.App.Logger().Error("failed to save new page record", "error", err, "page", page.PageNumber)
 				return err
-			} 
+			}
 
 			return nil
 		}
@@ -180,12 +195,12 @@ func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent
 		upload.Set("status", "SUCCESS")
 		upload.Set("num_pages", len(result.Pages))
 		if err := app.Save(upload); err != nil {
-			e.App.Logger().Error("Failed to update upload status to SUCCESS:", "error", err)
+			e.App.Logger().Error("failed to update upload status", "error", err)
 		}
 
 		chunksCollection, chunkErr := app.FindCollectionByNameOrId(collections.DocumentChunks)
 		if chunkErr != nil {
-			e.App.Logger().Error("Failed to find document_chunks collection:", "error", chunkErr)
+			e.App.Logger().Error("failed to find document_chunks collection", "error", chunkErr)
 		} else {
 			for _, page := range result.Pages {
 				pageRecord, err := app.FindFirstRecordByFilter(
@@ -194,7 +209,7 @@ func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent
 					dbx.Params{"uploadId": upload.Id, "pageNum": page.PageNumber},
 				)
 				if err != nil {
-					e.App.Logger().Error("Failed to find page record for chunking:", "error", err, "page", page.PageNumber)
+					e.App.Logger().Error("failed to find page record for chunking", "error", err, "page", page.PageNumber)
 					continue
 				}
 
@@ -212,75 +227,15 @@ func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent
 					chunkRecord.Set("content", stripMarkdown(chunk))
 					chunkRecord.Set("user", upload.GetString("user"))
 					if saveErr := app.Save(chunkRecord); saveErr != nil {
-						e.App.Logger().Error("Failed to save document chunk:", "error", saveErr, "page", page.PageNumber, "chunk", idx)
+						e.App.Logger().Error("failed to save document chunk", "error", saveErr, "page", page.PageNumber, "chunk", idx)
 					}
 				}
 			}
 		}
 
-		// Upload each page to LlamaIndex pipeline
-		// llamaClient, llamaErr := llama.New(app)
-		// if llamaErr != nil {
-		// 	e.App.Logger().Error("failed to create LlamaIndex client for pipeline upload", "uploadID", uploadID, "error", llamaErr)
-		// } else {
-		// 	for _, page := range result.Pages {
-		// 		pageRecord, err := app.FindFirstRecordByFilter(
-		// 			collections.Pages,
-		// 			"upload = {:uploadId} && page = {:pageNum}",
-		// 			dbx.Params{"uploadId": upload.Id, "pageNum": page.PageNumber},
-		// 		)
-		// 		if err != nil {
-		// 			e.App.Logger().Error("failed to find page record for pipeline upload", "error", err, "page", page.PageNumber)
-		// 			continue
-		// 		}
-		//
-		// 		uploadPageToPipelineWithClient(app, llamaClient, upload, pageRecord, page.Markdown, title, page.PageNumber)
-		// 	}
-		// }
 	})
 
 	return nil
-}
-
-func uploadPageToPipeline(app *pocketbase.PocketBase, upload *core.Record, pageRecord *core.Record, markdown string, title string, pageNumber int) {
-	llamaClient, err := llama.New(app)
-	if err != nil {
-		app.Logger().Error("failed to create LlamaIndex client for page pipeline upload", "uploadID", upload.Id, "error", err)
-		return
-	}
-	uploadPageToPipelineWithClient(app, llamaClient, upload, pageRecord, markdown, title, pageNumber)
-}
-
-func uploadPageToPipelineWithClient(app *pocketbase.PocketBase, llamaClient *llama.LlamaClient, upload *core.Record, pageRecord *core.Record, markdown string, title string, pageNumber int) {
-	filename := fmt.Sprintf("%s_page_%d.md", title, pageNumber)
-
-	uploadRes, err := llamaClient.UploadFileContent(filename, []byte(markdown), pageRecord.Id)
-	if err != nil {
-		app.Logger().Error("failed to upload page to LlamaIndex Cloud", "uploadID", upload.Id, "page", pageNumber, "error", err)
-		return
-	}
-
-	metadata := map[string]any{
-		"upload_id":      upload.Id,
-		"page_id":        pageRecord.Id,
-		"page_number":    pageNumber,
-		"title":          title,
-		"user_id":        upload.GetString("user"),
-		"topic_id":       upload.GetString("topic"),
-		"type":           upload.GetString("type"),
-		"publication_id": upload.GetString("publication"),
-	}
-
-	_, pipelineErr := llamaClient.AddFilesToPipeline(uploadRes.ID, metadata)
-	if pipelineErr != nil {
-		app.Logger().Error("failed to add page to LlamaIndex pipeline", "uploadID", upload.Id, "page", pageNumber, "error", pipelineErr)
-		return
-	}
-
-	pageRecord.Set("llama_file_id", uploadRes.ID)
-	if saveErr := app.Save(pageRecord); saveErr != nil {
-		app.Logger().Error("failed to save llama_file_id on page", "uploadID", upload.Id, "page", pageNumber, "error", saveErr)
-	}
 }
 
 func chunkMarkdown(markdown string) []string {
@@ -327,8 +282,7 @@ func chunkMarkdown(markdown string) []string {
 }
 
 func splitSentences(text string) []string {
-	re := regexp.MustCompile(`([.!?])\s+`)
-	marked := re.ReplaceAllString(text, "${1}\x00")
+	marked := reSentence.ReplaceAllString(text, "${1}\x00")
 	parts := strings.Split(marked, "\x00")
 	result := []string{}
 	for _, p := range parts {
@@ -341,42 +295,23 @@ func splitSentences(text string) []string {
 }
 
 func stripMarkdown(md string) string {
-	re := regexp.MustCompile(`!\[([^\]]*)\]\([^)]+\)`)
-	text := re.ReplaceAllString(md, "$1")
-
-	re = regexp.MustCompile(`\[([^\]]+)\]\([^)]+\)`)
-	text = re.ReplaceAllString(text, "$1")
-
-	re = regexp.MustCompile(`<[^>]+>`)
-	text = re.ReplaceAllString(text, "")
-
-	re = regexp.MustCompile(`(?m)^#{1,6}\s+`)
-	text = re.ReplaceAllString(text, "")
+	text := reImage.ReplaceAllString(md, "$1")
+	text = reLink.ReplaceAllString(text, "$1")
+	text = reHTML.ReplaceAllString(text, "")
+	text = reHeading.ReplaceAllString(text, "")
 
 	text = strings.ReplaceAll(text, "**", "")
 	text = strings.ReplaceAll(text, "__", "")
 	text = strings.ReplaceAll(text, "*", "")
 	text = strings.ReplaceAll(text, "_", "")
 
-	re = regexp.MustCompile(`(?m)^>\s*`)
-	text = re.ReplaceAllString(text, "")
-
-	re = regexp.MustCompile(`(?m)^[\s]*[-*+]\s+`)
-	text = re.ReplaceAllString(text, "")
-	re = regexp.MustCompile(`(?m)^[\s]*\d+\.\s+`)
-	text = re.ReplaceAllString(text, "")
-
-	re = regexp.MustCompile("```[\\s\\S]*?```")
-	text = re.ReplaceAllString(text, "")
-
-	re = regexp.MustCompile("`([^`]+)`")
-	text = re.ReplaceAllString(text, "$1")
-
-	re = regexp.MustCompile(`(?m)^[-*_]{3,}\s*$`)
-	text = re.ReplaceAllString(text, "")
-
-	re = regexp.MustCompile(`\s+`)
-	text = re.ReplaceAllString(text, " ")
+	text = reBlockquote.ReplaceAllString(text, "")
+	text = reListBullet.ReplaceAllString(text, "")
+	text = reListOrdered.ReplaceAllString(text, "")
+	text = reCodeBlock.ReplaceAllString(text, "")
+	text = reInlineCode.ReplaceAllString(text, "$1")
+	text = reHR.ReplaceAllString(text, "")
+	text = reWhitespace.ReplaceAllString(text, " ")
 
 	return strings.TrimSpace(text)
 }

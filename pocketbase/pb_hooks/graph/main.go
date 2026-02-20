@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/lsherman98/libgraph/pocketbase/collections"
-	"github.com/lsherman98/libgraph/pocketbase/llama"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -275,16 +274,22 @@ func syncEdgesForRelation(app *pocketbase.PocketBase, sourceNodeId string, targe
 
 	for nodeId, edge := range existingMap {
 		if !desiredMap[nodeId] {
-			app.Delete(edge)
+			if err := app.Delete(edge); err != nil {
+				app.Logger().Error("failed to delete stale edge", "edge_id", edge.Id, "error", err)
+			}
 		}
 	}
 
 	for nodeId := range desiredMap {
 		if _, exists := existingMap[nodeId]; !exists {
+			var err error
 			if sourceIsTarget {
-				createEdge(app, nodeId, sourceNodeId, edgeType, userId)
+				err = createEdge(app, nodeId, sourceNodeId, edgeType, userId)
 			} else {
-				createEdge(app, sourceNodeId, nodeId, edgeType, userId)
+				err = createEdge(app, sourceNodeId, nodeId, edgeType, userId)
+			}
+			if err != nil {
+				app.Logger().Error("failed to create edge", "source", sourceNodeId, "target", nodeId, "error", err)
 			}
 		}
 	}
@@ -307,7 +312,7 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 		label, data := getUploadLabelAndData(upload)
 		nodeId, err := createNode(app, upload.Id, NodeTypeUpload, userId, label, data)
 		if err != nil {
-			e.App.Logger().Error("Failed to create node for upload:", "error", err)
+			e.App.Logger().Error("failed to create node for upload", "error", err)
 			return e.Next()
 		}
 
@@ -356,31 +361,7 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 
 	app.OnRecordAfterDeleteSuccess(collections.Uploads).BindFunc(func(e *core.RecordEvent) error {
 		if err := deleteNodeAndEdges(app, e.Record.Id, e.Record.GetString("user"), NodeTypeUpload); err != nil {
-			e.App.Logger().Error("Failed to delete node and edges for upload:", "error", err)
-		}
-
-		pages, err := app.FindRecordsByFilter(
-			collections.Pages,
-			"upload = {:uploadId}",
-			"",
-			0,
-			0,
-			dbx.Params{"uploadId": e.Record.Id},
-		)
-		if err == nil && len(pages) > 0 {
-			llamaClient, llamaErr := llama.New(app)
-			if llamaErr != nil {
-				e.App.Logger().Error("Failed to create LlamaIndex client for page cleanup:", "error", llamaErr)
-			} else {
-				for _, page := range pages {
-					llamaFileId := page.GetString("llama_file_id")
-					if llamaFileId != "" {
-						if err := llamaClient.DeletePipelineFile(llamaFileId); err != nil {
-							e.App.Logger().Error("Failed to delete page from pipeline:", "error", err, "llama_file_id", llamaFileId, "page", page.GetInt("page"))
-						}
-					}
-				}
-			}
+			e.App.Logger().Error("failed to delete node and edges for upload", "error", err)
 		}
 
 		return e.Next()
@@ -391,38 +372,38 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 		userId := upload.GetString("user")
 		label, data := getUploadLabelAndData(upload)
 		if err := updateNodeData(app, upload.Id, userId, NodeTypeUpload, label, data); err != nil {
-			e.App.Logger().Error("Failed to update node data for upload:", "error", err)
+			e.App.Logger().Error("failed to update node data for upload", "error", err)
 		}
 
 		uploadNode, err := findNodeByRecord(app, upload.Id, userId, NodeTypeUpload)
 		if err != nil || uploadNode == nil {
-			e.App.Logger().Error("Failed to find upload node for edge sync:", "error", err)
+			e.App.Logger().Error("failed to find upload node for edge sync", "error", err)
 			return e.Next()
 		}
 
 		subjects := upload.GetStringSlice("people")
 		if err := syncEdgesForRelation(app, uploadNode.Id, subjects, NodeTypeAuthor, EdgeTypeAboutPerson, userId, true); err != nil {
-			e.App.Logger().Error("Failed to sync subject edges:", "error", err)
+			e.App.Logger().Error("failed to sync subject edges", "error", err)
 		}
 
 		publicationId := upload.GetString("publication")
 		if err := syncSingleEdge(app, uploadNode.Id, publicationId, NodeTypePublication, EdgeTypePublishedBy, userId, true); err != nil {
-			e.App.Logger().Error("Failed to sync publication edge:", "error", err)
+			e.App.Logger().Error("failed to sync publication edge", "error", err)
 		}
 
 		tags := upload.GetStringSlice("tags")
 		if err := syncEdgesForRelation(app, uploadNode.Id, tags, NodeTypeTag, EdgeTypeTaggedWith, userId, true); err != nil {
-			e.App.Logger().Error("Failed to sync tag edges:", "error", err)
+			e.App.Logger().Error("failed to sync tag edges", "error", err)
 		}
 
 		topics := upload.GetStringSlice("topics")
 		if err := syncEdgesForRelation(app, uploadNode.Id, topics, NodeTypeTopic, EdgeTypeBelongsTo, userId, true); err != nil {
-			e.App.Logger().Error("Failed to sync topic edges:", "error", err)
+			e.App.Logger().Error("failed to sync topic edges", "error", err)
 		}
 
 		relatedUploads := upload.GetStringSlice("uploads")
 		if err := syncEdgesForRelation(app, uploadNode.Id, relatedUploads, NodeTypeUpload, EdgeTypeLinksTo, userId, false); err != nil {
-			e.App.Logger().Error("Failed to sync related upload edges:", "error", err)
+			e.App.Logger().Error("failed to sync related upload edges", "error", err)
 		}
 
 		return e.Next()
@@ -439,7 +420,7 @@ func registerSimpleNodeHooks(app *pocketbase.PocketBase) {
 
 		label, data := collectionLabelData[collName](record)
 		if _, err := createNode(app, record.Id, collectionNodeType[collName], userId, label, data); err != nil {
-			e.App.Logger().Error("Failed to create node:", "collection", collName, "error", err)
+			e.App.Logger().Error("failed to create node", "collection", collName, "error", err)
 		}
 
 		return e.Next()
@@ -451,7 +432,7 @@ func registerSimpleNodeHooks(app *pocketbase.PocketBase) {
 	).BindFunc(func(e *core.RecordEvent) error {
 		collName := e.Record.Collection().Name
 		if err := deleteNodeAndEdges(app, e.Record.Id, e.Record.GetString("user"), collectionNodeType[collName]); err != nil {
-			e.App.Logger().Error("Failed to delete node and edges:", "collection", collName, "error", err)
+			e.App.Logger().Error("failed to delete node and edges", "collection", collName, "error", err)
 		}
 		return e.Next()
 	})
@@ -466,7 +447,7 @@ func registerSimpleNodeHooks(app *pocketbase.PocketBase) {
 
 		label, data := collectionLabelData[collName](record)
 		if err := updateNodeData(app, record.Id, userId, collectionNodeType[collName], label, data); err != nil {
-			e.App.Logger().Error("Failed to update node data:", "collection", collName, "error", err)
+			e.App.Logger().Error("failed to update node data", "collection", collName, "error", err)
 		}
 		return e.Next()
 	})
@@ -483,7 +464,7 @@ func registerAnnotationCreateHooks(app *pocketbase.PocketBase) {
 		label, data := collectionLabelData[collName](record)
 		nodeId, err := createNode(app, record.Id, collectionNodeType[collName], userId, label, data)
 		if err != nil {
-			e.App.Logger().Error("Failed to create node:", "collection", collName, "error", err)
+			e.App.Logger().Error("failed to create annotation node", "collection", collName, "error", err)
 			return e.Next()
 		}
 

@@ -1,17 +1,36 @@
 package chat
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
+	"strings"
 
-	"github.com/lsherman98/libgraph/pocketbase/llama"
+	"github.com/google/generative-ai-go/genai"
+	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/vector_search"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
+	"google.golang.org/api/option"
 )
 
+var geminiClient *genai.Client
+
 func Init(app *pocketbase.PocketBase) error {
+	apiKey := os.Getenv("GEMINI_API_KEY")
+	if apiKey == "" {
+		return fmt.Errorf("GEMINI_API_KEY environment variable is required")
+	}
+
+	var err error
+	geminiClient, err = genai.NewClient(context.Background(), option.WithAPIKey(apiKey))
+	if err != nil {
+		return fmt.Errorf("failed to create Gemini client: %w", err)
+	}
+
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.POST("/api/chat", func(e *core.RequestEvent) error {
 			body := ChatRequest{}
@@ -30,31 +49,9 @@ func Init(app *pocketbase.PocketBase) error {
 				body.Mode = "chat"
 			}
 
-			llamaClient, err := llama.New(app)
-			if err != nil {
-				return e.InternalServerError("failed to initialize client", err)
-			}
-
-			var searchFilters *llama.SearchFilters
+			var uploadIDs []string
 			if body.Filters != nil {
-				app.Logger().Info("[chat] building search filters",
-					"tags", body.Filters.Tags,
-					"people", body.Filters.People,
-					"publications", body.Filters.Publications,
-					"topics", body.Filters.Topics,
-					"uploads", body.Filters.Uploads,
-					"collections", body.Filters.Collections,
-					"types", body.Filters.Types,
-					"condition", body.Filters.Condition,
-				)
-				searchFilters = buildSearchFilters(app, body.Filters)
-			}
-
-			if searchFilters != nil {
-				filtersJSON, _ := json.Marshal(searchFilters)
-				app.Logger().Info("[chat] resolved search filters", "filters", string(filtersJSON))
-			} else {
-				app.Logger().Info("[chat] no search filters applied")
+				uploadIDs = resolveFilterUploadIDs(app, body.Filters)
 			}
 
 			chatID := body.ChatID
@@ -63,7 +60,6 @@ func Init(app *pocketbase.PocketBase) error {
 				if len(title) > 80 {
 					title = title[:80] + "…"
 				}
-
 				if body.Mode == "search" {
 					title = "Search: " + title
 				}
@@ -80,30 +76,8 @@ func Init(app *pocketbase.PocketBase) error {
 				if err := app.Save(chatRecord); err != nil {
 					return e.InternalServerError("failed to create chat", err)
 				}
-
 				chatID = chatRecord.Id
 			}
-
-			history, err := loadChatHistory(app, chatID)
-			if err != nil {
-				app.Logger().Error("failed to load chat history", "error", err)
-				return e.InternalServerError("failed to load chat history", err)
-			}
-
-			messages := make([]llama.Message, 0, len(history)+1)
-			for _, msg := range history {
-				messages = append(messages, llama.Message{
-					ClassName: "base_component",
-					Role:      msg.Role,
-					Content:   msg.Content,
-				})
-			}
-
-			messages = append(messages, llama.Message{
-				ClassName: "base_component",
-				Role:      "user",
-				Content:   body.Message,
-			})
 
 			userMsgID, err := saveMessage(app, chatID, userID, "user", body.Message, nil)
 			if err != nil {
@@ -111,16 +85,13 @@ func Init(app *pocketbase.PocketBase) error {
 			}
 
 			if body.Mode == "search" {
-				retrievalParams := buildRetrievalParams(body.RetrievalParameters, searchFilters)
-				retrieveReq := retrieveRequestFromParams(body.Message, retrievalParams)
-
-				resp, err := llamaClient.Retrieve(retrieveReq)
+				results, err := vector_search.Search(app, body.Message, uploadIDs, 10)
 				if err != nil {
-					app.Logger().Error("[chat/search] retrieve request failed", "error", err)
+					app.Logger().Error("[chat/search] vector search failed", "error", err)
 					return e.InternalServerError("search request failed", err)
 				}
 
-				sources := sourcesFromNodes(resp.Nodes)
+				sources := sourcesFromSearchResults(results)
 
 				assistantMsgID, err := saveMessage(app, chatID, userID, "assistant", "", sources)
 				if err != nil {
@@ -135,63 +106,57 @@ func Init(app *pocketbase.PocketBase) error {
 				})
 			}
 
-			modelName := "GPT_4O_MINI"
-			temperature := 0.1
-			useCitation := true
-			llmParams := llama.LLMParameters{
-				ClassName:   "base_component",
-				ModelName:   modelName,
-				Temperature: temperature,
-				UseCitation: useCitation,
-			}
-
-			if body.LLMParameters != nil {
-				lp := body.LLMParameters
-				if lp.ModelName != "" {
-					llmParams.ModelName = lp.ModelName
-				}
-				if lp.SystemPrompt != "" {
-					llmParams.SystemPrompt = lp.SystemPrompt
-				}
-				if lp.Temperature != nil {
-					llmParams.Temperature = *lp.Temperature
-				}
-				if lp.UseChainOfThoughtReasoning != nil {
-					llmParams.UseChainOfThoughtReasoning = *lp.UseChainOfThoughtReasoning
-				}
-				if lp.UseCitation != nil {
-					llmParams.UseCitation = *lp.UseCitation
-				}
-			}
-
-			retrievalParams := buildRetrievalParams(body.RetrievalParameters, searchFilters)
-
-			chatReq := &llama.ChatRequestBody{
-				ClassName: "base_component",
-				Data: llama.ChatData{
-					ClassName:           "base_component",
-					LLMParameters:       llmParams,
-					RetrievalParameters: retrievalParams,
-				},
-				Messages: messages,
-			}
-
-			resp, err := llamaClient.Chat(chatReq)
+			searchResults, err := vector_search.Search(app, body.Message, uploadIDs, 10)
 			if err != nil {
-				app.Logger().Error("Chat request failed:", "error", err)
+				app.Logger().Error("[chat] vector search failed", "error", err)
+				searchResults = nil
+			}
+
+			systemPrompt := buildPromptWithContext(searchResults)
+
+			history, err := loadChatHistory(app, chatID)
+			if err != nil {
+				app.Logger().Error("[chat] failed to load chat history", "error", err)
+				return e.InternalServerError("failed to load chat history", err)
+			}
+
+			modelName := os.Getenv("GEMINI_MODEL")
+			if modelName == "" {
+				modelName = "gemini-2.5-flash"
+			}
+
+			model := geminiClient.GenerativeModel(modelName)
+			model.Temperature = floatPtr(0.2)
+			model.ResponseMIMEType = "application/json"
+			model.ResponseSchema = getResponseSchema()
+			model.SystemInstruction = genai.NewUserContent(genai.Text(systemPrompt))
+
+			cs := model.StartChat()
+			cs.History = buildGeminiHistory(history)
+
+			resp, err := cs.SendMessage(context.Background(), genai.Text(body.Message))
+			if err != nil {
+				app.Logger().Error("[chat] Gemini request failed", "error", err)
 				return e.InternalServerError("chat request failed", err)
 			}
 
-			sources := sourcesFromNodes(resp.Nodes)
+			responseText := extractResponseText(resp)
+			var structured StructuredChatResponse
+			if err := json.Unmarshal([]byte(responseText), &structured); err != nil {
+				app.Logger().Error("[chat] failed to parse Gemini JSON response", "error", err, "raw", responseText)
+				structured = StructuredChatResponse{Answer: responseText}
+			}
 
-			assistantMsgID, err := saveMessage(app, chatID, userID, "assistant", resp.Response, sources)
+			sources := buildSourcesFromCitations(structured.Citations, searchResults)
+
+			assistantMsgID, err := saveMessage(app, chatID, userID, "assistant", structured.Answer, sources)
 			if err != nil {
 				return e.InternalServerError("failed to save assistant message", err)
 			}
 
 			return e.JSON(http.StatusOK, ChatResponse{
 				ChatID:             chatID,
-				Message:            resp.Response,
+				Message:            structured.Answer,
 				Sources:            sources,
 				UserMessageID:      userMsgID,
 				AssistantMessageID: assistantMsgID,
@@ -254,182 +219,254 @@ func saveMessage(app *pocketbase.PocketBase, chatID, userID, role, content strin
 	return record.Id, nil
 }
 
-func buildRetrievalParams(rp *RetrievalParamsInput, searchFilters *llama.SearchFilters) llama.RetrievalParameters {
-	denseSimilarityTopK := 10
-	enableReranking := true
-	rerankTopN := 5
+func buildPromptWithContext(results []vector_search.SearchResult) string {
+	var sb strings.Builder
+	sb.WriteString("You are an AI assistant helping users understand their uploaded documents.\n\n")
 
-	params := llama.RetrievalParameters{
-		ClassName:           "base_component",
-		DenseSimilarityTopK: &denseSimilarityTopK,
-		EnableReranking:     &enableReranking,
-		RerankTopN:          &rerankTopN,
-		RetrievalMode:       "chunks",
-		SearchFilters:       searchFilters,
+	if len(results) == 0 {
+		sb.WriteString("No relevant context was found in the user's documents. Answer based on your general knowledge, but let the user know if you're unsure.\n")
+		return sb.String()
 	}
 
-	if rp != nil {
-		if rp.Alpha != nil {
-			params.Alpha = rp.Alpha
-		}
-		if rp.DenseSimilarityCutoff != nil {
-			params.DenseSimilarityCutoff = rp.DenseSimilarityCutoff
-		}
-		if rp.DenseSimilarityTopK != nil {
-			params.DenseSimilarityTopK = rp.DenseSimilarityTopK
-		}
-		if rp.EnableReranking != nil {
-			params.EnableReranking = rp.EnableReranking
-		}
-		if rp.FilesTopK != nil {
-			params.FilesTopK = rp.FilesTopK
-		}
-		if rp.RerankTopN != nil {
-			params.RerankTopN = rp.RerankTopN
-		}
-		if rp.RetrievalMode != "" {
-			params.RetrievalMode = rp.RetrievalMode
-		}
-		if rp.RetrievePageFigureNodes != nil {
-			params.RetrievePageFigureNodes = rp.RetrievePageFigureNodes
-		}
-		if rp.RetrievePageScreenshotNodes != nil {
-			params.RetrievePageScreenshotNodes = rp.RetrievePageScreenshotNodes
-		}
-		if rp.SparseSimilarityTopK != nil {
-			params.SparseSimilarityTopK = rp.SparseSimilarityTopK
-		}
+	sb.WriteString("Use the following context from the user's documents to answer their question.\n\n")
+	sb.WriteString("IMPORTANT INSTRUCTIONS:\n")
+	sb.WriteString("- Quote directly from the provided context when answering.\n")
+	sb.WriteString("- When quoting or referencing information, ALWAYS cite it using [citation:CHUNK_ID] format where CHUNK_ID is the chunk_id from the context.\n")
+	sb.WriteString("- Example: \"This is a direct quote from the text.\"[citation:abc123def]\n")
+	sb.WriteString("- CRITICAL: Every individual quote or piece of referenced information must have its own citation immediately after it.\n")
+	sb.WriteString("- Prefer longer, more complete quotes over brief paraphrases.\n")
+	sb.WriteString("- MANDATORY: For EVERY quote you use from the context, you MUST include that exact quote text in the citations array in your JSON response.\n")
+	sb.WriteString("- Each citation in the citations array must include the chunk_id, quote text, page_number, and upload_id from the context.\n")
+	sb.WriteString("- Do not add [citation:...] markers unless you are actually quoting or referencing specific content.\n")
+	sb.WriteString("- If the context doesn't contain enough information, say so clearly.\n\n")
+	sb.WriteString("CONTEXT:\n\n")
+
+	for _, r := range results {
+		fmt.Fprintf(&sb, "[chunk_id: %s] (upload: %s, page: %d, title: %s)\n%s\n\n",
+			r.ChunkID, r.UploadID, r.PageNumber, r.Title, r.Content)
 	}
 
-	return params
+	return sb.String()
 }
 
-func retrieveRequestFromParams(query string, params llama.RetrievalParameters) *llama.RetrieveRequestBody {
-	return &llama.RetrieveRequestBody{
-		ClassName:                   params.ClassName,
-		Query:                       query,
-		Alpha:                       params.Alpha,
-		DenseSimilarityCutoff:       params.DenseSimilarityCutoff,
-		DenseSimilarityTopK:         params.DenseSimilarityTopK,
-		EnableReranking:             params.EnableReranking,
-		FilesTopK:                   params.FilesTopK,
-		RerankTopN:                  params.RerankTopN,
-		RetrievalMode:               params.RetrievalMode,
-		RetrievePageFigureNodes:     params.RetrievePageFigureNodes,
-		RetrievePageScreenshotNodes: params.RetrievePageScreenshotNodes,
-		SearchFilters:               params.SearchFilters,
-		SparseSimilarityTopK:        params.SparseSimilarityTopK,
-	}
-}
-
-func mapSourceMetadata(m *llama.NodeMetadata, source *ChatSource) {
-	if m == nil {
-		return
-	}
-	source.UploadID = m.UploadID
-	source.ExternalFileID = m.ExternalFileID
-	source.Title = m.Title
-	source.StartCharIdx = m.StartCharIdx
-	source.EndCharIdx = m.EndCharIdx
-	if m.PageNumber != nil && m.PageNumber.Set {
-		source.PageNumber = m.PageNumber.Value
-	} else if m.PageLabel != nil && m.PageLabel.Set {
-		source.PageNumber = m.PageLabel.Value
-	} else if m.PageNum != nil && m.PageNum.Set {
-		source.PageNumber = m.PageNum.Value
+func getResponseSchema() *genai.Schema {
+	return &genai.Schema{
+		Type: genai.TypeObject,
+		Properties: map[string]*genai.Schema{
+			"answer": {
+				Type:        genai.TypeString,
+				Description: "The complete answer to the user's question, with [citation:chunk_id] markers inline where appropriate",
+			},
+			"citations": {
+				Type:        genai.TypeArray,
+				Description: "Array of citations referenced in the answer",
+				Items: &genai.Schema{
+					Type: genai.TypeObject,
+					Properties: map[string]*genai.Schema{
+						"chunk_id": {
+							Type:        genai.TypeString,
+							Description: "The chunk_id of the source chunk",
+						},
+						"quote": {
+							Type:        genai.TypeString,
+							Description: "The specific quoted text from the context",
+						},
+						"page_number": {
+							Type:        genai.TypeInteger,
+							Description: "The page number of the source",
+						},
+						"upload_id": {
+							Type:        genai.TypeString,
+							Description: "The upload ID of the source document",
+						},
+					},
+					Required: []string{"chunk_id", "quote", "page_number", "upload_id"},
+				},
+			},
+		},
+		Required: []string{"answer", "citations"},
 	}
 }
 
-func sourcesFromNodes(nodes []llama.NodeInfo) []ChatSource {
-	sources := make([]ChatSource, 0, len(nodes))
-	for _, node := range nodes {
-		source := ChatSource{
-			Score:  node.Score,
-			Text:   node.Text,
-			NodeID: node.ID,
+func buildGeminiHistory(messages []ChatMessage) []*genai.Content {
+	history := make([]*genai.Content, 0, len(messages))
+	for _, msg := range messages {
+		role := "user"
+		if msg.Role == "assistant" {
+			role = "model"
 		}
-		mapSourceMetadata(node.Metadata, &source)
-		sources = append(sources, source)
+		history = append(history, &genai.Content{
+			Role:  role,
+			Parts: []genai.Part{genai.Text(msg.Content)},
+		})
+	}
+	return history
+}
+
+func extractResponseText(resp *genai.GenerateContentResponse) string {
+	if resp == nil || len(resp.Candidates) == 0 || resp.Candidates[0].Content == nil {
+		return ""
+	}
+	var sb strings.Builder
+	for _, part := range resp.Candidates[0].Content.Parts {
+		if text, ok := part.(genai.Text); ok {
+			sb.WriteString(string(text))
+		}
+	}
+	return sb.String()
+}
+
+func sourcesFromSearchResults(results []vector_search.SearchResult) []ChatSource {
+	sources := make([]ChatSource, 0, len(results))
+	for _, r := range results {
+		score := 1.0 / (1.0 + r.Distance)
+
+		sources = append(sources, ChatSource{
+			NodeID:     r.ChunkID,
+			UploadID:   r.UploadID,
+			Title:      r.Title,
+			Score:      score,
+			Text:       r.Content,
+			PageNumber: r.PageNumber,
+		})
 	}
 	return sources
 }
 
-func buildSearchFilters(app *pocketbase.PocketBase, filters *MetadataFilters) *llama.SearchFilters {
-	var filterList []llama.SearchFilter
+func buildSourcesFromCitations(citations []Citation, searchResults []vector_search.SearchResult) []ChatSource {
+	resultMap := make(map[string]vector_search.SearchResult)
+	for _, r := range searchResults {
+		resultMap[r.ChunkID] = r
+	}
 
-	if len(filters.Collections) > 0 {
-		for _, collectionId := range filters.Collections {
-			record, err := app.FindRecordById("collections", collectionId)
-			if err != nil {
-				app.Logger().Error("Failed to resolve collection", "id", collectionId, "error", err)
-				continue
+	seen := make(map[string]bool)
+	sources := make([]ChatSource, 0)
+
+	for _, c := range citations {
+		if seen[c.ChunkID] {
+			continue
+		}
+		seen[c.ChunkID] = true
+
+		source := ChatSource{
+			NodeID:     c.ChunkID,
+			UploadID:   c.UploadID,
+			PageNumber: c.PageNumber,
+			Text:       c.Quote,
+		}
+
+		if sr, ok := resultMap[c.ChunkID]; ok {
+			source.Title = sr.Title
+			source.Score = 1.0 / (1.0 + sr.Distance)
+			if source.Text == "" {
+				source.Text = sr.Content
 			}
-			uploadIds := record.GetStringSlice("uploads")
-			for _, uid := range uploadIds {
-				filters.Uploads = append(filters.Uploads, uid)
+		}
+
+		sources = append(sources, source)
+	}
+
+	return sources
+}
+
+func resolveFilterUploadIDs(app *pocketbase.PocketBase, filters *MetadataFilters) []string {
+	uploadIDSet := make(map[string]bool)
+
+	for _, uid := range filters.Uploads {
+		uploadIDSet[uid] = true
+	}
+
+	for _, collectionID := range filters.Collections {
+		record, err := app.FindRecordById("collections", collectionID)
+		if err != nil {
+			app.Logger().Error("[chat] failed to resolve collection", "id", collectionID, "error", err)
+			continue
+		}
+		for _, uid := range record.GetStringSlice("uploads") {
+			uploadIDSet[uid] = true
+		}
+	}
+
+	filterGroups := []string{}
+	filterParams := dbx.Params{}
+	condition := "||"
+	if filters.Condition == "and" {
+		condition = "&&"
+	}
+
+	if len(filters.Tags) > 0 {
+		parts := make([]string, 0, len(filters.Tags))
+		for i, tag := range filters.Tags {
+			key := fmt.Sprintf("tag%d", i)
+			parts = append(parts, fmt.Sprintf("tags ~ {:%s}", key))
+			filterParams[key] = tag
+		}
+		filterGroups = append(filterGroups, "("+strings.Join(parts, " || ")+")")
+	}
+
+	if len(filters.People) > 0 {
+		parts := make([]string, 0, len(filters.People))
+		for i, person := range filters.People {
+			key := fmt.Sprintf("person%d", i)
+			parts = append(parts, fmt.Sprintf("people ~ {:%s}", key))
+			filterParams[key] = person
+		}
+		filterGroups = append(filterGroups, "("+strings.Join(parts, " || ")+")")
+	}
+
+	if len(filters.Publications) > 0 {
+		parts := make([]string, 0, len(filters.Publications))
+		for i, pub := range filters.Publications {
+			key := fmt.Sprintf("pub%d", i)
+			parts = append(parts, fmt.Sprintf("publication = {:%s}", key))
+			filterParams[key] = pub
+		}
+		filterGroups = append(filterGroups, "("+strings.Join(parts, " || ")+")")
+	}
+
+	if len(filters.Types) > 0 {
+		parts := make([]string, 0, len(filters.Types))
+		for i, t := range filters.Types {
+			key := fmt.Sprintf("type%d", i)
+			parts = append(parts, fmt.Sprintf("type = {:%s}", key))
+			filterParams[key] = t
+		}
+		filterGroups = append(filterGroups, "("+strings.Join(parts, " || ")+")")
+	}
+
+	if len(filters.Topics) > 0 {
+		parts := make([]string, 0, len(filters.Topics))
+		for i, topic := range filters.Topics {
+			key := fmt.Sprintf("topic%d", i)
+			parts = append(parts, fmt.Sprintf("topic ~ {:%s}", key))
+			filterParams[key] = topic
+		}
+		filterGroups = append(filterGroups, "("+strings.Join(parts, " || ")+")")
+	}
+
+	if len(filterGroups) > 0 {
+		filterStr := strings.Join(filterGroups, " "+condition+" ")
+		records, err := app.FindRecordsByFilter("uploads", filterStr, "", 0, 0, filterParams)
+		if err != nil {
+			app.Logger().Error("[chat] failed to query uploads for filters",
+				"filter", filterStr,
+				"error", err,
+			)
+		} else {
+			for _, r := range records {
+				uploadIDSet[r.Id] = true
 			}
 		}
 	}
 
-	for _, tag := range filters.Tags {
-		filterList = append(filterList, llama.SearchFilter{
-			Key:      "tag_id",
-			Operator: "==",
-			Value:    tag,
-		})
+	result := make([]string, 0, len(uploadIDSet))
+	for uid := range uploadIDSet {
+		result = append(result, uid)
 	}
 
-	for _, person := range filters.People {
-		filterList = append(filterList, llama.SearchFilter{
-			Key:      "person_id",
-			Operator: "==",
-			Value:    person,
-		})
-	}
+	return result
+}
 
-	for _, pub := range filters.Publications {
-		filterList = append(filterList, llama.SearchFilter{
-			Key:      "publication_id",
-			Operator: "==",
-			Value:    pub,
-		})
-	}
-
-	for _, t := range filters.Types {
-		filterList = append(filterList, llama.SearchFilter{
-			Key:      "type",
-			Operator: "==",
-			Value:    t,
-		})
-	}
-
-	for _, topic := range filters.Topics {
-		filterList = append(filterList, llama.SearchFilter{
-			Key:      "topic_id",
-			Operator: "==",
-			Value:    topic,
-		})
-	}
-
-	for _, upload := range filters.Uploads {
-		filterList = append(filterList, llama.SearchFilter{
-			Key:      "upload_id",
-			Operator: "==",
-			Value:    upload,
-		})
-	}
-
-	if len(filterList) == 0 {
-		return nil
-	}
-
-	condition := "or"
-	if filters.Condition == "and" {
-		condition = "and"
-	}
-
-	return &llama.SearchFilters{
-		Condition: condition,
-		Filters:   filterList,
-	}
+func floatPtr(f float32) *float32 {
+	return &f
 }

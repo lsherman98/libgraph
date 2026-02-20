@@ -33,7 +33,7 @@ func (p *Parser) makeTmpDir(prefix string) (string, error) {
 	return os.MkdirTemp(baseDir, prefix)
 }
 
-func CleanupAllTmp() error {
+func CleanupTmp() error {
 	baseDir := filepath.Join(".", tmpBaseDir)
 	if _, err := os.Stat(baseDir); os.IsNotExist(err) {
 		return nil
@@ -43,14 +43,12 @@ func CleanupAllTmp() error {
 
 func (p *Parser) ParseUpload(upload *core.Record, onPage func(Page) error) (*ParseResult, error) {
 	filename := upload.GetString("file")
-	p.App.Logger().Info("ParseUpload started", "uploadID", upload.Id, "filename", filename)
 
 	if filename == "" {
 		return nil, fmt.Errorf("upload record has no file")
 	}
 
 	ext := strings.ToLower(filepath.Ext(filename))
-	p.App.Logger().Info("ParseUpload file type detected", "ext", ext)
 
 	fsys, err := p.App.NewFilesystem()
 	if err != nil {
@@ -59,7 +57,6 @@ func (p *Parser) ParseUpload(upload *core.Record, onPage func(Page) error) (*Par
 	defer fsys.Close()
 
 	filePath := upload.BaseFilesPath() + "/" + filename
-	p.App.Logger().Info("ParseUpload reading file from storage", "storagePath", filePath)
 
 	blob, err := fsys.GetReader(filePath)
 	if err != nil {
@@ -72,15 +69,13 @@ func (p *Parser) ParseUpload(upload *core.Record, onPage func(Page) error) (*Par
 		return nil, fmt.Errorf("failed to read file bytes: %w", err)
 	}
 
-	p.App.Logger().Info("ParseUpload file read successfully", "sizeBytes", len(fileBytes))
-
 	switch ext {
 	case ".pdf":
 		return p.parsePDF(fileBytes, filename, onPage)
 	case ".epub":
 		return p.parseEPUB(fileBytes, filename, onPage)
 	case ".txt", ".md", ".markdown":
-		return p.parsePlainText(fileBytes, filename, onPage)
+		return p.parsePlainText(fileBytes, onPage)
 	default:
 		return nil, fmt.Errorf("unsupported file type: %s", ext)
 	}
@@ -232,7 +227,7 @@ func (p *Parser) parseEPUB(fileBytes []byte, filename string, onPage func(Page) 
 	return p.parsePDF(pdfBytes, pdfName, onPage)
 }
 
-func (p *Parser) parsePlainText(fileBytes []byte, filename string, onPage func(Page) error) (*ParseResult, error) {
+func (p *Parser) parsePlainText(fileBytes []byte, onPage func(Page) error) (*ParseResult, error) {
 	content := string(fileBytes)
 	if strings.TrimSpace(content) == "" {
 		return nil, fmt.Errorf("file is empty")
@@ -275,7 +270,7 @@ func splitTextIntoPages(text string, maxPageSize int) []string {
 
 		for i := end; i > searchLimit; i-- {
 			if i+1 < totalLen && runes[i] == '\n' && runes[i+1] == '\n' {
-				splitIdx = i + 2 // include the newlines in the previous page
+				splitIdx = i + 2
 				break
 			}
 		}

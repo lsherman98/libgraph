@@ -156,6 +156,7 @@ export type DocumentChunksRecord = {
 	updated: IsoAutoDateString
 	upload: RecordIdString
 	user: RecordIdString
+	vector_id?: number
 }
 
 export enum EdgesTypeOptions {
@@ -282,7 +283,7 @@ export type PreferencesRecord<Treader_settings = unknown, Tui_settings = unknown
 	reader_settings?: null | Treader_settings
 	ui_settings?: null | Tui_settings
 	updated: IsoAutoDateString
-	user?: RecordIdString
+	user: RecordIdString
 	workspace_layout?: null | Tworkspace_layout
 }
 

@@ -3,6 +3,7 @@ import { upload, createPerson, createPublication, createTag, createTopic, create
 import { handleError } from "../utils";
 import { Collections, type Create, type Update } from "../pocketbase-types";
 import type { ChatFilters } from "../types";
+import { queryKeys } from "./queryKeys";
 
 export function useUpload() {
     const queryClient = useQueryClient();
@@ -11,9 +12,10 @@ export function useUpload() {
         mutationFn: upload,
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["uploads"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.uploads.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
         },
-    })
+    });
 }
 
 export function useUpdateUpload() {
@@ -23,12 +25,12 @@ export function useUpdateUpload() {
         mutationFn: ({ id, data }: { id: string; data: Update<Collections.Uploads> }) =>
             updateUpload(id, data),
         onError: handleError,
-        onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({ queryKey: ["uploads"] });
-            queryClient.invalidateQueries({ queryKey: ["upload", variables.id] });
-            queryClient.invalidateQueries({ queryKey: ["graph"] });
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.uploads.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.graph.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
         },
-    })
+    });
 }
 
 export function useDeleteUpload() {
@@ -38,9 +40,10 @@ export function useDeleteUpload() {
         mutationFn: deleteUpload,
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["uploads"] });
-            queryClient.invalidateQueries({ queryKey: ["graph"] });
-            queryClient.invalidateQueries({ queryKey: ["collections"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.uploads.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.graph.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.collections.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
         },
     });
 }
@@ -52,9 +55,9 @@ export function useCreatePerson() {
         mutationFn: createPerson,
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["people"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.people.all });
         },
-    })
+    });
 }
 
 export function useCreatePublication() {
@@ -64,9 +67,9 @@ export function useCreatePublication() {
         mutationFn: createPublication,
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["publications"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.publications.all });
         },
-    })
+    });
 }
 
 export function useCreateTag() {
@@ -76,9 +79,9 @@ export function useCreateTag() {
         mutationFn: createTag,
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["tags"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.tags.all });
         },
-    })
+    });
 }
 
 export function useCreateTopic() {
@@ -88,9 +91,9 @@ export function useCreateTopic() {
         mutationFn: createTopic,
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["topics"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.topics.all });
         },
-    })
+    });
 }
 
 export function useCreateHighlight() {
@@ -99,10 +102,11 @@ export function useCreateHighlight() {
     return useMutation({
         mutationFn: createHighlight,
         onMutate: async (newHighlight) => {
-            await queryClient.cancelQueries({ queryKey: ["highlights", "page", newHighlight.page] });
-            const previousHighlights = queryClient.getQueryData(["highlights", "page", newHighlight.page]);
+            const pageKey = queryKeys.highlights.byPage(newHighlight.page as string);
+            await queryClient.cancelQueries({ queryKey: pageKey });
+            const previousHighlights = queryClient.getQueryData(pageKey);
 
-            queryClient.setQueryData(["highlights", "page", newHighlight.page], (old: any[]) => {
+            queryClient.setQueryData(pageKey, (old: any[]) => {
                 const optimisticHighlight = {
                     collectionId: 'highlights',
                     collectionName: Collections.Highlights,
@@ -114,17 +118,17 @@ export function useCreateHighlight() {
                 return old ? [...old, optimisticHighlight] : [optimisticHighlight];
             });
 
-            return { previousHighlights };
+            return { previousHighlights, pageKey };
         },
-        onError: (err, newHighlight, context) => {
+        onError: (err, _newHighlight, context) => {
             handleError(err);
             if (context?.previousHighlights) {
-                queryClient.setQueryData(["highlights", "page", newHighlight.page], context.previousHighlights);
+                queryClient.setQueryData(context.pageKey, context.previousHighlights);
             }
         },
-        onSuccess: (data) => {
-            queryClient.invalidateQueries({ queryKey: ["highlights"] });
-            queryClient.invalidateQueries({ queryKey: ["highlights", "page", data.page] });
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.highlights.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
         },
     });
 }
@@ -137,7 +141,8 @@ export function useUpdateHighlight() {
             updateHighlight(id, data),
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["highlights"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.highlights.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
         },
     });
 }
@@ -149,7 +154,8 @@ export function useDeleteHighlight() {
         mutationFn: deleteHighlight,
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["highlights"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.highlights.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
         },
     });
 }
@@ -161,7 +167,8 @@ export function useCreateBookmark() {
         mutationFn: createBookmark,
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.bookmarks.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
         },
     });
 }
@@ -174,7 +181,8 @@ export function useUpdateBookmark() {
             updateBookmark(id, data),
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.bookmarks.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
         },
     });
 }
@@ -186,7 +194,8 @@ export function useDeleteBookmark() {
         mutationFn: deleteBookmark,
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.bookmarks.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
         },
     });
 }
@@ -198,7 +207,8 @@ export function useCreateNote() {
         mutationFn: createNote,
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["notes"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.notes.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
         },
     });
 }
@@ -211,7 +221,8 @@ export function useUpdateNote() {
             updateNote(id, data),
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["notes"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.notes.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
         },
     });
 }
@@ -223,7 +234,8 @@ export function useDeleteNote() {
         mutationFn: deleteNote,
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["notes"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.notes.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
         },
     });
 }
@@ -235,7 +247,7 @@ export function useCreateWritingProject() {
         mutationFn: createWritingProject,
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["writingProjects"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.writingProjects.all });
         },
     });
 }
@@ -247,9 +259,8 @@ export function useUpdateWritingProject() {
         mutationFn: ({ id, data }: { id: string; data: Update<Collections.WritingProjects> }) =>
             updateWritingProject(id, data),
         onError: handleError,
-        onSuccess: (_data, variables) => {
-            queryClient.invalidateQueries({ queryKey: ["writingProjects"] });
-            queryClient.invalidateQueries({ queryKey: ["writingProject", variables.id] });
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.writingProjects.all });
         },
     });
 }
@@ -261,7 +272,7 @@ export function useDeleteWritingProject() {
         mutationFn: deleteWritingProject,
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["writingProjects"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.writingProjects.all });
         },
     });
 }
@@ -273,7 +284,7 @@ export function useCreateCollection() {
         mutationFn: createCollection,
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["collections"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.collections.all });
         },
     });
 }
@@ -286,7 +297,7 @@ export function useUpdateCollection() {
             updateCollection(id, data),
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["collections"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.collections.all });
         },
     });
 }
@@ -298,7 +309,7 @@ export function useDeleteCollection() {
         mutationFn: deleteCollection,
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["collections"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.collections.all });
         },
     });
 }
@@ -310,7 +321,7 @@ export function useCreateChat() {
         mutationFn: createChat,
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["chats"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.chats.all });
         },
     });
 }
@@ -323,7 +334,7 @@ export function useUpdateChat() {
             updateChat(id, data),
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["chats"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.chats.all });
         },
     });
 }
@@ -335,7 +346,7 @@ export function useDeleteChat() {
         mutationFn: deleteChat,
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["chats"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.chats.all });
         },
     });
 }
@@ -347,7 +358,7 @@ export function useCreateMessage() {
         mutationFn: createMessage,
         onError: handleError,
         onSuccess: (data) => {
-            queryClient.invalidateQueries({ queryKey: ["messages", data.chat] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.messages.byChat(data.chat) });
         },
     });
 }
@@ -382,9 +393,10 @@ export function useSendChatMessage({
             setInput("");
 
             if (activeChatId) {
-                await queryClient.cancelQueries({ queryKey: ["messages", activeChatId] });
-                const previousMessages = queryClient.getQueryData(["messages", activeChatId]);
-                queryClient.setQueryData(["messages", activeChatId], (old: any[] | null) => [
+                const messagesKey = queryKeys.messages.byChat(activeChatId);
+                await queryClient.cancelQueries({ queryKey: messagesKey });
+                const previousMessages = queryClient.getQueryData(messagesKey);
+                queryClient.setQueryData(messagesKey, (old: any[] | null) => [
                     ...(old || []),
                     {
                         id: "optimistic-user-" + Date.now(),
@@ -411,12 +423,15 @@ export function useSendChatMessage({
                 setActiveChatId(data.chat_id);
             }
 
-            queryClient.invalidateQueries({ queryKey: ["messages", data.chat_id] });
-            queryClient.invalidateQueries({ queryKey: ["chats"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.messages.byChat(data.chat_id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.chats.all });
         },
         onError: (_error, _message, context) => {
             if (context?.chatId && context?.previousMessages) {
-                queryClient.setQueryData(["messages", context.chatId], context.previousMessages);
+                queryClient.setQueryData(
+                    queryKeys.messages.byChat(context.chatId),
+                    context.previousMessages,
+                );
             }
         },
     });
@@ -426,11 +441,11 @@ export function useUpdatePreferences() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (data: Partial<Create<Collections.Preferences>>) =>
+        mutationFn: (data: Create<Collections.Preferences>) =>
             upsertPreferences(data),
         onError: handleError,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ["preferences"] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.preferences.all });
         },
     });
 }
@@ -443,7 +458,7 @@ export function useUpdateReadingProgress() {
             upsertReadingProgress(uploadId, data),
         onError: handleError,
         onSuccess: (_data, variables) => {
-            queryClient.invalidateQueries({ queryKey: ["readingProgress", variables.uploadId] });
+            queryClient.invalidateQueries({ queryKey: queryKeys.readingProgress.byUpload(variables.uploadId) });
         },
     });
 }

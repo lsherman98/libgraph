@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"os"
 	"strings"
@@ -11,19 +12,48 @@ import (
 	fts "github.com/lsherman98/libgraph/pocketbase/pb_hooks/full_text_search"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/graph"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/uploads"
+	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/vector_search"
+	"github.com/mattn/go-sqlite3"
 
-	// _ "github.com/lsherman98/libgraph/pocketbase/migrations"
+	_ "github.com/lsherman98/libgraph/pocketbase/migrations"
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/plugins/migratecmd"
 )
 
+func init() {
+	sql.Register("pb_sqlite3",
+		&sqlite3.SQLiteDriver{
+			ConnectHook: func(conn *sqlite3.SQLiteConn) error {
+				_, err := conn.Exec(`
+                    PRAGMA busy_timeout       = 10000;
+                    PRAGMA journal_mode       = WAL;
+                    PRAGMA journal_size_limit = 200000000;
+                    PRAGMA synchronous        = NORMAL;
+                    PRAGMA foreign_keys       = ON;
+                    PRAGMA temp_store         = MEMORY;
+                    PRAGMA cache_size         = -16000;
+                `, nil)
+
+				return err
+			},
+		},
+	)
+
+	dbx.BuilderFuncMap["pb_sqlite3"] = dbx.BuilderFuncMap["sqlite3"]
+}
+
 func main() {
-	app := pocketbase.New()
+	app := pocketbase.NewWithConfig(pocketbase.Config{
+		DBConnect: func(dbPath string) (*dbx.DB, error) {
+			return dbx.Open("pb_sqlite3", dbPath)
+		},
+	})
 
 	if err := godotenv.Load(); err != nil {
-		log.Fatal("Error loading .env file")
+		log.Println("No .env file found, using environment variables")
 	}
 
 	// if err := api.Init(app); err != nil {
@@ -40,6 +70,10 @@ func main() {
 
 	if err := uploads.Init(app); err != nil {
 		log.Fatal("Failed to initialize Uploads hooks: ", err)
+	}
+
+	if err := vector_search.Init(app); err != nil {
+		log.Fatal("Failed to initialize Vector Search: ", err)
 	}
 
 	if err := graph.Init(app); err != nil {
@@ -64,7 +98,7 @@ func main() {
 		Automigrate: isGoRun,
 	})
 
-	parser.CleanupAllTmp()
+	parser.CleanupTmp()
 
 	if err := app.Start(); err != nil {
 		log.Fatal(err)

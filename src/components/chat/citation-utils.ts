@@ -1,6 +1,6 @@
 import type { ChatSource } from "@/lib/types";
 
-const CITATION_REGEX = /\[citation:([a-f0-9-]+)\]/g;
+const CITATION_REGEX = /\[citation:([a-z0-9]+)\]/g;
 
 export function buildCitationMap(content: string, sources: ChatSource[]): Map<string, number> {
     const map = new Map<string, number>();

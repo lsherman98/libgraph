@@ -49,10 +49,10 @@ function SourceCard({ source, rank, onSourceClick }: { source: ChatSource; rank:
           <div className="flex items-center gap-2">
             <button
               onClick={() => onSourceClick?.(source)}
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-foreground hover:text-primary transition-colors cursor-pointer text-left truncate"
+              className="inline-flex items-start gap-1.5 text-sm font-medium text-foreground hover:text-primary transition-colors cursor-pointer text-left"
             >
-              <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <span className="truncate">{source.title || "Untitled Document"}</span>
+              <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground mt-0.5" />
+              <span className="break-words min-w-0">{source.title || "Untitled Document"}</span>
               <ExternalLink className="h-3 w-3 shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" />
             </button>
           </div>

@@ -22,7 +22,7 @@ export function CitationContent({ content, sources, citationMap, onSourceClick }
 
   const parts = useMemo(() => {
     const result: { type: "text" | "citation"; value: string }[] = [];
-    const regex = /\[citation:([a-f0-9-]+)\]/g;
+    const regex = /\[citation:([a-z0-9]+)\]/g;
     let lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = regex.exec(content)) !== null) {
@@ -65,7 +65,8 @@ export function CitationContent({ content, sources, citationMap, onSourceClick }
                   </PopoverTrigger>
                 </TooltipTrigger>
                 <TooltipContent side="top" className="text-xs">
-                  {source?.title || "Document"}{source?.page_number ? ` · p.${source.page_number}` : ""}
+                  {source?.title || "Document"}
+                  {source?.page_number ? ` · p.${source.page_number}` : ""}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

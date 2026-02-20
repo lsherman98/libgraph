@@ -236,19 +236,19 @@ export const getNodeByRecord = async (recordId: string, type: NodesTypeOptions) 
 }
 
 export const getEdges = async (filters?: { sourceId?: string; targetId?: string; type?: string }) => {
-    let filterStr = '';
+    const filterParts: string[] = [];
     if (filters?.sourceId) {
-        filterStr += ` && source=${filters.sourceId}`;
+        filterParts.push(`source = "${filters.sourceId}"`);
     }
     if (filters?.targetId) {
-        filterStr += ` && target=${filters.targetId}`;
+        filterParts.push(`target = "${filters.targetId}"`);
     }
     if (filters?.type) {
-        filterStr += ` && type=${filters.type}`;
+        filterParts.push(`type = "${filters.type}"`);
     }
 
     return await pb.collection(Collections.Edges).getFullList({
-        filter: filterStr,
+        filter: filterParts.length > 0 ? filterParts.join(' && ') : undefined,
         sort: '-created',
         expand: 'source,target'
     });

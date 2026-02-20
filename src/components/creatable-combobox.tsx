@@ -89,7 +89,7 @@ export function CreatableCombobox({
                         : "opacity-0",
                     )}
                   />
-                  <span className="min-w-0 break-words whitespace-normal">{option.label}</span>
+                  <span className="min-w-0 wrap-break-word whitespace-normal">{option.label}</span>
                 </CommandItem>
               ))}
             </CommandGroup>
