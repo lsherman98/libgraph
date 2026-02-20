@@ -359,13 +359,27 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 			e.App.Logger().Error("Failed to delete node and edges for upload:", "error", err)
 		}
 
-		llamaFileId := e.Record.GetString("llama_file_id")
-		if llamaFileId != "" {
-			llamaClient, err := llama.New(app)
-			if err != nil {
-				e.App.Logger().Error("Failed to create LlamaIndex client:", "error", err)
-			} else if err := llamaClient.DeletePipelineFile(llamaFileId); err != nil {
-				e.App.Logger().Error("Failed to delete document from pipeline:", "error", err, "llama_file_id", llamaFileId)
+		pages, err := app.FindRecordsByFilter(
+			collections.Pages,
+			"upload = {:uploadId}",
+			"",
+			0,
+			0,
+			dbx.Params{"uploadId": e.Record.Id},
+		)
+		if err == nil && len(pages) > 0 {
+			llamaClient, llamaErr := llama.New(app)
+			if llamaErr != nil {
+				e.App.Logger().Error("Failed to create LlamaIndex client for page cleanup:", "error", llamaErr)
+			} else {
+				for _, page := range pages {
+					llamaFileId := page.GetString("llama_file_id")
+					if llamaFileId != "" {
+						if err := llamaClient.DeletePipelineFile(llamaFileId); err != nil {
+							e.App.Logger().Error("Failed to delete page from pipeline:", "error", err, "llama_file_id", llamaFileId, "page", page.GetInt("page"))
+						}
+					}
+				}
 			}
 		}
 

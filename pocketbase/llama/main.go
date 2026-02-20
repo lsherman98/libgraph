@@ -15,47 +15,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/lsherman98/libgraph/pocketbase/collections"
 	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/core"
 )
-
-func buildProdUrl(record *core.Record, token string) string {
-	return fmt.Sprintf(
-		"test.com/%s/%s/%s?token=%s",
-		collections.Uploads,
-		record.Id,
-		record.GetString("file"),
-		token,
-	)
-}
-
-func buildS3Url(collectionId, recordId, filename string) string {
-	return fmt.Sprintf(
-		"https://storage.googleapis.com/%s/%s/%s/%s",
-		"libgraph-development",
-		collectionId,
-		recordId,
-		filename,
-	)
-}
-
-func buildUrl(app *pocketbase.PocketBase, collectionId, recordId, filename, token string) string {
-	dev := os.Getenv("DEV")
-
-	var url string
-	if dev == "true" {
-		url = buildS3Url(collectionId, recordId, filename)
-	} else {
-		record, err := app.FindRecordById(collections.Uploads, recordId)
-		if err != nil {
-			return ""
-		}
-
-		url = buildProdUrl(record, token)
-	}
-	return url
-}
 
 const (
 	cloudBaseURL = "https://api.cloud.llamaindex.ai"
@@ -106,53 +67,6 @@ func New(app *pocketbase.PocketBase) (*LlamaClient, error) {
 		PipelineID:     pipelineID,
 		App:            app,
 	}, nil
-}
-
-func (c *LlamaClient) Parse(upload *core.Record, token string) (*ParseResponse, error) {
-	params := url.Values{}
-	params.Add("project_id", c.ProjectID)
-	params.Add("organization_id", c.OrganizationID)
-
-	url := buildUrl(c.App, upload.Collection().Id, upload.Id, upload.GetString("file"), token)
-
-	var response ParseResponse
-	body := &ParseRequest{
-		Tier:    "cost_effective",
-		Version: "latest",
-		OutputOptions: &OutputOptions{
-			Markdown: &MarkdownOptions{
-				AnnotateLinks: true,
-			},
-		},
-		ProcessingOptions: &ProcessingOptions{
-			Ignore: &IgnoreOptions{
-				IgnoreDiagonalText: true,
-				IgnoreTextInImage:  true,
-				IgnoreHiddenText:   true,
-			},
-		},
-		SourceURL: url,
-	}
-
-	if err := c.Do(context.Background(), http.MethodPost, "/api/v2/parse", params, body, &response); err != nil {
-		return nil, err
-	}
-
-	return &response, nil
-}
-
-func (c *LlamaClient) GetParseJob(jobId string) (*ParseJobResponse, error) {
-	params := url.Values{}
-	params.Add("project_id", c.ProjectID)
-	params.Add("organization_id", c.OrganizationID)
-	params.Add("expand", "markdown")
-
-	var response ParseJobResponse
-	if err := c.Do(context.Background(), http.MethodGet, path.Join("/api/v2/parse", jobId), params, nil, &response); err != nil {
-		return nil, err
-	}
-
-	return &response, nil
 }
 
 func (c *LlamaClient) UploadFileContent(name string, content []byte, externalFileID string) (*UploadFileContentResponse, error) {
@@ -209,28 +123,6 @@ func (c *LlamaClient) UploadFileContent(name string, content []byte, externalFil
 	var response UploadFileContentResponse
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
 		return nil, fmt.Errorf("failed to decode upload response: %w", err)
-	}
-
-	return &response, nil
-}
-
-func (c *LlamaClient) UploadFileFromURL(upload *core.Record, token string) (*UploadFileFromURLResponse, error) {
-	params := url.Values{}
-	params.Add("project_id", c.ProjectID)
-
-	url := buildUrl(c.App, upload.Collection().Id, upload.Id, upload.GetString("file"), token)
-
-	body := &UploadFileFromURLRequest{
-		Url:             url,
-		Name:            upload.GetString("file"),
-		ExternalFileID:  upload.Id,
-		FollowRedirects: true,
-		VerifySsl:       true,
-	}
-
-	var response UploadFileFromURLResponse
-	if err := c.Do(context.Background(), http.MethodPut, "/api/v1/files/upload_from_url", params, body, &response); err != nil {
-		return nil, err
 	}
 
 	return &response, nil

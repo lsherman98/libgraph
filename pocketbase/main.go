@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/joho/godotenv"
+	"github.com/lsherman98/libgraph/pocketbase/parser"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/chat"
 	fts "github.com/lsherman98/libgraph/pocketbase/pb_hooks/full_text_search"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/graph"
@@ -62,6 +63,8 @@ func main() {
 	migratecmd.MustRegister(app, app.RootCmd, migratecmd.Config{
 		Automigrate: isGoRun,
 	})
+
+	parser.CleanupAllTmp()
 
 	if err := app.Start(); err != nil {
 		log.Fatal(err)

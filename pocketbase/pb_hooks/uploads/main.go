@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/lsherman98/libgraph/pocketbase/collections"
 	"github.com/lsherman98/libgraph/pocketbase/llama"
 	"github.com/lsherman98/libgraph/pocketbase/mistral"
+	"github.com/lsherman98/libgraph/pocketbase/parser"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -18,24 +18,18 @@ import (
 
 func Init(app *pocketbase.PocketBase) error {
 	app.OnRecordCreateRequest(collections.Uploads).BindFunc(func(e *core.RecordRequestEvent) error {
-		e.Next()
+		if err := e.Next(); err != nil {
+			return err
+		}
 
 		upload := e.Record
 		filename := upload.GetString("file")
 
-		token, err := e.Auth.NewFileToken()
-		if err != nil {
-			e.App.Logger().Error("Failed to create file token:", "error", err)
-			return err
-		}
-
 		if mistral.IsAudioFile(filename) {
-			handleAudioUpload(app, e, upload)
-			return e.Next()
+			return handleAudioUpload(app, e, upload)
 		}
 
-		handleDocumentUpload(app, e, upload, token)
-		return e.Next()
+		return handleDocumentUpload(app, e, upload)
 	})
 
 	return nil
@@ -128,96 +122,34 @@ func handleAudioUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent, u
 			}
 		}
 
-		llamaClient, llamaErr := llama.New(app)
-		if llamaErr != nil {
-			e.App.Logger().Error("failed to create LlamaIndex client for audio transcript", "uploadID", uploadID, "error", llamaErr)
-		} else {
-			transcriptFilename := fmt.Sprintf("%s_transcript.md", title)
-			uploadRes, uploadErr := llamaClient.UploadFileContent(transcriptFilename, []byte(markdown), upload.Id)
-			if uploadErr != nil {
-				e.App.Logger().Error("failed to upload transcript to LlamaIndex Cloud", "uploadID", uploadID, "error", uploadErr)
-			} else {
-				metadata := map[string]any{
-					"upload_id":      upload.Id,
-					"title":          title,
-					"user_id":        upload.GetString("user"),
-					"topic_id":       upload.GetString("topic"),
-					"type":           upload.GetString("type"),
-					"publication_id": upload.GetString("publication"),
-				}
-
-				_, pipelineErr := llamaClient.AddFilesToPipeline(uploadRes.ID, metadata)
-				if pipelineErr != nil {
-					app.Logger().Error("failed to add transcript to LlamaIndex pipeline", "uploadID", uploadID, "error", pipelineErr)
-				} else {
-					upload.Set("llama_file_id", uploadRes.ID)
-					if saveErr := app.Save(upload); saveErr != nil {
-						app.Logger().Error("failed to save llama_file_id on upload", "uploadID", uploadID, "error", saveErr)
-					}
-				}
-			}
-		}
+		// Upload transcript page to LlamaIndex pipeline
+		// uploadPageToPipeline(app, upload, newPage, markdown, title, 1)
 	})
 
-	return e.Next()
+	return nil
 }
 
-func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent, upload *core.Record, token string) error {
+func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent, upload *core.Record) error {
 	title := upload.GetString("title")
+	uploadID := upload.Id
 
-	llamaClient, err := llama.New(app)
-	if err != nil {
-		return err
-	}
-
-	res, err := llamaClient.Parse(upload, token)
-	if err != nil {
-		e.App.Logger().Error("Failed to start parse job:", "error", err)
-		upload.Set("status", "FAILED")
-		if err := app.Save(upload); err != nil {
-			e.App.Logger().Error("Failed to update upload status to FAILED:", "error", err)
-		}
-		return err
-	}
+	docParser := parser.New(app)
 
 	upload.Set("status", "PROCESSING")
 	if err := app.Save(upload); err != nil {
 		e.App.Logger().Error("Failed to update upload status:", "error", err)
 	}
 
-	jobId := res.ID
-
 	routine.FireAndForget(func() {
-		jobRes, err := llamaClient.GetParseJob(jobId)
+		pagesCollection, err := app.FindCollectionByNameOrId(collections.Pages)
 		if err != nil {
-			e.App.Logger().Error("Failed to get parse job status:", "error", err)
-		}
-
-		status := jobRes.Job.Status
-		for status == "RUNNING" || status == "PENDING" {
-			time.Sleep(5 * time.Second)
-			jobRes, err = llamaClient.GetParseJob(jobId)
-			if err != nil {
-				e.App.Logger().Error("Failed to get parse job status:", "error", err)
-			}
-			status = jobRes.Job.Status
-		}
-
-		if status != "SUCCESS" && status != "COMPLETED" {
-			e.App.Logger().Error("LlamaIndex Parse failed", "status", status)
+			e.App.Logger().Error("Failed to find pages collection:", "error", err)
 			upload.Set("status", "FAILED")
 			app.Save(upload)
 			return
 		}
 
-		pages := jobRes.Markdown.Pages
-
-		pagesCollection, err := app.FindCollectionByNameOrId(collections.Pages)
-		if err != nil {
-			e.App.Logger().Error("Failed to find pages collection:", "error", err)
-		}
-
-		for _, page := range pages {
+		onPage := func(page parser.Page) error {
 			newPage := core.NewRecord(pagesCollection)
 			newPage.Set("upload", upload.Id)
 			newPage.Set("page", page.PageNumber)
@@ -225,16 +157,28 @@ func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent
 
 			f, err := filesystem.NewFileFromBytes([]byte(page.Markdown), fmt.Sprintf("%s_page_%d.md", title, page.PageNumber))
 			if err != nil {
-				e.App.Logger().Error("Failed to create file from markdown bytes:", "error", err)
+				e.App.Logger().Error("Failed to create file from markdown bytes:", "error", err, "page", page.PageNumber)
+				return err
 			}
 			newPage.Set("markdown", f)
 			if err = app.Save(newPage); err != nil {
-				e.App.Logger().Error("Failed to save new page record:", "error", err)
-			}
+				e.App.Logger().Error("Failed to save new page record:", "error", err, "page", page.PageNumber)
+				return err
+			} 
+
+			return nil
+		}
+
+		result, err := docParser.ParseUpload(upload, onPage)
+		if err != nil {
+			e.App.Logger().Error("Document parsing failed", "uploadID", uploadID, "error", err)
+			upload.Set("status", "FAILED")
+			app.Save(upload)
+			return
 		}
 
 		upload.Set("status", "SUCCESS")
-		upload.Set("num_pages", len(pages))
+		upload.Set("num_pages", len(result.Pages))
 		if err := app.Save(upload); err != nil {
 			e.App.Logger().Error("Failed to update upload status to SUCCESS:", "error", err)
 		}
@@ -243,14 +187,14 @@ func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent
 		if chunkErr != nil {
 			e.App.Logger().Error("Failed to find document_chunks collection:", "error", chunkErr)
 		} else {
-			for i, page := range pages {
+			for _, page := range result.Pages {
 				pageRecord, err := app.FindFirstRecordByFilter(
 					collections.Pages,
 					"upload = {:uploadId} && page = {:pageNum}",
 					dbx.Params{"uploadId": upload.Id, "pageNum": page.PageNumber},
 				)
 				if err != nil {
-					e.App.Logger().Error("Failed to find page record for chunking:", "error", err, "pageIndex", i)
+					e.App.Logger().Error("Failed to find page record for chunking:", "error", err, "page", page.PageNumber)
 					continue
 				}
 
@@ -274,34 +218,69 @@ func handleDocumentUpload(app *pocketbase.PocketBase, e *core.RecordRequestEvent
 			}
 		}
 
-		uploadRes, err := llamaClient.UploadFileFromURL(upload, token)
-		if err != nil {
-			e.App.Logger().Error("Failed to upload file to Llama Cloud:", "error", err)
-			return
-		}
-
-		metadata := map[string]any{
-			"upload_id":      upload.Id,
-			"title":          title,
-			"user_id":        upload.GetString("user"),
-			"topic_id":       upload.GetString("topic"),
-			"type":           upload.GetString("type"),
-			"publication_id": upload.GetString("publication"),
-		}
-
-		_, err = llamaClient.AddFilesToPipeline(uploadRes.ID, metadata)
-		if err != nil {
-			e.App.Logger().Error("Failed to add file to pipeline:", "error", err)
-			return
-		}
-
-		upload.Set("llama_file_id", uploadRes.ID)
-		if err := app.Save(upload); err != nil {
-			e.App.Logger().Error("Failed to save llama_file_id on upload:", "error", err)
-		}
+		// Upload each page to LlamaIndex pipeline
+		// llamaClient, llamaErr := llama.New(app)
+		// if llamaErr != nil {
+		// 	e.App.Logger().Error("failed to create LlamaIndex client for pipeline upload", "uploadID", uploadID, "error", llamaErr)
+		// } else {
+		// 	for _, page := range result.Pages {
+		// 		pageRecord, err := app.FindFirstRecordByFilter(
+		// 			collections.Pages,
+		// 			"upload = {:uploadId} && page = {:pageNum}",
+		// 			dbx.Params{"uploadId": upload.Id, "pageNum": page.PageNumber},
+		// 		)
+		// 		if err != nil {
+		// 			e.App.Logger().Error("failed to find page record for pipeline upload", "error", err, "page", page.PageNumber)
+		// 			continue
+		// 		}
+		//
+		// 		uploadPageToPipelineWithClient(app, llamaClient, upload, pageRecord, page.Markdown, title, page.PageNumber)
+		// 	}
+		// }
 	})
 
-	return e.Next()
+	return nil
+}
+
+func uploadPageToPipeline(app *pocketbase.PocketBase, upload *core.Record, pageRecord *core.Record, markdown string, title string, pageNumber int) {
+	llamaClient, err := llama.New(app)
+	if err != nil {
+		app.Logger().Error("failed to create LlamaIndex client for page pipeline upload", "uploadID", upload.Id, "error", err)
+		return
+	}
+	uploadPageToPipelineWithClient(app, llamaClient, upload, pageRecord, markdown, title, pageNumber)
+}
+
+func uploadPageToPipelineWithClient(app *pocketbase.PocketBase, llamaClient *llama.LlamaClient, upload *core.Record, pageRecord *core.Record, markdown string, title string, pageNumber int) {
+	filename := fmt.Sprintf("%s_page_%d.md", title, pageNumber)
+
+	uploadRes, err := llamaClient.UploadFileContent(filename, []byte(markdown), pageRecord.Id)
+	if err != nil {
+		app.Logger().Error("failed to upload page to LlamaIndex Cloud", "uploadID", upload.Id, "page", pageNumber, "error", err)
+		return
+	}
+
+	metadata := map[string]any{
+		"upload_id":      upload.Id,
+		"page_id":        pageRecord.Id,
+		"page_number":    pageNumber,
+		"title":          title,
+		"user_id":        upload.GetString("user"),
+		"topic_id":       upload.GetString("topic"),
+		"type":           upload.GetString("type"),
+		"publication_id": upload.GetString("publication"),
+	}
+
+	_, pipelineErr := llamaClient.AddFilesToPipeline(uploadRes.ID, metadata)
+	if pipelineErr != nil {
+		app.Logger().Error("failed to add page to LlamaIndex pipeline", "uploadID", upload.Id, "page", pageNumber, "error", pipelineErr)
+		return
+	}
+
+	pageRecord.Set("llama_file_id", uploadRes.ID)
+	if saveErr := app.Save(pageRecord); saveErr != nil {
+		app.Logger().Error("failed to save llama_file_id on page", "uploadID", upload.Id, "page", pageNumber, "error", saveErr)
+	}
 }
 
 func chunkMarkdown(markdown string) []string {
