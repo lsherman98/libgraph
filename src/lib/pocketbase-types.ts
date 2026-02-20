@@ -252,6 +252,7 @@ export type NotesRecord = {
 export type PagesRecord = {
 	created: IsoAutoDateString
 	id: string
+	llama_file_id?: string
 	markdown: FileNameString
 	page: number
 	updated: IsoAutoDateString

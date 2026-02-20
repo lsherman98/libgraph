@@ -54,9 +54,15 @@ function RouteComponent() {
   const createTopicMutation = useCreateTopic();
 
   const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac", ".wma", ".webm", ".mp4"]);
+  const DOCUMENT_EXTENSIONS = new Set([".pdf", ".epub", ".txt", ".md", ".markdown"]);
+  const ALLOWED_EXTENSIONS = new Set([...AUDIO_EXTENSIONS, ...DOCUMENT_EXTENSIONS]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    const newFiles = acceptedFiles.map((file) => {
+    const filtered = acceptedFiles.filter((file) => {
+      const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+      return ALLOWED_EXTENSIONS.has(ext);
+    });
+    const newFiles = filtered.map((file) => {
       const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
       const detectedType = AUDIO_EXTENSIONS.has(ext) ? UploadsTypeOptions.podcast : UploadsTypeOptions.book;
       return {
@@ -74,7 +80,18 @@ function RouteComponent() {
     setFiles((prev) => [...prev, ...newFiles]);
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({ onDrop, noClick: true });
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+    onDrop,
+    noClick: true,
+    accept: {
+      "application/pdf": [".pdf"],
+      "application/epub+zip": [".epub"],
+      "text/plain": [".txt"],
+      "text/markdown": [".md", ".markdown"],
+      "audio/*": [".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac", ".wma", ".webm"],
+      "video/mp4": [".mp4"],
+    },
+  });
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -174,10 +191,7 @@ function RouteComponent() {
             <Button variant="outline" size="sm" onClick={open}>
               <Plus className="mr-1 h-4 w-4" /> Add Files
             </Button>
-            <Button
-              onClick={handleUploadAll}
-              disabled={uploadMutation.isPending || files.every((f) => f.status === "SUCCESS")}
-            >
+            <Button onClick={handleUploadAll} disabled={uploadMutation.isPending || files.every((f) => f.status === "SUCCESS")}>
               {uploadMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Upload {files.filter((f) => f.status === "PENDING").length} Files
             </Button>
@@ -195,7 +209,7 @@ function RouteComponent() {
           <div className="flex flex-col items-center gap-2">
             <Upload className="h-10 w-10 text-muted-foreground" />
             <p className="text-lg font-medium">Drop files here or click to select</p>
-            <p className="text-sm text-muted-foreground">Supports Text, PDFs, Markdown, eBooks, and audio files.</p>
+            <p className="text-sm text-muted-foreground">Supports PDFs, EPUBs, Text, Markdown, and audio files.</p>
           </div>
         </div>
       )}
@@ -207,9 +221,7 @@ function RouteComponent() {
               <div className="flex items-center gap-2 px-4 py-2 border-b bg-muted/30">
                 <Checkbox checked={allSelected} onCheckedChange={toggleAll} />
                 <span className="text-xs text-muted-foreground">
-                  {selectedIds.size > 0
-                    ? `${selectedIds.size} selected — edits to any selected file apply to all`
-                    : "Select files for bulk editing"}
+                  {selectedIds.size > 0 ? `${selectedIds.size} selected — edits to any selected file apply to all` : "Select files for bulk editing"}
                 </span>
               </div>
             )}
@@ -218,11 +230,7 @@ function RouteComponent() {
                 <div key={file.id} className={`p-4 space-y-3 ${selectedIds.has(file.id) ? "bg-accent/40" : ""}`}>
                   <div className="flex items-center gap-2">
                     {file.status === "PENDING" && (
-                      <Checkbox
-                        checked={selectedIds.has(file.id)}
-                        onCheckedChange={() => toggleSelected(file.id)}
-                        className="shrink-0"
-                      />
+                      <Checkbox checked={selectedIds.has(file.id)} onCheckedChange={() => toggleSelected(file.id)} className="shrink-0" />
                     )}
                     <div className="p-1.5 bg-muted rounded shrink-0">
                       <FileIcon className="h-4 w-4" />
@@ -233,10 +241,7 @@ function RouteComponent() {
                       placeholder="Title"
                       className="h-8 text-sm flex-1 min-w-0"
                     />
-                    <Select
-                      value={file.type}
-                      onValueChange={(val) => updateFile(file.id, { type: val as UploadsTypeOptions })}
-                    >
+                    <Select value={file.type} onValueChange={(val) => updateFile(file.id, { type: val as UploadsTypeOptions })}>
                       <SelectTrigger className="h-8 text-sm w-25 shrink-0">
                         <SelectValue placeholder="Type" />
                       </SelectTrigger>
@@ -259,9 +264,7 @@ function RouteComponent() {
                           <X className="h-4 w-4" />
                         </Button>
                       )}
-                      {file.status === "UPLOADING" && (
-                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                      )}
+                      {file.status === "UPLOADING" && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
                       {file.status === "SUCCESS" && <CheckCircle className="h-5 w-5 text-green-500" />}
                       {file.status === "ERROR" && <AlertCircle className="h-5 w-5 text-red-500" />}
                     </div>
@@ -275,17 +278,13 @@ function RouteComponent() {
                         className="h-8 text-sm flex-1"
                         isMulti
                         onSelect={(val) => {
-                          const newSubjects = file.subjects.includes(val)
-                            ? file.subjects.filter((s) => s !== val)
-                            : [...file.subjects, val];
+                          const newSubjects = file.subjects.includes(val) ? file.subjects.filter((s) => s !== val) : [...file.subjects, val];
                           updateFile(file.id, { subjects: newSubjects });
                         }}
                         onCreate={(name) => {
-                          createPersonMutation
-                            .mutateAsync({ name, type: PeopleTypeOptions.author, user: getUserId() })
-                            .then((record) => {
-                              updateFile(file.id, { subjects: [...file.subjects, record.id] });
-                            });
+                          createPersonMutation.mutateAsync({ name, type: PeopleTypeOptions.author, user: getUserId() }).then((record) => {
+                            updateFile(file.id, { subjects: [...file.subjects, record.id] });
+                          });
                         }}
                         placeholder="Authors..."
                         emptyText="No authors found."
@@ -315,9 +314,7 @@ function RouteComponent() {
                         className="h-8 text-sm flex-1"
                         isMulti
                         onSelect={(val) => {
-                          const newTags = file.tags.includes(val)
-                            ? file.tags.filter((t) => t !== val)
-                            : [...file.tags, val];
+                          const newTags = file.tags.includes(val) ? file.tags.filter((t) => t !== val) : [...file.tags, val];
                           updateFile(file.id, { tags: newTags });
                         }}
                         onCreate={(title) => {
@@ -337,9 +334,7 @@ function RouteComponent() {
                         className="h-8 text-sm flex-1"
                         isMulti
                         onSelect={(val) => {
-                          const newTopics = file.topics.includes(val)
-                            ? file.topics.filter((t) => t !== val)
-                            : [...file.topics, val];
+                          const newTopics = file.topics.includes(val) ? file.topics.filter((t) => t !== val) : [...file.topics, val];
                           updateFile(file.id, { topics: newTopics });
                         }}
                         onCreate={(title) => {
@@ -352,10 +347,7 @@ function RouteComponent() {
                       />
                     </div>
                   </div>
-                  <div
-                    className={`text-xs text-muted-foreground truncate ${file.status === "PENDING" ? "pl-14" : "pl-9"}`}
-                    title={file.file.name}
-                  >
+                  <div className={`text-xs text-muted-foreground truncate ${file.status === "PENDING" ? "pl-14" : "pl-9"}`} title={file.file.name}>
                     {file.file.name} • {(file.file.size / 1024 / 1024).toFixed(2)} MB
                   </div>
                 </div>

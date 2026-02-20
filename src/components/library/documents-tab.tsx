@@ -184,7 +184,7 @@ export function DocumentsTab() {
       ) : (
         <Card className="overflow-hidden flex flex-col min-h-0 flex-1">
           <div className="overflow-y-auto flex-1 min-h-0">
-            <Table className="table-fixed">
+            <Table className="table-fixed w-full">
               <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
                   <TableHead className="w-10 pr-0">
@@ -194,10 +194,10 @@ export function DocumentsTab() {
                       aria-label="Select all documents"
                     />
                   </TableHead>
-                  <TableHead className="w-[40%]">Document</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="w-12.5"></TableHead>
+                  <TableHead>Document</TableHead>
+                  <TableHead className="w-28">Status</TableHead>
+                  <TableHead className="w-32">Created</TableHead>
+                  <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

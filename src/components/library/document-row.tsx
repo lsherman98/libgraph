@@ -47,13 +47,13 @@ export function DocumentRow({
           />
         </TableCell>
       )}
-      <TableCell className="max-w-0">
+      <TableCell className="max-w-0 overflow-hidden">
         <div className="flex items-center gap-3 min-w-0">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted shrink-0">
             <TypeIcon className="h-5 w-5 text-muted-foreground" />
           </div>
-          <div className="flex flex-col min-w-0">
-            <span className="font-medium truncate">{upload.title || "Untitled"}</span>
+          <div className="flex flex-col min-w-0 overflow-hidden">
+            <span className="font-medium truncate block">{upload.title || "Untitled"}</span>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground capitalize">{upload.type}</span>
               {linkedCount > 0 && (

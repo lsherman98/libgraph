@@ -40,5 +40,6 @@ pocketbase/server
 pocketbase/pocketbase
 pocketbase/output
 pocketbase/deploy.sh
+pocketbase/tmp
 
 .github
