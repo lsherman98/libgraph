@@ -26,6 +26,7 @@ export type NodeRecordData =
 export interface UploadNodeData {
     title?: string;
     type?: string;
+    status?: string;
     num_pages?: number;
 }
 

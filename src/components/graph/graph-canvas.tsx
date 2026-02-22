@@ -1,9 +1,10 @@
 import { useState, useMemo, useCallback } from "react";
 import { useGraphData } from "@/lib/api/queries";
+import type { UploadFilters } from "@/lib/api/api";
 import type { EdgesResponse } from "@/lib/pocketbase-types";
 import { NodesTypeOptions, EdgesTypeOptions } from "@/lib/pocketbase-types";
 import type { HighlightsRecord, BookmarksRecord, NotesRecord } from "@/lib/pocketbase-types";
-import type { EnrichedNodesResponse } from "@/lib/types";
+import type { EnrichedNodesResponse, UploadNodeData } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -22,10 +23,13 @@ import {
   ChevronRight,
   Filter,
   PanelLeftClose,
+  SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useDebounce } from "@/lib/hooks/use-debounce";
 import { ForceGraphView, type NodePreviewRequest } from "./force-graph-view";
 import { PreviewDialog } from "@/components/workspace/preview-dialog";
+import { GraphFiltersPanel } from "./graph-filters-panel";
 
 const nodeTypeConfig: Record<NodesTypeOptions, { icon: React.ElementType; color: string; label: string }> = {
   [NodesTypeOptions.upload]: { icon: FileText, color: "#3b82f6", label: "Uploads" },
@@ -52,12 +56,16 @@ const edgeTypeConfig: Record<EdgesTypeOptions, { color: string; label: string }>
 export function GraphCanvas() {
   const { data: graphData, isLoading, error } = useGraphData();
 
+  const [uploadFilters, setUploadFilters] = useState<UploadFilters>({});
+  const debouncedSearch = useDebounce(uploadFilters.search, 300);
+
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [hiddenNodeTypes, setHiddenNodeTypes] = useState<Set<NodesTypeOptions>>(new Set());
   const [hiddenEdgeTypes, setHiddenEdgeTypes] = useState<Set<EdgesTypeOptions>>(new Set());
   const [showNodeFilters, setShowNodeFilters] = useState(true);
   const [showEdgeFilters, setShowEdgeFilters] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(false);
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewType, setPreviewType] = useState<"highlight" | "bookmark" | "note" | "source" | "upload">("upload");
@@ -119,6 +127,150 @@ export function GraphCanvas() {
     return counts;
   }, [graphData?.edges]);
 
+  // Client-side filtering of graph nodes based on UploadFilters
+  const { filteredNodes, filteredEdges } = useMemo(() => {
+    const allNodes = (graphData?.nodes as EnrichedNodesResponse[]) || [];
+    const allEdges = (graphData?.edges as EdgesResponse[]) || [];
+
+    const hasUploadFilters =
+      debouncedSearch ||
+      (uploadFilters.type?.length ?? 0) > 0 ||
+      (uploadFilters.status?.length ?? 0) > 0 ||
+      (uploadFilters.tags?.length ?? 0) > 0 ||
+      (uploadFilters.topics?.length ?? 0) > 0 ||
+      (uploadFilters.people?.length ?? 0) > 0 ||
+      !!uploadFilters.publication;
+
+    if (!hasUploadFilters) {
+      return { filteredNodes: allNodes, filteredEdges: allEdges };
+    }
+
+    // Build a lookup: record_id -> node id (for tags/topics/people/publications)
+    const recordIdToNodeId = new Map<string, string>();
+    for (const node of allNodes) {
+      if (node.record_id) {
+        recordIdToNodeId.set(node.record_id, node.id);
+      }
+    }
+
+    // Build adjacency from edges: node id -> Set of connected node ids
+    const nodeEdgeMap = new Map<string, Set<string>>();
+    for (const edge of allEdges) {
+      if (!nodeEdgeMap.has(edge.source)) nodeEdgeMap.set(edge.source, new Set());
+      if (!nodeEdgeMap.has(edge.target)) nodeEdgeMap.set(edge.target, new Set());
+      nodeEdgeMap.get(edge.source)!.add(edge.target);
+      nodeEdgeMap.get(edge.target)!.add(edge.source);
+    }
+
+    // Find upload node IDs connected to selected filter entities
+    const getUploadNodeIdsConnectedTo = (recordIds: string[]): Set<string> => {
+      const connectedUploadNodeIds = new Set<string>();
+      for (const recordId of recordIds) {
+        const filterNodeId = recordIdToNodeId.get(recordId);
+        if (!filterNodeId) continue;
+        const neighbors = nodeEdgeMap.get(filterNodeId);
+        if (!neighbors) continue;
+        for (const neighborId of neighbors) {
+          connectedUploadNodeIds.add(neighborId);
+        }
+      }
+      return connectedUploadNodeIds;
+    };
+
+    // Determine which upload nodes pass all active filters (AND logic across filter categories)
+    const passingUploadNodeIds = new Set<string>();
+
+    for (const node of allNodes) {
+      if (node.type !== NodesTypeOptions.upload) continue;
+
+      const data = node.data as UploadNodeData | null | undefined;
+      let passes = true;
+
+      // Search filter
+      if (debouncedSearch) {
+        const search = debouncedSearch.toLowerCase();
+        const title = (data?.title || node.label || "").toLowerCase();
+        if (!title.includes(search)) {
+          passes = false;
+        }
+      }
+
+      // Type filter
+      if (passes && uploadFilters.type && uploadFilters.type.length > 0) {
+        if (!data?.type || !uploadFilters.type.includes(data.type)) {
+          passes = false;
+        }
+      }
+
+      // Status filter
+      if (passes && uploadFilters.status && uploadFilters.status.length > 0) {
+        if (!data?.status || !uploadFilters.status.includes(data.status)) {
+          passes = false;
+        }
+      }
+
+      // Tags filter (OR within category: upload must be connected to at least one selected tag)
+      if (passes && uploadFilters.tags && uploadFilters.tags.length > 0) {
+        const connectedToTags = getUploadNodeIdsConnectedTo(uploadFilters.tags);
+        if (!connectedToTags.has(node.id)) {
+          passes = false;
+        }
+      }
+
+      // Topics filter
+      if (passes && uploadFilters.topics && uploadFilters.topics.length > 0) {
+        const connectedToTopics = getUploadNodeIdsConnectedTo(uploadFilters.topics);
+        if (!connectedToTopics.has(node.id)) {
+          passes = false;
+        }
+      }
+
+      // People filter
+      if (passes && uploadFilters.people && uploadFilters.people.length > 0) {
+        const connectedToPeople = getUploadNodeIdsConnectedTo(uploadFilters.people);
+        if (!connectedToPeople.has(node.id)) {
+          passes = false;
+        }
+      }
+
+      // Publication filter
+      if (passes && uploadFilters.publication) {
+        const connectedToPub = getUploadNodeIdsConnectedTo([uploadFilters.publication]);
+        if (!connectedToPub.has(node.id)) {
+          passes = false;
+        }
+      }
+
+      if (passes) {
+        passingUploadNodeIds.add(node.id);
+      }
+    }
+
+    // Collect all node IDs that should remain visible:
+    // - Upload nodes that pass filters
+    // - Non-upload nodes that are connected to at least one passing upload node
+    const visibleNodeIds = new Set<string>();
+    for (const id of passingUploadNodeIds) {
+      visibleNodeIds.add(id);
+    }
+    for (const node of allNodes) {
+      if (node.type === NodesTypeOptions.upload) continue;
+      const neighbors = nodeEdgeMap.get(node.id);
+      if (!neighbors) continue;
+      for (const neighborId of neighbors) {
+        if (passingUploadNodeIds.has(neighborId)) {
+          visibleNodeIds.add(node.id);
+          break;
+        }
+      }
+    }
+
+    const fNodes = allNodes.filter((n) => visibleNodeIds.has(n.id));
+    const fEdges = allEdges.filter((e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target));
+
+    return { filteredNodes: fNodes, filteredEdges: fEdges };
+  }, [graphData?.nodes, graphData?.edges, debouncedSearch, uploadFilters]);
+
   const toggleNodeType = useCallback((type: NodesTypeOptions) => {
     setHiddenNodeTypes((prev) => {
       const next = new Set(prev);
@@ -171,16 +323,46 @@ export function GraphCanvas() {
   const allNodes = (graphData?.nodes as EnrichedNodesResponse[]) || [];
   const allEdges = (graphData?.edges as EdgesResponse[]) || [];
 
+  const hasActiveUploadFilters =
+    Object.keys(uploadFilters).filter((k) => k !== "sortBy" && k !== "sortOrder" && uploadFilters[k as keyof UploadFilters]).length > 0;
+
   return (
     <div className="flex-1 h-full flex overflow-hidden">
+      {isFiltersPanelOpen && (
+        <GraphFiltersPanel filters={uploadFilters} onFiltersChange={setUploadFilters} onClose={() => setIsFiltersPanelOpen(false)} />
+      )}
       {sidebarOpen && (
         <div className="w-64 border-r flex flex-col bg-background overflow-y-auto shrink-0">
           <div className="flex items-center justify-between px-3 py-2 border-b">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Filters</span>
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Graph</span>
             <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setSidebarOpen(false)}>
               <PanelLeftClose className="h-3.5 w-3.5" />
             </Button>
           </div>
+
+          {/* Content Filters toggle */}
+          <div className="p-3 border-b">
+            <Button
+              variant={isFiltersPanelOpen ? "secondary" : "outline"}
+              size="sm"
+              className="w-full gap-2"
+              onClick={() => setIsFiltersPanelOpen(!isFiltersPanelOpen)}
+            >
+              <SlidersHorizontal className="h-4 w-4" />
+              Content Filters
+              {hasActiveUploadFilters && (
+                <Badge variant="secondary" className="ml-auto h-5 px-1.5 text-xs">
+                  {Object.keys(uploadFilters).filter((k) => k !== "sortBy" && k !== "sortOrder" && uploadFilters[k as keyof UploadFilters]).length}
+                </Badge>
+              )}
+            </Button>
+            {hasActiveUploadFilters && (
+              <div className="text-xs text-muted-foreground mt-2">
+                Showing {filteredNodes.length} of {allNodes.length} nodes
+              </div>
+            )}
+          </div>
+
           <div className="p-3 border-b space-y-2">
             <button
               className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-full hover:text-foreground transition-colors"
@@ -288,9 +470,9 @@ export function GraphCanvas() {
           <div className="p-3 text-xs text-muted-foreground space-y-1 mt-auto">
             <div>
               {allNodes.length - hiddenNodeTypes.size * 0} nodes visible /{" "}
-              {allNodes.filter((n) => !hiddenNodeTypes.has(n.type as NodesTypeOptions)).length} shown
+              {filteredNodes.filter((n) => !hiddenNodeTypes.has(n.type as NodesTypeOptions)).length} shown
             </div>
-            <div>{allEdges.filter((e) => !hiddenEdgeTypes.has(e.type as EdgesTypeOptions)).length} edges shown</div>
+            <div>{filteredEdges.filter((e) => !hiddenEdgeTypes.has(e.type as EdgesTypeOptions)).length} edges shown</div>
           </div>
         </div>
       )}
@@ -306,8 +488,8 @@ export function GraphCanvas() {
           </Button>
         )}
         <ForceGraphView
-          nodes={allNodes}
-          edges={allEdges}
+          nodes={filteredNodes}
+          edges={filteredEdges}
           selectedNodeId={selectedNodeId}
           onSelectNode={handleSelectNode}
           onPreviewNode={handlePreviewNode}
