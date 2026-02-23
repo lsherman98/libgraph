@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { BookMarked, ChevronLeft, ChevronRight, Maximize2, Minimize2 } from "lucide-react";
+import { BookMarked, ChevronLeft, ChevronRight, ChevronDown, Maximize2, Minimize2, Volume2 } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { pb } from "@/lib/pocketbase";
 import { HighlightsColorOptions } from "@/lib/pocketbase-types";
 import { Switch } from "@/components/ui/switch";
@@ -42,6 +43,9 @@ interface ReaderPaneProps {
 export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, showHeader = true, onPageChange, onTitleLoad }: ReaderPaneProps) {
   const { data: upload } = useUploadById(uploadId);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [isAudioOpen, setIsAudioOpen] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const { isReadingMode, setReadingMode, setCurrentPageState, setCurrentUploadId, setNavigateToPage } = useReaderStore();
   const readerContainerRef = useRef<HTMLDivElement>(null);
@@ -379,12 +383,47 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
         </header>
       )}
       {audioUrl && (
-        <div className="shrink-0 border-b bg-muted/30 px-4 py-3">
-          <audio controls className="w-full max-w-3xl mx-auto block" preload="metadata">
-            <source src={audioUrl} />
-            Your browser does not support the audio element.
-          </audio>
-        </div>
+        <Collapsible open={isAudioOpen} onOpenChange={setIsAudioOpen} className="shrink-0 border-b bg-muted/30">
+          <CollapsibleTrigger asChild>
+            <button className="flex w-full items-center gap-2 px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+              <Volume2 className="size-4" />
+              <span>Audio Player</span>
+              <ChevronDown className={cn("size-4 ml-auto transition-transform duration-200", isAudioOpen && "rotate-180")} />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="px-4 pb-3 flex items-center gap-3 max-w-3xl mx-auto">
+              <audio
+                ref={audioRef}
+                controls
+                className="flex-1 min-w-0"
+                preload="metadata"
+                onRateChange={(e) => setPlaybackRate((e.target as HTMLAudioElement).playbackRate)}
+              >
+                <source src={audioUrl} />
+                Your browser does not support the audio element.
+              </audio>
+              <div className="flex items-center gap-1 shrink-0">
+                {[1, 1.5, 2, 3, 4].map((rate) => (
+                  <Button
+                    key={rate}
+                    variant={playbackRate === rate ? "default" : "ghost"}
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() => {
+                      if (audioRef.current) {
+                        audioRef.current.playbackRate = rate;
+                        setPlaybackRate(rate);
+                      }
+                    }}
+                  >
+                    {rate}x
+                  </Button>
+                ))}
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       )}
       <main
         className="flex-1 min-h-0 overflow-hidden transition-colors duration-300"

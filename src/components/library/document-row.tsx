@@ -66,12 +66,15 @@ export function DocumentRow({
           </div>
         </div>
       </TableCell>
-      <TableCell>
-        <div className="flex items-center gap-2">
-          <StatusIcon className={`h-4 w-4 ${status.className}`} />
-          <Badge variant={status.variant}>{status.label}</Badge>
-        </div>
-      </TableCell>
+      {upload.status !== "SUCCESS" && (
+        <TableCell>
+          <div className="flex items-center gap-2">
+            <StatusIcon className={`h-4 w-4 ${status.className}`} />
+            <Badge variant={status.variant}>{status.label}</Badge>
+          </div>
+        </TableCell>
+      )}
+      {upload.status === "SUCCESS" && <TableCell />}
       <TableCell className="text-muted-foreground">
         {new Date(upload.created).toLocaleDateString(undefined, {
           year: "numeric",
