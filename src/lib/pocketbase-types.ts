@@ -16,6 +16,7 @@ export enum Collections {
 	Collections = "collections",
 	DocumentChunks = "document_chunks",
 	Edges = "edges",
+	EmbeddingOperations = "embedding_operations",
 	Highlights = "highlights",
 	Messages = "messages",
 	Nodes = "nodes",
@@ -183,6 +184,42 @@ export type EdgesRecord = {
 	user: RecordIdString
 }
 
+export enum EmbeddingOperationsStatusOptions {
+	"queued" = "queued",
+	"submitted" = "submitted",
+	"polling" = "polling",
+	"succeeded" = "succeeded",
+	"failing" = "failing",
+	"cancelled" = "cancelled",
+	"expired" = "expired",
+}
+export type EmbeddingOperationsRecord<Tchunk_ids_json = unknown> = {
+	attempts?: number
+	chunk_ids_json?: null | Tchunk_ids_json
+	created: IsoAutoDateString
+	error_message?: string
+	failed_chunks?: number
+	finished_at?: IsoDateString
+	id: string
+	last_polled_at?: IsoDateString
+	lease_until?: IsoDateString
+	max_attempts?: number
+	model?: string
+	next_poll_at?: IsoDateString
+	page?: RecordIdString
+	processing_job?: RecordIdString
+	provider?: string
+	provider_operation_id?: string
+	status?: EmbeddingOperationsStatusOptions
+	submitted_at?: IsoDateString
+	succeeded_chunks?: number
+	total_chunks?: number
+	updated: IsoAutoDateString
+	upload?: RecordIdString
+	user?: RecordIdString
+	worker_id?: string
+}
+
 export enum HighlightsColorOptions {
 	"yellow" = "yellow",
 	"green" = "green",
@@ -301,11 +338,11 @@ export type ProcessingJobEventsRecord<Tmeta_json = unknown> = {
 
 export enum ProcessingJobsJobTypeOptions {
 	"upload.parse_or_transcribe" = "upload.parse_or_transcribe",
-	"page.persist" = "page.persist",
 	"chunk.generate" = "chunk.generate",
-	"upload.summarize" = "upload.summarize",
 	"page.summarize" = "page.summarize",
 	"chunk.embed" = "chunk.embed",
+	"chunk.embed.submit" = "chunk.embed.submit",
+	"chunk.embed.poll" = "chunk.embed.poll",
 }
 
 export enum ProcessingJobsStatusOptions {
@@ -321,6 +358,7 @@ export type ProcessingJobsRecord<Tpayload_json = unknown> = {
 	chunk?: RecordIdString
 	created: IsoAutoDateString
 	dedupe_key: string
+	embedding_operation?: RecordIdString
 	error_code?: string
 	error_message?: string
 	finished_at?: IsoDateString
@@ -485,6 +523,7 @@ export type ChatsResponse<Texpand = unknown> = Required<ChatsRecord> & BaseSyste
 export type CollectionsResponse<Texpand = unknown> = Required<CollectionsRecord> & BaseSystemFields<Texpand>
 export type DocumentChunksResponse<Texpand = unknown> = Required<DocumentChunksRecord> & BaseSystemFields<Texpand>
 export type EdgesResponse<Texpand = unknown> = Required<EdgesRecord> & BaseSystemFields<Texpand>
+export type EmbeddingOperationsResponse<Tchunk_ids_json = unknown, Texpand = unknown> = Required<EmbeddingOperationsRecord<Tchunk_ids_json>> & BaseSystemFields<Texpand>
 export type HighlightsResponse<Texpand = unknown> = Required<HighlightsRecord> & BaseSystemFields<Texpand>
 export type MessagesResponse<Tsources = unknown, Texpand = unknown> = Required<MessagesRecord<Tsources>> & BaseSystemFields<Texpand>
 export type NodesResponse<Tdata = unknown, Texpand = unknown> = Required<NodesRecord<Tdata>> & BaseSystemFields<Texpand>
@@ -516,6 +555,7 @@ export type CollectionRecords = {
 	collections: CollectionsRecord
 	document_chunks: DocumentChunksRecord
 	edges: EdgesRecord
+	embedding_operations: EmbeddingOperationsRecord
 	highlights: HighlightsRecord
 	messages: MessagesRecord
 	nodes: NodesRecord
@@ -546,6 +586,7 @@ export type CollectionResponses = {
 	collections: CollectionsResponse
 	document_chunks: DocumentChunksResponse
 	edges: EdgesResponse
+	embedding_operations: EmbeddingOperationsResponse
 	highlights: HighlightsResponse
 	messages: MessagesResponse
 	nodes: NodesResponse

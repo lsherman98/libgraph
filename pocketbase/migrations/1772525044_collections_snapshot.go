@@ -968,6 +968,15 @@ func init() {
 					},
 					{
 						"hidden": false,
+						"id": "bool3625246891",
+						"name": "is_summary",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "bool"
+					},
+					{
+						"hidden": false,
 						"id": "autodate2990389176",
 						"name": "created",
 						"onCreate": true,
@@ -1550,20 +1559,6 @@ func init() {
 						"required": true,
 						"system": false,
 						"type": "relation"
-					},
-					{
-						"autogeneratePattern": "",
-						"hidden": false,
-						"id": "text3399421961",
-						"max": 0,
-						"min": 0,
-						"name": "llama_file_id",
-						"pattern": "",
-						"presentable": false,
-						"primaryKey": false,
-						"required": false,
-						"system": false,
-						"type": "text"
 					},
 					{
 						"hidden": false,
@@ -2772,7 +2767,8 @@ func init() {
 				"id": "pbc_392403009",
 				"indexes": [
 					"CREATE INDEX ` + "`" + `idx_bBz36OAvhm` + "`" + ` ON ` + "`" + `document_chunks` + "`" + ` (` + "`" + `upload` + "`" + `)",
-					"CREATE INDEX ` + "`" + `idx_rtS6XzVwLV` + "`" + ` ON ` + "`" + `document_chunks` + "`" + ` (` + "`" + `page` + "`" + `)"
+					"CREATE INDEX ` + "`" + `idx_rtS6XzVwLV` + "`" + ` ON ` + "`" + `document_chunks` + "`" + ` (` + "`" + `page` + "`" + `)",
+					"CREATE UNIQUE INDEX ` + "`" + `idx_9R1CP46XMq` + "`" + ` ON ` + "`" + `document_chunks` + "`" + ` (\n  ` + "`" + `upload` + "`" + `,\n  ` + "`" + `page` + "`" + `,\n  ` + "`" + `chunk_index` + "`" + `\n)"
 				],
 				"listRule": "@request.auth.id = user.id",
 				"name": "document_chunks",
@@ -2891,7 +2887,7 @@ func init() {
 						"type": "text"
 					},
 					{
-						"cascadeDelete": false,
+						"cascadeDelete": true,
 						"collectionId": "_pb_users_auth_",
 						"hidden": false,
 						"id": "relation2375276105",
@@ -2904,7 +2900,7 @@ func init() {
 						"type": "relation"
 					},
 					{
-						"cascadeDelete": false,
+						"cascadeDelete": true,
 						"collectionId": "pbc_121766130",
 						"hidden": false,
 						"id": "relation398321183",
@@ -2967,6 +2963,565 @@ func init() {
 				],
 				"listRule": "@request.auth.id = user.id",
 				"name": "reading_progress",
+				"system": false,
+				"type": "base",
+				"updateRule": "@request.auth.id = user.id",
+				"viewRule": "@request.auth.id = user.id"
+			},
+			{
+				"createRule": null,
+				"deleteRule": null,
+				"fields": [
+					{
+						"autogeneratePattern": "[a-z0-9]{15}",
+						"hidden": false,
+						"id": "text3208210256",
+						"max": 15,
+						"min": 15,
+						"name": "id",
+						"pattern": "^[a-z0-9]+$",
+						"presentable": false,
+						"primaryKey": true,
+						"required": true,
+						"system": true,
+						"type": "text"
+					},
+					{
+						"hidden": false,
+						"id": "select185737576",
+						"maxSelect": 1,
+						"name": "job_type",
+						"presentable": false,
+						"required": true,
+						"system": false,
+						"type": "select",
+						"values": [
+							"upload.parse_or_transcribe",
+							"page.persist",
+							"chunk.generate",
+							"upload.summarize",
+							"page.summarize",
+							"chunk.embed"
+						]
+					},
+					{
+						"hidden": false,
+						"id": "select2063623452",
+						"maxSelect": 1,
+						"name": "status",
+						"presentable": false,
+						"required": true,
+						"system": false,
+						"type": "select",
+						"values": [
+							"queued",
+							"running",
+							"succeeded",
+							"failed",
+							"deadletter",
+							"cancelled"
+						]
+					},
+					{
+						"hidden": false,
+						"id": "number1655102503",
+						"max": null,
+						"min": null,
+						"name": "priority",
+						"onlyInt": false,
+						"presentable": false,
+						"required": true,
+						"system": false,
+						"type": "number"
+					},
+					{
+						"hidden": false,
+						"id": "number3217549156",
+						"max": null,
+						"min": null,
+						"name": "attempts",
+						"onlyInt": false,
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "number"
+					},
+					{
+						"hidden": false,
+						"id": "number3470954935",
+						"max": null,
+						"min": null,
+						"name": "max_attempts",
+						"onlyInt": false,
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "number"
+					},
+					{
+						"hidden": false,
+						"id": "date164390390",
+						"max": "",
+						"min": "",
+						"name": "scheduled_at",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "date"
+					},
+					{
+						"hidden": false,
+						"id": "date35549773",
+						"max": "",
+						"min": "",
+						"name": "lease_until",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "date"
+					},
+					{
+						"hidden": false,
+						"id": "date222754019",
+						"max": "",
+						"min": "",
+						"name": "started_at",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "date"
+					},
+					{
+						"hidden": false,
+						"id": "date902724141",
+						"max": "",
+						"min": "",
+						"name": "finished_at",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "date"
+					},
+					{
+						"autogeneratePattern": "",
+						"hidden": false,
+						"id": "text2077016553",
+						"max": 0,
+						"min": 0,
+						"name": "dedupe_key",
+						"pattern": "",
+						"presentable": false,
+						"primaryKey": false,
+						"required": true,
+						"system": false,
+						"type": "text"
+					},
+					{
+						"hidden": false,
+						"id": "json966904008",
+						"maxSize": 0,
+						"name": "payload_json",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "json"
+					},
+					{
+						"autogeneratePattern": "",
+						"hidden": false,
+						"id": "text862125476",
+						"max": 0,
+						"min": 0,
+						"name": "error_code",
+						"pattern": "",
+						"presentable": false,
+						"primaryKey": false,
+						"required": false,
+						"system": false,
+						"type": "text"
+					},
+					{
+						"autogeneratePattern": "",
+						"hidden": false,
+						"id": "text737763667",
+						"max": 0,
+						"min": 0,
+						"name": "error_message",
+						"pattern": "",
+						"presentable": false,
+						"primaryKey": false,
+						"required": false,
+						"system": false,
+						"type": "text"
+					},
+					{
+						"autogeneratePattern": "",
+						"hidden": false,
+						"id": "text1797306934",
+						"max": 0,
+						"min": 0,
+						"name": "worker_id",
+						"pattern": "",
+						"presentable": false,
+						"primaryKey": false,
+						"required": false,
+						"system": false,
+						"type": "text"
+					},
+					{
+						"autogeneratePattern": "",
+						"hidden": false,
+						"id": "text3188542320",
+						"max": 0,
+						"min": 0,
+						"name": "trace_id",
+						"pattern": "",
+						"presentable": false,
+						"primaryKey": false,
+						"required": false,
+						"system": false,
+						"type": "text"
+					},
+					{
+						"cascadeDelete": false,
+						"collectionId": "_pb_users_auth_",
+						"hidden": false,
+						"id": "relation2375276105",
+						"maxSelect": 1,
+						"minSelect": 0,
+						"name": "user",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "relation"
+					},
+					{
+						"cascadeDelete": true,
+						"collectionId": "pbc_121766130",
+						"hidden": false,
+						"id": "relation398321183",
+						"maxSelect": 1,
+						"minSelect": 0,
+						"name": "upload",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "relation"
+					},
+					{
+						"cascadeDelete": false,
+						"collectionId": "pbc_3446931122",
+						"hidden": false,
+						"id": "relation336246304",
+						"maxSelect": 1,
+						"minSelect": 0,
+						"name": "page",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "relation"
+					},
+					{
+						"cascadeDelete": false,
+						"collectionId": "pbc_392403009",
+						"hidden": false,
+						"id": "relation2500227374",
+						"maxSelect": 1,
+						"minSelect": 0,
+						"name": "chunk",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "relation"
+					},
+					{
+						"hidden": false,
+						"id": "autodate2990389176",
+						"name": "created",
+						"onCreate": true,
+						"onUpdate": false,
+						"presentable": false,
+						"system": false,
+						"type": "autodate"
+					},
+					{
+						"hidden": false,
+						"id": "autodate3332085495",
+						"name": "updated",
+						"onCreate": true,
+						"onUpdate": true,
+						"presentable": false,
+						"system": false,
+						"type": "autodate"
+					}
+				],
+				"id": "pbc_85348442",
+				"indexes": [
+					"CREATE UNIQUE INDEX ` + "`" + `idx_BBuFBrEqm2` + "`" + ` ON ` + "`" + `processing_jobs` + "`" + ` (` + "`" + `dedupe_key` + "`" + `)",
+					"CREATE INDEX ` + "`" + `idx_lOrIp1i0yh` + "`" + ` ON ` + "`" + `processing_jobs` + "`" + ` (\n  ` + "`" + `status` + "`" + `,\n  ` + "`" + `scheduled_at` + "`" + `,\n  ` + "`" + `priority` + "`" + `\n)",
+					"CREATE INDEX ` + "`" + `idx_MErOmtfYbr` + "`" + ` ON ` + "`" + `processing_jobs` + "`" + ` (\n  ` + "`" + `lease_until` + "`" + `,\n  ` + "`" + `status` + "`" + `\n)",
+					"CREATE INDEX ` + "`" + `idx_uD4l8ixESv` + "`" + ` ON ` + "`" + `processing_jobs` + "`" + ` (\n  ` + "`" + `upload` + "`" + `,\n  ` + "`" + `job_type` + "`" + `,\n  ` + "`" + `status` + "`" + `\n)"
+				],
+				"listRule": null,
+				"name": "processing_jobs",
+				"system": false,
+				"type": "base",
+				"updateRule": null,
+				"viewRule": null
+			},
+			{
+				"createRule": null,
+				"deleteRule": null,
+				"fields": [
+					{
+						"autogeneratePattern": "[a-z0-9]{15}",
+						"hidden": false,
+						"id": "text3208210256",
+						"max": 15,
+						"min": 15,
+						"name": "id",
+						"pattern": "^[a-z0-9]+$",
+						"presentable": false,
+						"primaryKey": true,
+						"required": true,
+						"system": true,
+						"type": "text"
+					},
+					{
+						"cascadeDelete": false,
+						"collectionId": "pbc_85348442",
+						"hidden": false,
+						"id": "relation4225294584",
+						"maxSelect": 1,
+						"minSelect": 0,
+						"name": "job",
+						"presentable": false,
+						"required": true,
+						"system": false,
+						"type": "relation"
+					},
+					{
+						"autogeneratePattern": "",
+						"hidden": false,
+						"id": "text2467634050",
+						"max": 0,
+						"min": 0,
+						"name": "event_type",
+						"pattern": "",
+						"presentable": false,
+						"primaryKey": false,
+						"required": false,
+						"system": false,
+						"type": "text"
+					},
+					{
+						"autogeneratePattern": "",
+						"hidden": false,
+						"id": "text3065852031",
+						"max": 0,
+						"min": 0,
+						"name": "message",
+						"pattern": "",
+						"presentable": false,
+						"primaryKey": false,
+						"required": false,
+						"system": false,
+						"type": "text"
+					},
+					{
+						"hidden": false,
+						"id": "json4171322886",
+						"maxSize": 0,
+						"name": "meta_json",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "json"
+					},
+					{
+						"hidden": false,
+						"id": "autodate2990389176",
+						"name": "created",
+						"onCreate": true,
+						"onUpdate": false,
+						"presentable": false,
+						"system": false,
+						"type": "autodate"
+					},
+					{
+						"hidden": false,
+						"id": "autodate3332085495",
+						"name": "updated",
+						"onCreate": true,
+						"onUpdate": true,
+						"presentable": false,
+						"system": false,
+						"type": "autodate"
+					}
+				],
+				"id": "pbc_3173329488",
+				"indexes": [
+					"CREATE INDEX ` + "`" + `idx_NaEplaRt08` + "`" + ` ON ` + "`" + `processing_job_events` + "`" + ` (\n  ` + "`" + `job` + "`" + `,\n  ` + "`" + `created` + "`" + `\n)"
+				],
+				"listRule": null,
+				"name": "processing_job_events",
+				"system": false,
+				"type": "base",
+				"updateRule": null,
+				"viewRule": null
+			},
+			{
+				"createRule": "@request.auth.id != \"\"",
+				"deleteRule": "@request.auth.id = user.id",
+				"fields": [
+					{
+						"autogeneratePattern": "[a-z0-9]{15}",
+						"hidden": false,
+						"id": "text3208210256",
+						"max": 15,
+						"min": 15,
+						"name": "id",
+						"pattern": "^[a-z0-9]+$",
+						"presentable": false,
+						"primaryKey": true,
+						"required": true,
+						"system": true,
+						"type": "text"
+					},
+					{
+						"cascadeDelete": false,
+						"collectionId": "_pb_users_auth_",
+						"hidden": false,
+						"id": "relation2375276105",
+						"maxSelect": 1,
+						"minSelect": 0,
+						"name": "user",
+						"presentable": false,
+						"required": true,
+						"system": false,
+						"type": "relation"
+					},
+					{
+						"cascadeDelete": true,
+						"collectionId": "pbc_121766130",
+						"hidden": false,
+						"id": "relation2705507321",
+						"maxSelect": 1,
+						"minSelect": 0,
+						"name": "source_upload",
+						"presentable": false,
+						"required": true,
+						"system": false,
+						"type": "relation"
+					},
+					{
+						"cascadeDelete": true,
+						"collectionId": "pbc_3446931122",
+						"hidden": false,
+						"id": "relation360723235",
+						"maxSelect": 1,
+						"minSelect": 0,
+						"name": "source_page",
+						"presentable": false,
+						"required": true,
+						"system": false,
+						"type": "relation"
+					},
+					{
+						"cascadeDelete": false,
+						"collectionId": "pbc_121766130",
+						"hidden": false,
+						"id": "relation3982378579",
+						"maxSelect": 1,
+						"minSelect": 0,
+						"name": "summary_upload",
+						"presentable": false,
+						"required": true,
+						"system": false,
+						"type": "relation"
+					},
+					{
+						"cascadeDelete": false,
+						"collectionId": "pbc_3446931122",
+						"hidden": false,
+						"id": "relation3939995361",
+						"maxSelect": 1,
+						"minSelect": 0,
+						"name": "summary_page",
+						"presentable": false,
+						"required": true,
+						"system": false,
+						"type": "relation"
+					},
+					{
+						"hidden": false,
+						"id": "select2063623452",
+						"maxSelect": 1,
+						"name": "status",
+						"presentable": false,
+						"required": true,
+						"system": false,
+						"type": "select",
+						"values": [
+							"processing",
+							"success",
+							"failed"
+						]
+					},
+					{
+						"autogeneratePattern": "",
+						"hidden": false,
+						"id": "text1574812785",
+						"max": 0,
+						"min": 0,
+						"name": "error",
+						"pattern": "",
+						"presentable": false,
+						"primaryKey": false,
+						"required": false,
+						"system": false,
+						"type": "text"
+					},
+					{
+						"hidden": false,
+						"id": "select11490771",
+						"maxSelect": 1,
+						"name": "scope",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "select",
+						"values": [
+							"page"
+						]
+					},
+					{
+						"hidden": false,
+						"id": "autodate2990389176",
+						"name": "created",
+						"onCreate": true,
+						"onUpdate": false,
+						"presentable": false,
+						"system": false,
+						"type": "autodate"
+					},
+					{
+						"hidden": false,
+						"id": "autodate3332085495",
+						"name": "updated",
+						"onCreate": true,
+						"onUpdate": true,
+						"presentable": false,
+						"system": false,
+						"type": "autodate"
+					}
+				],
+				"id": "pbc_39049810",
+				"indexes": [
+					"CREATE UNIQUE INDEX ` + "`" + `idx_XXwO1TiZ3u` + "`" + ` ON ` + "`" + `summaries` + "`" + ` (\n  ` + "`" + `user` + "`" + `,\n  ` + "`" + `source_page` + "`" + `,\n  ` + "`" + `source_upload` + "`" + `\n)"
+				],
+				"listRule": "@request.auth.id = user.id",
+				"name": "summaries",
 				"system": false,
 				"type": "base",
 				"updateRule": "@request.auth.id = user.id",

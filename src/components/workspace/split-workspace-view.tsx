@@ -23,6 +23,7 @@ export function SplitWorkspaceView({
   onTitleLoad,
 }: SplitWorkspaceViewProps) {
   const { tabs, activeTabId, splitMode, splitTabId, panelSizes, updateReaderTabPage, updateTabTitle, setWriterTabDirty } = useWorkspaceTabsStore();
+  const [focusedTabId, setFocusedTabId] = useState<string | null>(null);
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const splitTab = splitTabId ? tabs.find((t) => t.id === splitTabId) : null;
@@ -89,6 +90,23 @@ export function SplitWorkspaceView({
     };
   }, []);
 
+  useEffect(() => {
+    if (!activeTabId) {
+      setFocusedTabId(null);
+      return;
+    }
+
+    if (splitMode === "none" || !splitTabId) {
+      setFocusedTabId(activeTabId);
+      return;
+    }
+
+    const isFocusedTabVisible = focusedTabId === activeTabId || focusedTabId === splitTabId;
+    if (!isFocusedTabVisible) {
+      setFocusedTabId(activeTabId);
+    }
+  }, [activeTabId, splitMode, splitTabId, focusedTabId]);
+
   if (!activeTab) {
     return null;
   }
@@ -132,17 +150,41 @@ export function SplitWorkspaceView({
     splitTab?.type === "writer" ? { localContent: splitLocalContent, project: splitProject, onContentChange: handleSplitContentChange } : undefined;
 
   if (splitMode === "none" || !splitTab) {
-    return <div className={className}>{renderPane(activeTab, true, activeWriterProps)}</div>;
+    return (
+      <div className={className} onMouseDown={() => setFocusedTabId(activeTab.id)} onFocusCapture={() => setFocusedTabId(activeTab.id)}>
+        {renderPane(activeTab, true, activeWriterProps)}
+      </div>
+    );
   }
+
+  const resolvedFocusedTabId = focusedTabId ?? activeTab.id;
 
   return (
     <ResizablePanelGroup className={cn("flex h-full w-full", className)}>
       <ResizablePanel defaultSize={panelSizes[0]} minSize={20}>
-        <div className="h-full w-full overflow-hidden">{renderPane(activeTab, true, activeWriterProps)}</div>
+        <div
+          className={cn(
+            "h-full w-full overflow-hidden ring-1 ring-inset ring-transparent transition-shadow duration-150",
+            resolvedFocusedTabId === activeTab.id && "ring-primary/40",
+          )}
+          onMouseDown={() => setFocusedTabId(activeTab.id)}
+          onFocusCapture={() => setFocusedTabId(activeTab.id)}
+        >
+          {renderPane(activeTab, resolvedFocusedTabId === activeTab.id, activeWriterProps)}
+        </div>
       </ResizablePanel>
       <ResizableHandle withHandle />
       <ResizablePanel defaultSize={panelSizes[1]} minSize={20}>
-        <div className="h-full w-full overflow-hidden">{renderPane(splitTab, false, splitWriterProps)}</div>
+        <div
+          className={cn(
+            "h-full w-full overflow-hidden ring-1 ring-inset ring-transparent transition-shadow duration-150",
+            resolvedFocusedTabId === splitTab.id && "ring-primary/40",
+          )}
+          onMouseDown={() => setFocusedTabId(splitTab.id)}
+          onFocusCapture={() => setFocusedTabId(splitTab.id)}
+        >
+          {renderPane(splitTab, resolvedFocusedTabId === splitTab.id, splitWriterProps)}
+        </div>
       </ResizablePanel>
     </ResizablePanelGroup>
   );

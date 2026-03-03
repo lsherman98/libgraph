@@ -28,22 +28,84 @@ func init() {
 					"type": "text"
 				},
 				{
+					"cascadeDelete": false,
+					"collectionId": "pbc_121766130",
 					"hidden": false,
-					"id": "select185737576",
+					"id": "relation398321183",
 					"maxSelect": 1,
-					"name": "job_type",
+					"minSelect": 0,
+					"name": "upload",
 					"presentable": false,
-					"required": true,
+					"required": false,
 					"system": false,
-					"type": "select",
-					"values": [
-						"upload.parse_or_transcribe",
-						"page.persist",
-						"chunk.generate",
-						"upload.summarize",
-						"page.summarize",
-						"chunk.embed"
-					]
+					"type": "relation"
+				},
+				{
+					"cascadeDelete": false,
+					"collectionId": "pbc_85348442",
+					"hidden": false,
+					"id": "relation1048988677",
+					"maxSelect": 1,
+					"minSelect": 0,
+					"name": "processing_job",
+					"presentable": false,
+					"required": false,
+					"system": false,
+					"type": "relation"
+				},
+				{
+					"cascadeDelete": false,
+					"collectionId": "pbc_3446931122",
+					"hidden": false,
+					"id": "relation336246304",
+					"maxSelect": 1,
+					"minSelect": 0,
+					"name": "page",
+					"presentable": false,
+					"required": false,
+					"system": false,
+					"type": "relation"
+				},
+				{
+					"cascadeDelete": false,
+					"collectionId": "_pb_users_auth_",
+					"hidden": false,
+					"id": "relation2375276105",
+					"maxSelect": 1,
+					"minSelect": 0,
+					"name": "user",
+					"presentable": false,
+					"required": false,
+					"system": false,
+					"type": "relation"
+				},
+				{
+					"autogeneratePattern": "",
+					"hidden": false,
+					"id": "text2462348188",
+					"max": 0,
+					"min": 0,
+					"name": "provider",
+					"pattern": "",
+					"presentable": false,
+					"primaryKey": false,
+					"required": false,
+					"system": false,
+					"type": "text"
+				},
+				{
+					"autogeneratePattern": "",
+					"hidden": false,
+					"id": "text400177470",
+					"max": 0,
+					"min": 0,
+					"name": "provider_operation_id",
+					"pattern": "",
+					"presentable": false,
+					"primaryKey": false,
+					"required": false,
+					"system": false,
+					"type": "text"
 				},
 				{
 					"hidden": false,
@@ -51,27 +113,76 @@ func init() {
 					"maxSelect": 1,
 					"name": "status",
 					"presentable": false,
-					"required": true,
+					"required": false,
 					"system": false,
 					"type": "select",
 					"values": [
 						"queued",
-						"running",
+						"submitted",
+						"polling",
 						"succeeded",
-						"failed",
-						"deadletter",
-						"cancelled"
+						"failing",
+						"cancelled",
+						"expired"
 					]
 				},
 				{
+					"autogeneratePattern": "",
 					"hidden": false,
-					"id": "number1655102503",
+					"id": "text3616895705",
+					"max": 0,
+					"min": 0,
+					"name": "model",
+					"pattern": "",
+					"presentable": false,
+					"primaryKey": false,
+					"required": false,
+					"system": false,
+					"type": "text"
+				},
+				{
+					"hidden": false,
+					"id": "json2193354422",
+					"maxSize": 0,
+					"name": "chunk_ids_json",
+					"presentable": false,
+					"required": false,
+					"system": false,
+					"type": "json"
+				},
+				{
+					"hidden": false,
+					"id": "number257550243",
 					"max": null,
 					"min": null,
-					"name": "priority",
+					"name": "total_chunks",
 					"onlyInt": false,
 					"presentable": false,
-					"required": true,
+					"required": false,
+					"system": false,
+					"type": "number"
+				},
+				{
+					"hidden": false,
+					"id": "number3295815537",
+					"max": null,
+					"min": null,
+					"name": "succeeded_chunks",
+					"onlyInt": false,
+					"presentable": false,
+					"required": false,
+					"system": false,
+					"type": "number"
+				},
+				{
+					"hidden": false,
+					"id": "number328251847",
+					"max": null,
+					"min": null,
+					"name": "failed_chunks",
+					"onlyInt": false,
+					"presentable": false,
+					"required": false,
 					"system": false,
 					"type": "number"
 				},
@@ -101,10 +212,10 @@ func init() {
 				},
 				{
 					"hidden": false,
-					"id": "date164390390",
+					"id": "date729074881",
 					"max": "",
 					"min": "",
-					"name": "scheduled_at",
+					"name": "next_poll_at",
 					"presentable": false,
 					"required": false,
 					"system": false,
@@ -122,58 +233,12 @@ func init() {
 					"type": "date"
 				},
 				{
-					"hidden": false,
-					"id": "date222754019",
-					"max": "",
-					"min": "",
-					"name": "started_at",
-					"presentable": false,
-					"required": false,
-					"system": false,
-					"type": "date"
-				},
-				{
-					"hidden": false,
-					"id": "date902724141",
-					"max": "",
-					"min": "",
-					"name": "finished_at",
-					"presentable": false,
-					"required": false,
-					"system": false,
-					"type": "date"
-				},
-				{
 					"autogeneratePattern": "",
 					"hidden": false,
-					"id": "text2077016553",
+					"id": "text1797306934",
 					"max": 0,
 					"min": 0,
-					"name": "dedupe_key",
-					"pattern": "",
-					"presentable": false,
-					"primaryKey": false,
-					"required": true,
-					"system": false,
-					"type": "text"
-				},
-				{
-					"hidden": false,
-					"id": "json966904008",
-					"maxSize": 0,
-					"name": "payload_json",
-					"presentable": false,
-					"required": false,
-					"system": false,
-					"type": "json"
-				},
-				{
-					"autogeneratePattern": "",
-					"hidden": false,
-					"id": "text862125476",
-					"max": 0,
-					"min": 0,
-					"name": "error_code",
+					"name": "worker_id",
 					"pattern": "",
 					"presentable": false,
 					"primaryKey": false,
@@ -196,45 +261,37 @@ func init() {
 					"type": "text"
 				},
 				{
-					"autogeneratePattern": "",
 					"hidden": false,
-					"id": "text1797306934",
-					"max": 0,
-					"min": 0,
-					"name": "worker_id",
-					"pattern": "",
+					"id": "date830654268",
+					"max": "",
+					"min": "",
+					"name": "submitted_at",
 					"presentable": false,
-					"primaryKey": false,
 					"required": false,
 					"system": false,
-					"type": "text"
+					"type": "date"
 				},
 				{
-					"autogeneratePattern": "",
 					"hidden": false,
-					"id": "text3188542320",
-					"max": 0,
-					"min": 0,
-					"name": "trace_id",
-					"pattern": "",
+					"id": "date2457226749",
+					"max": "",
+					"min": "",
+					"name": "last_polled_at",
 					"presentable": false,
-					"primaryKey": false,
 					"required": false,
 					"system": false,
-					"type": "text"
+					"type": "date"
 				},
 				{
-					"cascadeDelete": false,
-					"collectionId": "_pb_users_auth_",
 					"hidden": false,
-					"id": "relation2375276105",
-					"maxSelect": 1,
-					"minSelect": 0,
-					"name": "user",
+					"id": "date902724141",
+					"max": "",
+					"min": "",
+					"name": "finished_at",
 					"presentable": false,
 					"required": false,
 					"system": false,
-					"type": "relation"
+					"type": "date"
 				},
 				{
 					"hidden": false,
@@ -257,10 +314,12 @@ func init() {
 					"type": "autodate"
 				}
 			],
-			"id": "pbc_85348442",
-			"indexes": [],
+			"id": "pbc_2956699289",
+			"indexes": [
+				"CREATE UNIQUE INDEX ` + "`" + `idx_2E5iVYGGjs` + "`" + ` ON ` + "`" + `embedding_operations` + "`" + ` (` + "`" + `provider_operation_id` + "`" + `)"
+			],
 			"listRule": null,
-			"name": "processing_jobs",
+			"name": "embedding_operations",
 			"system": false,
 			"type": "base",
 			"updateRule": null,
@@ -274,7 +333,7 @@ func init() {
 
 		return app.Save(collection)
 	}, func(app core.App) error {
-		collection, err := app.FindCollectionByNameOrId("pbc_85348442")
+		collection, err := app.FindCollectionByNameOrId("pbc_2956699289")
 		if err != nil {
 			return err
 		}

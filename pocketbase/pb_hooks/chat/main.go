@@ -24,8 +24,10 @@ import (
 var geminiClient *genai.Client
 
 type pageSummarizePayload struct {
-	PageID string `json:"page_id"`
-	UserID string `json:"user_id"`
+	PageID       string `json:"page_id"`
+	UserID       string `json:"user_id"`
+	UploadID     string `json:"upload_id,omitempty"`
+	FullDocument bool   `json:"full_document,omitempty"`
 }
 
 func Init(app *pocketbase.PocketBase) error {
@@ -250,9 +252,56 @@ func handlePageSummarizeJob(app *pocketbase.PocketBase, job *core.Record) error 
 		return err
 	}
 
-	summary, err := GeneratePageSummary(markdown)
-	if err != nil {
-		return err
+	summary := ""
+	if payload.FullDocument {
+		uploadID := strings.TrimSpace(payload.UploadID)
+		if uploadID == "" {
+			uploadID = strings.TrimSpace(pageRecord.GetString("upload"))
+		}
+		if uploadID == "" {
+			return fmt.Errorf("upload_id is required for full document summary")
+		}
+
+		pages, err := app.FindRecordsByFilter(
+			collections.Pages,
+			"upload = {:uploadId}",
+			"+page",
+			0,
+			0,
+			dbx.Params{"uploadId": uploadID},
+		)
+		if err != nil {
+			return err
+		}
+		if len(pages) == 0 {
+			return fmt.Errorf("no pages found for upload %s", uploadID)
+		}
+
+		allMarkdown := strings.Builder{}
+		for _, p := range pages {
+			pageMarkdown, readErr := ReadPageMarkdown(app, p)
+			if readErr != nil {
+				return readErr
+			}
+			pageMarkdown = strings.TrimSpace(pageMarkdown)
+			if pageMarkdown == "" {
+				continue
+			}
+			if allMarkdown.Len() > 0 {
+				allMarkdown.WriteString("\n\n")
+			}
+			allMarkdown.WriteString(pageMarkdown)
+		}
+
+		summary, err = GenerateDocumentSummary(allMarkdown.String())
+		if err != nil {
+			return err
+		}
+	} else {
+		summary, err = GeneratePageSummary(markdown)
+		if err != nil {
+			return err
+		}
 	}
 
 	_, _, _, err = UpsertPageSummaryArtifact(app, pageRecord, payload.UserID, summary)

@@ -489,35 +489,7 @@ func waitForBatchJob(ctx context.Context, batchName string, pollInterval time.Du
 				return nil, fmt.Errorf("batch job state is FAILED")
 			}
 
-			var result embedContentBatchResult
-
-			if len(op.Response) > 0 && string(op.Response) != "null" {
-				if err := json.Unmarshal(op.Response, &result); err == nil && result.Output != nil {
-					return &result, nil
-				}
-			}
-
-			if op.Output != nil {
-				result.Name = op.Name
-				result.State = op.State
-				result.Output = op.Output
-				result.BatchStats = op.BatchStats
-				return &result, nil
-			}
-
-			if err := json.Unmarshal(rawBody, &result); err == nil && result.Output != nil {
-				return &result, nil
-			}
-
-			if len(op.Metadata) > 0 && string(op.Metadata) != "null" {
-				if err := json.Unmarshal(op.Metadata, &result); err == nil && result.Output != nil {
-					return &result, nil
-				}
-			}
-
-			_ = json.Unmarshal(rawBody, &result)
-			result.RawDebug = string(rawBody)
-			return &result, nil
+			return resolveBatchResult(op, rawBody)
 		}
 
 		select {
@@ -526,6 +498,42 @@ func waitForBatchJob(ctx context.Context, batchName string, pollInterval time.Du
 		case <-time.After(pollInterval):
 		}
 	}
+}
+
+func resolveBatchResult(op *batchOperation, rawBody []byte) (*embedContentBatchResult, error) {
+	var result embedContentBatchResult
+
+	if len(op.Response) > 0 && string(op.Response) != "null" {
+		if err := json.Unmarshal(op.Response, &result); err == nil && result.Output != nil {
+			return &result, nil
+		}
+	}
+
+	if op.Output != nil {
+		result.Name = op.Name
+		result.State = op.State
+		result.Output = op.Output
+		result.BatchStats = op.BatchStats
+		return &result, nil
+	}
+
+	if err := json.Unmarshal(rawBody, &result); err == nil && result.Output != nil {
+		return &result, nil
+	}
+
+	if len(op.Metadata) > 0 && string(op.Metadata) != "null" {
+		if err := json.Unmarshal(op.Metadata, &result); err == nil && result.Output != nil {
+			return &result, nil
+		}
+	}
+
+	_ = json.Unmarshal(rawBody, &result)
+	result.RawDebug = string(rawBody)
+	if result.Output == nil {
+		return nil, fmt.Errorf("batch result missing output")
+	}
+
+	return &result, nil
 }
 
 func storeChunkEmbedding(app *pocketbase.PocketBase, record *core.Record, values []float32) error {

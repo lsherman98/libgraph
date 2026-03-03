@@ -27,12 +27,11 @@ type chunkGeneratePayload struct {
 	UserID     string `json:"user_id"`
 }
 
-const chunkEmbedEnqueueBatchSize = 100
+const chunkEmbedEnqueueBatchSize = 250
 
 func registerQueueHandlers(app *pocketbase.PocketBase) {
 	processing.RegisterHandler(processing.JobTypeUploadParseOrTranscribe, handleUploadParseOrTranscribeJob)
 	processing.RegisterHandler(processing.JobTypeChunkGenerate, handleChunkGenerateJob)
-	processing.RegisterHandler(processing.JobTypeUploadSummarize, handleUploadSummarizeJob)
 }
 
 func handleUploadParseOrTranscribeJob(app *pocketbase.PocketBase, job *core.Record) error {
@@ -83,14 +82,35 @@ func handleUploadParseOrTranscribeJob(app *pocketbase.PocketBase, job *core.Reco
 		if err := enqueueChunkGenerateForPage(app, upload, page); err != nil {
 			return err
 		}
-		if err := enqueuePageSummarizeForPage(app, upload, page); err != nil {
-			return err
-		}
+	}
+
+	if err := enqueueSummarizeJobsForUpload(app, upload, pages); err != nil {
+		return err
 	}
 
 	upload.Set("num_pages", len(pages))
 	upload.Set("status", "PROCESSING")
 	return app.Save(upload)
+}
+
+func enqueueSummarizeJobsForUpload(app *pocketbase.PocketBase, upload *core.Record, pages []*core.Record) error {
+	if upload.GetBool("is_summary") || len(pages) == 0 {
+		return nil
+	}
+
+	uploadType := strings.ToLower(strings.TrimSpace(upload.GetString("type")))
+	if uploadType != "book" {
+		anchorPage := pages[0]
+		return enqueuePageSummarizeForPage(app, upload, anchorPage, true)
+	}
+
+	for _, page := range pages {
+		if err := enqueuePageSummarizeForPage(app, upload, page, false); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func parseAudioUploadIntoPages(app *pocketbase.PocketBase, upload *core.Record) ([]*core.Record, error) {
@@ -200,7 +220,7 @@ func enqueueChunkGenerateForPage(app *pocketbase.PocketBase, upload *core.Record
 	})
 }
 
-func enqueuePageSummarizeForPage(app *pocketbase.PocketBase, upload *core.Record, page *core.Record) error {
+func enqueuePageSummarizeForPage(app *pocketbase.PocketBase, upload *core.Record, page *core.Record, fullDocument bool) error {
 	if upload.GetBool("is_summary") {
 		return nil
 	}
@@ -219,13 +239,23 @@ func enqueuePageSummarizeForPage(app *pocketbase.PocketBase, upload *core.Record
 	}
 
 	dedupeKey := fmt.Sprintf("page.summarize:%s:%s", userID, pageID)
+	if fullDocument {
+		dedupeKey = fmt.Sprintf("upload.summarize.full:%s:%s", userID, upload.Id)
+	}
+
+	payload := map[string]any{
+		"page_id": pageID,
+		"user_id": userID,
+	}
+	if fullDocument {
+		payload["full_document"] = true
+		payload["upload_id"] = upload.Id
+	}
+
 	return processing.Enqueue(app, processing.EnqueueRequest{
-		JobType:   processing.JobTypePageSummarize,
-		DedupeKey: dedupeKey,
-		Payload: map[string]any{
-			"page_id": pageID,
-			"user_id": userID,
-		},
+		JobType:     processing.JobTypePageSummarize,
+		DedupeKey:   dedupeKey,
+		Payload:     payload,
 		Priority:    80,
 		MaxAttempts: 5,
 		UserID:      userID,
@@ -241,6 +271,16 @@ func handleChunkGenerateJob(app *pocketbase.PocketBase, job *core.Record) error 
 	}
 	if payload.PageID == "" || payload.UploadID == "" {
 		return fmt.Errorf("payload page_id and upload_id are required")
+	}
+
+	uploadRecord, err := app.FindRecordById(collections.Uploads, payload.UploadID)
+	if err != nil {
+		return err
+	}
+
+	if uploadRecord.GetBool("is_summary") {
+		app.Logger().Info("[uploads] skipping chunk generation for summary upload", "upload_id", payload.UploadID, "page_id", payload.PageID)
+		return nil
 	}
 
 	pageRecord, err := app.FindRecordById(collections.Pages, payload.PageID)
@@ -260,11 +300,6 @@ func handleChunkGenerateJob(app *pocketbase.PocketBase, job *core.Record) error 
 
 	chunks := chunkMarkdown(markdown)
 	chunkIndex := 1
-	type embedChunkRef struct {
-		chunkID string
-		hash    string
-	}
-	embedChunkRefs := make([]embedChunkRef, 0, len(chunks))
 
 	for _, chunk := range chunks {
 		trimmed := strings.TrimSpace(chunk)
@@ -308,13 +343,66 @@ func handleChunkGenerateJob(app *pocketbase.PocketBase, job *core.Record) error 
 			}
 		}
 
+		chunkIndex++
+	}
+
+	if hasPendingChunkGenerateJobs(app, payload.UploadID, job.Id) {
+		return nil
+	}
+
+	return enqueueUploadChunkEmbeds(app, payload.UploadID, payload.UserID)
+}
+
+func hasPendingChunkGenerateJobs(app *pocketbase.PocketBase, uploadID string, currentJobID string) bool {
+	records, err := app.FindRecordsByFilter(
+		collections.ProcessingJobs,
+		"upload = {:uploadId} && job_type = {:jobType} && (status = 'queued' || status = 'running') && id != {:jobId}",
+		"",
+		1,
+		0,
+		dbx.Params{"uploadId": uploadID, "jobType": processing.JobTypeChunkGenerate, "jobId": currentJobID},
+	)
+	if err != nil {
+		app.Logger().Warn("[uploads] failed to check pending chunk.generate jobs", "upload_id", uploadID, "error", err)
+		return true
+	}
+
+	return len(records) > 0
+}
+
+func enqueueUploadChunkEmbeds(app *pocketbase.PocketBase, uploadID string, userID string) error {
+	chunkRecords, err := app.FindRecordsByFilter(
+		collections.DocumentChunks,
+		"upload = {:uploadId} && (vector_id = 0 || vector_id = null)",
+		"page_number,chunk_index,created",
+		0,
+		0,
+		dbx.Params{"uploadId": uploadID},
+	)
+	if err != nil {
+		return err
+	}
+
+	if len(chunkRecords) == 0 {
+		return nil
+	}
+
+	type embedChunkRef struct {
+		chunkID string
+		hash    string
+	}
+	embedChunkRefs := make([]embedChunkRef, 0, len(chunkRecords))
+	for _, chunkRecord := range chunkRecords {
+		content := strings.TrimSpace(chunkRecord.GetString("content"))
+		if content == "" {
+			continue
+		}
+
 		hash := sha1.Sum([]byte(content))
 		embedChunkRefs = append(embedChunkRefs, embedChunkRef{
 			chunkID: chunkRecord.Id,
 			hash:    hex.EncodeToString(hash[:]),
 		})
-
-		chunkIndex++
 	}
 
 	for start := 0; start < len(embedChunkRefs); start += chunkEmbedEnqueueBatchSize {
@@ -337,46 +425,29 @@ func handleChunkGenerateJob(app *pocketbase.PocketBase, job *core.Record) error 
 		batchHash := sha1.Sum([]byte(hashInput.String()))
 		batchNumber := start/chunkEmbedEnqueueBatchSize + 1
 		totalBatches := (len(embedChunkRefs) + chunkEmbedEnqueueBatchSize - 1) / chunkEmbedEnqueueBatchSize
-		dedupe := fmt.Sprintf("chunk.embed.batch:%s:%s:%d:%s", payload.UploadID, payload.PageID, batchNumber, hex.EncodeToString(batchHash[:]))
+		dedupe := fmt.Sprintf("chunk.embed.batch:%s:%d:%s", uploadID, batchNumber, hex.EncodeToString(batchHash[:]))
 
-		app.Logger().Info("[uploads] enqueue chunk embed batch",
-			"upload_id", payload.UploadID,
-			"page_id", payload.PageID,
+		app.Logger().Info("[uploads] enqueue upload chunk embed batch",
+			"upload_id", uploadID,
 			"batch", batchNumber,
 			"total_batches", totalBatches,
 			"batch_size", len(chunkIDs),
 		)
 
 		if err := processing.Enqueue(app, processing.EnqueueRequest{
-			JobType:   processing.JobTypeChunkEmbed,
+			JobType:   processing.JobTypeChunkEmbedSubmit,
 			DedupeKey: dedupe,
 			Payload: map[string]any{
 				"chunk_ids": chunkIDs,
 			},
 			Priority:    100,
 			MaxAttempts: 5,
-			UserID:      payload.UserID,
-			UploadID:    payload.UploadID,
-			PageID:      payload.PageID,
+			UserID:      userID,
+			UploadID:    uploadID,
 		}); err != nil {
 			return err
 		}
 	}
 
-	return nil
-}
-
-func handleUploadSummarizeJob(app *pocketbase.PocketBase, job *core.Record) error {
-	payload := uploadJobPayload{}
-	if err := job.UnmarshalJSONField("payload_json", &payload); err != nil {
-		return fmt.Errorf("invalid payload_json: %w", err)
-	}
-	if strings.TrimSpace(payload.UploadID) == "" {
-		return fmt.Errorf("payload upload_id is required")
-	}
-
-	// upload.summary field was removed from schema; keep this handler as a
-	// no-op to gracefully drain any already queued legacy upload.summarize jobs.
-	app.Logger().Info("[uploads] upload.summarize job is deprecated; skipping", "uploadId", payload.UploadID)
 	return nil
 }

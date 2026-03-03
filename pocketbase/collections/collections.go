@@ -18,6 +18,7 @@ const (
 	Notes               = "notes"
 	Summaries           = "summaries"
 	DocumentChunks      = "document_chunks"
+	EmbeddingOperations = "embedding_operations"
 	ProcessingJobs      = "processing_jobs"
 	ProcessingJobEvents = "processing_job_events"
 )

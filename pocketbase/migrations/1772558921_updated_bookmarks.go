@@ -7,13 +7,13 @@ import (
 
 func init() {
 	m.Register(func(app core.App) error {
-		collection, err := app.FindCollectionByNameOrId("pbc_85348442")
+		collection, err := app.FindCollectionByNameOrId("pbc_486090712")
 		if err != nil {
 			return err
 		}
 
 		// update field
-		if err := collection.Fields.AddMarshaledJSONAt(17, []byte(`{
+		if err := collection.Fields.AddMarshaledJSONAt(5, []byte(`{
 			"cascadeDelete": true,
 			"collectionId": "pbc_121766130",
 			"hidden": false,
@@ -22,7 +22,7 @@ func init() {
 			"minSelect": 0,
 			"name": "upload",
 			"presentable": false,
-			"required": false,
+			"required": true,
 			"system": false,
 			"type": "relation"
 		}`)); err != nil {
@@ -31,13 +31,13 @@ func init() {
 
 		return app.Save(collection)
 	}, func(app core.App) error {
-		collection, err := app.FindCollectionByNameOrId("pbc_85348442")
+		collection, err := app.FindCollectionByNameOrId("pbc_486090712")
 		if err != nil {
 			return err
 		}
 
 		// update field
-		if err := collection.Fields.AddMarshaledJSONAt(17, []byte(`{
+		if err := collection.Fields.AddMarshaledJSONAt(5, []byte(`{
 			"cascadeDelete": false,
 			"collectionId": "pbc_121766130",
 			"hidden": false,
@@ -46,7 +46,7 @@ func init() {
 			"minSelect": 0,
 			"name": "upload",
 			"presentable": false,
-			"required": false,
+			"required": true,
 			"system": false,
 			"type": "relation"
 		}`)); err != nil {

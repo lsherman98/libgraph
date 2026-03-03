@@ -1,14 +1,10 @@
 package vector_search
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/google/generative-ai-go/genai"
 	"github.com/pocketbase/dbx"
@@ -78,80 +74,8 @@ func Init(app *pocketbase.PocketBase) error {
 		return e.Next()
 	})
 
-	app.Cron().MustAdd("processMissingEmbeddings", "*/2 * * * *", func() {
-		runID := time.Now().UTC().Format("20060102T150405.000Z0700")
-		if !embeddingBatchMu.TryLock() {
-			app.Logger().Info("[vector_search] cron: previous embedding batch still processing, skipping this run",
-				"run_id", runID,
-			)
-			return
-		}
-
-		go func() {
-			defer embeddingBatchMu.Unlock()
-
-			fetchLimit := embeddingFetchLimit()
-			totalProcessed := 0
-			totalFailed := 0
-
-			for pass := 1; ; pass++ {
-				records, err := app.FindRecordsByFilter("document_chunks", "vector_id = 0 || vector_id = null", "", fetchLimit, 0)
-				if err != nil {
-					app.Logger().Error("[vector_search] cron: failed to fetch chunks", "run_id", runID, "pass", pass, "error", err)
-					return
-				}
-				if len(records) == 0 {
-					if pass == 1 {
-						app.Logger().Info("[vector_search] cron: no chunks with missing embeddings found", "run_id", runID)
-					}
-					break
-				}
-
-				chunks := collectChunkRecords(app, records)
-				if len(chunks) == 0 {
-					app.Logger().Info("[vector_search] cron: no valid chunks to process after filtering", "run_id", runID, "pass", pass)
-					break
-				}
-
-				ctx := context.Background()
-				app.Logger().Info("[vector_search] cron: starting embedding batch",
-					"run_id", runID,
-					"pass", pass,
-					"fetch_limit", fetchLimit,
-					"records", len(records),
-					"chunks", len(chunks),
-				)
-				processed, failed, haltedByRateLimit := processBatchEmbeddings(ctx, app, chunks, fmt.Sprintf("cron-missing-embeddings-%s-pass-%d", runID, pass))
-				totalProcessed += processed
-				totalFailed += failed
-
-				app.Logger().Info("[vector_search] cron: embedding batch pass completed",
-					"run_id", runID,
-					"pass", pass,
-					"processed", processed,
-					"failed", failed,
-					"total_processed", totalProcessed,
-					"total_failed", totalFailed,
-				)
-
-				if haltedByRateLimit {
-					app.Logger().Warn("[vector_search] cron: stopping run due to rate limit",
-						"run_id", runID,
-						"pass", pass,
-					)
-					break
-				}
-
-				if len(records) < fetchLimit {
-					break
-				}
-			}
-			app.Logger().Info("[vector_search] cron: embedding batch completed",
-				"run_id", runID,
-				"processed", totalProcessed,
-				"failed", totalFailed,
-			)
-		}()
+	app.Cron().MustAdd("recoverEmbeddingPollJobs", "*/1 * * * *", func() {
+		enqueuePendingEmbeddingPollJobs(app, 200)
 	})
 
 	app.Cron().MustAdd("cleanupOrphanedEmbeddings", "0 2 * * *", func() {
@@ -209,22 +133,6 @@ func getEmbeddingStats(app *pocketbase.PocketBase) map[string]any {
 	}
 
 	return stats
-}
-
-func embeddingFetchLimit() int {
-	const defaultFetchLimit = 500
-
-	raw := os.Getenv("VECTOR_EMBED_FETCH_LIMIT")
-	if raw == "" {
-		return defaultFetchLimit
-	}
-
-	parsed, err := strconv.Atoi(raw)
-	if err != nil || parsed <= 0 {
-		return defaultFetchLimit
-	}
-
-	return parsed
 }
 
 func Search(app *pocketbase.PocketBase, query string, uploadIDs []string, k int) ([]SearchResult, error) {

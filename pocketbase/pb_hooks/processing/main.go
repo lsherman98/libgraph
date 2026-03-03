@@ -15,11 +15,10 @@ import (
 
 const (
 	JobTypeUploadParseOrTranscribe = "upload.parse_or_transcribe"
-	JobTypePagePersist             = "page.persist"
 	JobTypeChunkGenerate           = "chunk.generate"
-	JobTypeUploadSummarize         = "upload.summarize"
 	JobTypePageSummarize           = "page.summarize"
-	JobTypeChunkEmbed              = "chunk.embed"
+	JobTypeChunkEmbedSubmit        = "chunk.embed.submit"
+	JobTypeChunkEmbedPoll          = "chunk.embed.poll"
 )
 
 const (
@@ -28,19 +27,26 @@ const (
 	workerID          = "pb-main-worker"
 )
 
+type workerSpec struct {
+	name     string
+	jobTypes []string
+	limit    int
+}
+
 type JobHandler func(app *pocketbase.PocketBase, job *core.Record) error
 
 type EnqueueRequest struct {
-	JobType     string
-	DedupeKey   string
-	Payload     map[string]any
-	Priority    int
-	MaxAttempts int
-	ScheduledAt *time.Time
-	UserID      string
-	UploadID    string
-	PageID      string
-	ChunkID     string
+	JobType              string
+	DedupeKey            string
+	Payload              map[string]any
+	Priority             int
+	MaxAttempts          int
+	ScheduledAt          *time.Time
+	UserID               string
+	UploadID             string
+	PageID               string
+	ChunkID              string
+	EmbeddingOperationID string
 }
 
 var (
@@ -56,25 +62,26 @@ func RegisterHandler(jobType string, handler JobHandler) {
 
 func Init(app *pocketbase.PocketBase) error {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
-		routine.FireAndForget(func() {
-			ticker := time.NewTicker(queuePollInterval)
-			defer ticker.Stop()
+		workers := []workerSpec{
+			{name: "upload-parse", jobTypes: []string{JobTypeUploadParseOrTranscribe}, limit: 2},
+			{name: "chunk-generate", jobTypes: []string{JobTypeChunkGenerate}, limit: 4},
+			{name: "page-summarize", jobTypes: []string{JobTypePageSummarize}, limit: 4},
+			{name: "embed-submit", jobTypes: []string{JobTypeChunkEmbedSubmit}, limit: 3},
+			{name: "embed-poll", jobTypes: []string{JobTypeChunkEmbedPoll}, limit: 8},
+		}
 
-			for {
-				processDueJobs(app, 10, false)
-				<-ticker.C
-			}
-		})
+		for _, spec := range workers {
+			spec := spec
+			routine.FireAndForget(func() {
+				ticker := time.NewTicker(queuePollInterval)
+				defer ticker.Stop()
 
-		routine.FireAndForget(func() {
-			ticker := time.NewTicker(queuePollInterval)
-			defer ticker.Stop()
-
-			for {
-				processDueJobs(app, 5, true)
-				<-ticker.C
-			}
-		})
+				for {
+					processDueJobs(app, spec)
+					<-ticker.C
+				}
+			})
+		}
 
 		return se.Next()
 	})
@@ -168,30 +175,41 @@ func setOptionalRelations(record *core.Record, req EnqueueRequest) {
 	if req.ChunkID != "" {
 		record.Set("chunk", req.ChunkID)
 	}
+	if req.EmbeddingOperationID != "" {
+		record.Set("embedding_operation", req.EmbeddingOperationID)
+	}
 }
 
-func processDueJobs(app *pocketbase.PocketBase, limit int, embedOnly bool) {
-	now := time.Now().UTC().Format(time.RFC3339)
-	jobTypeFilter := "job_type != {:embedJobType}"
-	if embedOnly {
-		jobTypeFilter = "job_type = {:embedJobType}"
+func processDueJobs(app *pocketbase.PocketBase, worker workerSpec) {
+	if len(worker.jobTypes) == 0 || worker.limit <= 0 {
+		return
 	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	jobTypeFilters := make([]string, 0, len(worker.jobTypes))
+	params := dbx.Params{"now": now}
+	for i, jobType := range worker.jobTypes {
+		key := fmt.Sprintf("jobType%d", i)
+		jobTypeFilters = append(jobTypeFilters, fmt.Sprintf("job_type = {:%s}", key))
+		params[key] = jobType
+	}
+	jobTypeClause := "(" + strings.Join(jobTypeFilters, " || ") + ")"
 
 	records, err := app.FindRecordsByFilter(
 		collections.ProcessingJobs,
-		"((status = 'queued' && (scheduled_at = '' || scheduled_at = null || scheduled_at <= {:now})) || (status = 'running' && lease_until != null && lease_until <= {:now})) && "+jobTypeFilter,
+		"((status = 'queued' && (scheduled_at = '' || scheduled_at = null || scheduled_at <= {:now})) || (status = 'running' && lease_until != null && lease_until <= {:now})) && "+jobTypeClause,
 		"priority,scheduled_at,created",
-		limit,
+		worker.limit,
 		0,
-		dbx.Params{"now": now, "embedJobType": JobTypeChunkEmbed},
+		params,
 	)
 	if err != nil {
-		app.Logger().Error("[processing] failed to fetch due jobs", "error", err)
+		app.Logger().Error("[processing] failed to fetch due jobs", "worker", worker.name, "error", err)
 		return
 	}
 
 	for _, job := range records {
-		if err := claimJob(app, job); err != nil {
+		if err := claimJob(app, job, worker.name); err != nil {
 			app.Logger().Warn("[processing] failed to claim job", "jobId", job.Id, "error", err)
 			continue
 		}
@@ -199,6 +217,10 @@ func processDueJobs(app *pocketbase.PocketBase, limit int, embedOnly bool) {
 		execErr := executeJob(app, job)
 		if execErr != nil {
 			handleJobFailure(app, job, execErr)
+			continue
+		}
+
+		if job.GetString("status") != "running" {
 			continue
 		}
 
@@ -216,12 +238,12 @@ func processDueJobs(app *pocketbase.PocketBase, limit int, embedOnly bool) {
 	}
 }
 
-func claimJob(app *pocketbase.PocketBase, job *core.Record) error {
+func claimJob(app *pocketbase.PocketBase, job *core.Record, workerName string) error {
 	now := time.Now().UTC()
 	job.Set("status", "running")
 	job.Set("lease_until", now.Add(queueLeaseWindow))
 	job.Set("started_at", now)
-	job.Set("worker_id", workerID)
+	job.Set("worker_id", fmt.Sprintf("%s:%s", workerID, workerName))
 	job.Set("error_code", "")
 	job.Set("error_message", "")
 	return app.Save(job)
