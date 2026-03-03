@@ -21,6 +21,8 @@ import {
 } from "@/lib/pocketbase-types";
 import { useNavigate } from "@tanstack/react-router";
 
+const USER_UPLOAD_TYPES = Object.values(UploadsTypeOptions).filter((type) => type !== UploadsTypeOptions.summary);
+
 interface DocumentInfoPanelProps {
   uploadId: string;
 }
@@ -163,7 +165,7 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.values(UploadsTypeOptions).map((t) => (
+                  {USER_UPLOAD_TYPES.map((t) => (
                     <SelectItem key={t} value={t}>
                       {t.charAt(0).toUpperCase() + t.slice(1)}
                     </SelectItem>

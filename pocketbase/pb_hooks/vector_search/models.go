@@ -93,6 +93,11 @@ type restEmbedContentResponse struct {
 	Embedding *restContentEmbedding `json:"embedding,omitempty"`
 }
 
+type restBulkEmbedContentResponse struct {
+	Embeddings []restEmbedContentResponse `json:"embeddings,omitempty"`
+	Embedding  *restContentEmbedding      `json:"embedding,omitempty"`
+}
+
 type restContentEmbedding struct {
 	Values []float32 `json:"values"`
 }

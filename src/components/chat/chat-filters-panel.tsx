@@ -9,6 +9,8 @@ import { cn } from "@/lib/utils";
 import { UploadsTypeOptions } from "@/lib/pocketbase-types";
 import type { ChatFilters } from "@/lib/types";
 
+const USER_UPLOAD_TYPES = Object.values(UploadsTypeOptions).filter((type) => type !== UploadsTypeOptions.summary);
+
 interface ChatFiltersPanelProps {
   filters: ChatFilters;
   onFiltersChange: (filters: ChatFilters) => void;
@@ -133,7 +135,7 @@ export function ChatFiltersPanel({ filters, onFiltersChange, onClose }: ChatFilt
             values={filters.types}
             placeholder="All types"
             onToggle={(value) => handleFilterToggle("types", value)}
-            options={Object.values(UploadsTypeOptions).map((type) => ({
+            options={USER_UPLOAD_TYPES.map((type) => ({
               value: type,
               label: type.charAt(0).toUpperCase() + type.slice(1),
             }))}

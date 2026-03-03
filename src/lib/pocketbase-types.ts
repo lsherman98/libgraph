@@ -173,6 +173,7 @@ export enum EdgesTypeOptions {
 	"published_by" = "published_by",
 	"about_person" = "about_person",
 	"links_to" = "links_to",
+	"summary_of" = "summary_of",
 }
 export type EdgesRecord = {
 	created: IsoAutoDateString
@@ -451,6 +452,7 @@ export enum UploadsTypeOptions {
 	"lecture" = "lecture",
 	"youtube" = "youtube",
 	"essay" = "essay",
+	"summary" = "summary",
 }
 
 export enum UploadsStatusOptions {
@@ -463,8 +465,6 @@ export type UploadsRecord = {
 	created: IsoAutoDateString
 	file: FileNameString
 	id: string
-	is_summary?: boolean
-	llama_file_id?: string
 	num_pages?: number
 	people?: RecordIdString[]
 	publication?: RecordIdString

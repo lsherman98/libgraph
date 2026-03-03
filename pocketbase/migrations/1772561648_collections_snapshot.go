@@ -847,6 +847,20 @@ func init() {
 						"type": "file"
 					},
 					{
+						"hidden": false,
+						"id": "file2451137642",
+						"maxSelect": 1,
+						"maxSize": 52428800,
+						"mimeTypes": [],
+						"name": "transcript_file",
+						"presentable": false,
+						"protected": false,
+						"required": false,
+						"system": false,
+						"thumbs": [],
+						"type": "file"
+					},
+					{
 						"cascadeDelete": true,
 						"collectionId": "_pb_users_auth_",
 						"hidden": false,

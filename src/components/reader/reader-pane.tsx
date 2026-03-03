@@ -72,7 +72,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
   const { data: currentPageData } = usePages(uploadId ?? null, pageSettings.currentPage, 1);
   const currentPageId = currentPageData?.items[0]?.id ?? null;
 
-  const isSummaryUpload = !!upload?.is_summary;
+  const isSummaryUpload = upload?.type === "summary";
   const shouldPollForSummary = !isSummaryUpload && !!currentPageId && queuedSummaryPageId === currentPageId;
   const { data: pageSummaryRecord } = useSummaryBySourcePage(!isSummaryUpload ? (currentPageId ?? undefined) : undefined, {
     pollUntilFound: shouldPollForSummary,

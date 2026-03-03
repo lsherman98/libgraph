@@ -19,6 +19,7 @@ interface CreatableComboboxProps {
   placeholder?: string;
   emptyText?: string;
   isMulti?: boolean;
+  searchable?: boolean;
   className?: string;
 }
 
@@ -30,6 +31,7 @@ export function CreatableCombobox({
   placeholder = "Select...",
   emptyText = "No results found.",
   isMulti = false,
+  searchable = true,
   className,
 }: CreatableComboboxProps) {
   const [open, setOpen] = React.useState(false);
@@ -67,7 +69,7 @@ export function CreatableCombobox({
       </PopoverTrigger>
       <PopoverContent className="w-75 overflow-hidden p-0" align="start">
         <Command className="max-w-full">
-          <CommandInput placeholder={placeholder} value={inputValue} onValueChange={setInputValue} />
+          {searchable && <CommandInput placeholder={placeholder} value={inputValue} onValueChange={setInputValue} />}
           <CommandList>
             <CommandEmpty>{emptyText}</CommandEmpty>
             <CommandGroup heading="Suggestions">

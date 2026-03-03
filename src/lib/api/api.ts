@@ -88,7 +88,7 @@ export interface UploadFilters {
 }
 
 export const getUploads = async (filters?: UploadFilters) => {
-    const filterParts: string[] = ["is_summary = false"];
+    const filterParts: string[] = ['type != "summary"'];
 
     if (filters?.type && filters.type.length > 0) {
         const typeFilters = filters.type.map(t => `type = "${t}"`).join(' || ');
@@ -345,7 +345,7 @@ export const getWorkspaceMaterials = async () => {
     const [uploads, highlights, bookmarks, notes] = await Promise.all([
         pb.collection(Collections.Uploads).getFullList({
             sort: '-created',
-            filter: 'is_summary = false',
+            filter: 'type != "summary"',
             expand: 'subjects,publication,tags'
         }),
         pb.collection(Collections.Highlights).getFullList({

@@ -10,10 +10,12 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	pbgen "github.com/lsherman98/libgraph/pocketbase/pbschema/generated"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -60,20 +62,31 @@ func collectChunkRecords(app *pocketbase.PocketBase, records []*core.Record) []c
 
 	for _, record := range records {
 		content := record.GetString("content")
+		vectorID := float64(record.GetInt("vector_id"))
+		uploadID := record.GetString("upload")
+		if chunk, err := pbgen.WrapRecord[pbgen.DocumentChunks](record); err == nil {
+			content = chunk.Content()
+			vectorID = chunk.VectorId()
+			uploadID = chunk.GetString("upload")
+		}
+
 		if content == "" {
 			continue
 		}
-		if record.GetInt("vector_id") != 0 {
+		if vectorID != 0 {
 			continue
 		}
 
-		uploadID := record.GetString("upload")
 		title := ""
 		if uploadID != "" {
 			if !uploadLookupDone[uploadID] {
 				uploadLookupDone[uploadID] = true
 				if upload, err := app.FindRecordById("uploads", uploadID); err == nil {
-					uploadTitleCache[uploadID] = upload.GetString("title")
+					uploadTitle := upload.GetString("title")
+					if uploadProxy, wrapErr := pbgen.WrapRecord[pbgen.Uploads](upload); wrapErr == nil {
+						uploadTitle = uploadProxy.Title()
+					}
+					uploadTitleCache[uploadID] = uploadTitle
 				} else {
 					app.Logger().Warn("[vector_search] failed to resolve upload title for chunk",
 						"upload_id", uploadID,
@@ -342,6 +355,20 @@ func embeddingMaxBatchSize() int {
 	return parsed
 }
 
+func batchEmbeddingEnabled() bool {
+	raw := strings.TrimSpace(strings.ToLower(os.Getenv("BATCH")))
+	if raw == "" {
+		return false
+	}
+
+	switch raw {
+	case "1", "true", "t", "yes", "y", "on":
+		return true
+	default:
+		return false
+	}
+}
+
 func embeddingPollInterval() time.Duration {
 	raw := os.Getenv("VECTOR_EMBED_POLL_INTERVAL_SECONDS")
 	if raw == "" {
@@ -431,6 +458,73 @@ func submitBatchEmbedJob(ctx context.Context, requests []inlinedEmbedContentRequ
 		return nil, fmt.Errorf("parsing operation response: %w", err)
 	}
 	return &op, nil
+}
+
+func submitBulkEmbedContent(ctx context.Context, modelName string, parts []restPart) ([][]float32, error) {
+	apiKey := os.Getenv("GEMINI_API_KEY")
+	if apiKey == "" {
+		return nil, fmt.Errorf("GEMINI_API_KEY not set")
+	}
+	if len(parts) == 0 {
+		return nil, nil
+	}
+
+	url := fmt.Sprintf("%s/models/%s:embedContent?key=%s", geminiAPIBase, modelName, apiKey)
+	body := restEmbedContentRequest{
+		Model:    fmt.Sprintf("models/%s", modelName),
+		Content:  restContent{Parts: parts},
+		TaskType: "RETRIEVAL_DOCUMENT",
+	}
+
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, fmt.Errorf("marshal embedContent request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("embedContent HTTP request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading response body: %w", err)
+	}
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		return nil, fmt.Errorf("%w (HTTP 429): %s", errRateLimited, string(respBody))
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("embedContent failed (HTTP %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var parsed restBulkEmbedContentResponse
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return nil, fmt.Errorf("parsing embedContent response: %w", err)
+	}
+
+	if len(parsed.Embeddings) == 0 && parsed.Embedding != nil {
+		parsed.Embeddings = []restEmbedContentResponse{{Embedding: parsed.Embedding}}
+	}
+
+	vectors := make([][]float32, 0, len(parsed.Embeddings))
+	for _, emb := range parsed.Embeddings {
+		if emb.Embedding == nil || len(emb.Embedding.Values) == 0 {
+			vectors = append(vectors, nil)
+			continue
+		}
+		vectors = append(vectors, emb.Embedding.Values)
+	}
+
+	return vectors, nil
 }
 
 func getBatchJobStatus(ctx context.Context, batchName string) (*batchOperation, []byte, error) {

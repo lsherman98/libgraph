@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
+	pbgen "github.com/lsherman98/libgraph/pocketbase/pbschema/generated"
 	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/core"
 )
 
 const (
@@ -28,8 +28,8 @@ const (
 )
 
 var (
-	mistralRequestMu      sync.Mutex
-	nextMistralRequestAt  time.Time
+	mistralRequestMu     sync.Mutex
+	nextMistralRequestAt time.Time
 )
 
 var audioExtensions = map[string]bool{
@@ -68,8 +68,8 @@ func New(app *pocketbase.PocketBase) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) Transcribe(upload *core.Record) (*TranscriptionResponse, error) {
-	filename := upload.GetString("file")
+func (c *Client) Transcribe(upload *pbgen.Uploads) (*TranscriptionResponse, error) {
+	filename := upload.File()
 	if filename == "" {
 		return nil, errors.New("upload record has no file")
 	}

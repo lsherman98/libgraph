@@ -1,13 +1,8 @@
 package crons
 
-import (
-	"github.com/pocketbase/pocketbase"
-)
+import "github.com/pocketbase/pocketbase"
 
 func Init(app *pocketbase.PocketBase) error {
-	app.Cron().MustAdd("CronJob", "* * * * *", func() {
-
-	})
-
+	_ = app
 	return nil
 }

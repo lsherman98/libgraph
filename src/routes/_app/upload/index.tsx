@@ -23,6 +23,8 @@ import {
   type TopicsResponse,
 } from "@/lib/pocketbase-types";
 
+const USER_UPLOAD_TYPES = Object.values(UploadsTypeOptions).filter((type) => type !== UploadsTypeOptions.summary);
+
 export const Route = createFileRoute("/_app/upload/")({
   component: RouteComponent,
 });
@@ -30,6 +32,7 @@ export const Route = createFileRoute("/_app/upload/")({
 interface FileMetadata {
   id: string;
   file: File;
+  transcriptFile?: File;
   name: string;
   type: UploadsTypeOptions;
   subjects: string[];
@@ -55,29 +58,97 @@ function RouteComponent() {
 
   const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac", ".wma", ".webm", ".mp4"]);
   const DOCUMENT_EXTENSIONS = new Set([".pdf", ".epub", ".txt", ".md", ".markdown"]);
+  const TRANSCRIPT_EXTENSIONS = new Set([".txt", ".md", ".markdown"]);
   const ALLOWED_EXTENSIONS = new Set([...AUDIO_EXTENSIONS, ...DOCUMENT_EXTENSIONS]);
+
+  const getExtension = (filename: string) => {
+    const dotIndex = filename.lastIndexOf(".");
+    if (dotIndex < 0) return "";
+    return filename.toLowerCase().slice(dotIndex);
+  };
+  const getBaseName = (filename: string) => filename.replace(/\.[^/.]+$/, "");
+  const getNormalizedBaseName = (filename: string) => getBaseName(filename).trim().toLowerCase();
+  const isAudioFile = (filename: string) => AUDIO_EXTENSIONS.has(getExtension(filename));
+  const isTranscriptFile = (filename: string) => TRANSCRIPT_EXTENSIONS.has(getExtension(filename));
+
+  const createFileMetadata = (file: File, transcriptFile?: File): FileMetadata => {
+    const ext = getExtension(file.name);
+    const detectedType = AUDIO_EXTENSIONS.has(ext) ? UploadsTypeOptions.podcast : UploadsTypeOptions.book;
+
+    return {
+      id: Math.random().toString(36).substring(7),
+      file,
+      transcriptFile,
+      name: getBaseName(file.name),
+      type: detectedType,
+      subjects: [],
+      publication: "",
+      tags: [],
+      topics: [],
+      status: "PENDING" as const,
+    };
+  };
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const filtered = acceptedFiles.filter((file) => {
-      const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
+      const ext = getExtension(file.name);
       return ALLOWED_EXTENSIONS.has(ext);
     });
-    const newFiles = filtered.map((file) => {
-      const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."));
-      const detectedType = AUDIO_EXTENSIONS.has(ext) ? UploadsTypeOptions.podcast : UploadsTypeOptions.book;
-      return {
-        id: Math.random().toString(36).substring(7),
-        file,
-        name: file.name.replace(/\.[^/.]+$/, ""),
-        type: detectedType,
-        subjects: [],
-        publication: "",
-        tags: [],
-        topics: [],
-        status: "PENDING" as const,
-      };
+
+    const transcriptPool = new Map<string, File[]>();
+    for (const file of filtered) {
+      if (!isTranscriptFile(file.name)) continue;
+      const baseName = getNormalizedBaseName(file.name);
+      if (!transcriptPool.has(baseName)) transcriptPool.set(baseName, []);
+      transcriptPool.get(baseName)?.push(file);
+    }
+
+    const takeTranscript = (baseName: string) => {
+      const matches = transcriptPool.get(baseName);
+      if (!matches || matches.length === 0) return undefined;
+      const transcript = matches.shift();
+      if (matches.length === 0) transcriptPool.delete(baseName);
+      return transcript;
+    };
+
+    setFiles((prev) => {
+      const nextFiles = [...prev];
+
+      for (const file of filtered) {
+        if (isTranscriptFile(file.name)) continue;
+
+        if (isAudioFile(file.name)) {
+          const transcript = takeTranscript(getNormalizedBaseName(file.name));
+          nextFiles.push(createFileMetadata(file, transcript));
+          continue;
+        }
+
+        nextFiles.push(createFileMetadata(file));
+      }
+
+      for (const [baseName, transcripts] of transcriptPool) {
+        for (const transcript of transcripts) {
+          const existingAudioIndex = nextFiles.findIndex(
+            (item) =>
+              isAudioFile(item.file.name) &&
+              (item.status === "PENDING" || item.status === "ERROR") &&
+              getNormalizedBaseName(item.file.name) === baseName,
+          );
+
+          if (existingAudioIndex >= 0) {
+            nextFiles[existingAudioIndex] = {
+              ...nextFiles[existingAudioIndex],
+              transcriptFile: transcript,
+            };
+            continue;
+          }
+
+          nextFiles.push(createFileMetadata(transcript));
+        }
+      }
+
+      return nextFiles;
     });
-    setFiles((prev) => [...prev, ...newFiles]);
   }, []);
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
@@ -139,6 +210,10 @@ function RouteComponent() {
     }
   };
 
+  const setTranscriptFile = (id: string, transcriptFile?: File) => {
+    setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, transcriptFile } : f)));
+  };
+
   const handleUploadAll = async () => {
     const pendingFiles = files.filter((f) => f.status === "PENDING" || f.status === "ERROR");
     if (pendingFiles.length === 0) return;
@@ -148,6 +223,7 @@ function RouteComponent() {
       try {
         await uploadMutation.mutateAsync({
           file: fileData.file,
+          transcript_file: fileData.transcriptFile,
           title: fileData.name,
           type: fileData.type,
           people: fileData.subjects.length > 0 ? fileData.subjects : undefined,
@@ -210,6 +286,7 @@ function RouteComponent() {
             <Upload className="h-10 w-10 text-muted-foreground" />
             <p className="text-lg font-medium">Drop files here or click to select</p>
             <p className="text-sm text-muted-foreground">Supports PDFs, EPUBs, Text, Markdown, and audio files.</p>
+            <p className="text-xs text-muted-foreground">Tip: same-name .txt/.md files are auto-added as transcripts for audio uploads.</p>
           </div>
         </div>
       )}
@@ -228,128 +305,188 @@ function RouteComponent() {
             <div className="divide-y max-h-[70vh] overflow-y-auto">
               {files.map((file) => (
                 <div key={file.id} className={`p-4 space-y-3 ${selectedIds.has(file.id) ? "bg-accent/40" : ""}`}>
-                  <div className="flex items-center gap-2">
-                    {file.status === "PENDING" && (
-                      <Checkbox checked={selectedIds.has(file.id)} onCheckedChange={() => toggleSelected(file.id)} className="shrink-0" />
-                    )}
-                    <div className="p-1.5 bg-muted rounded shrink-0">
-                      <FileIcon className="h-4 w-4" />
-                    </div>
-                    <Input
-                      value={file.name}
-                      onChange={(e) => updateFile(file.id, { name: e.target.value })}
-                      placeholder="Title"
-                      className="h-8 text-sm flex-1 min-w-0"
-                    />
-                    <Select value={file.type} onValueChange={(val) => updateFile(file.id, { type: val as UploadsTypeOptions })}>
-                      <SelectTrigger className="h-8 text-sm w-25 shrink-0">
-                        <SelectValue placeholder="Type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {Object.values(UploadsTypeOptions).map((type) => (
-                          <SelectItem key={type} value={type}>
-                            {type.charAt(0).toUpperCase() + type.slice(1)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <div className="w-8 shrink-0 flex justify-center">
-                      {file.status === "PENDING" && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => removeFile(file.id)}
+                  {(() => {
+                    const audioUpload = isAudioFile(file.file.name);
+
+                    return (
+                      <>
+                        <div className="flex items-center gap-2">
+                          {file.status === "PENDING" && (
+                            <Checkbox checked={selectedIds.has(file.id)} onCheckedChange={() => toggleSelected(file.id)} className="shrink-0" />
+                          )}
+                          <div className="p-1.5 bg-muted rounded shrink-0">
+                            <FileIcon className="h-4 w-4" />
+                          </div>
+                          <Input
+                            value={file.name}
+                            onChange={(e) => updateFile(file.id, { name: e.target.value })}
+                            placeholder="Title"
+                            className="h-8 text-sm flex-1 min-w-0"
+                          />
+                          <Select value={file.type} onValueChange={(val) => updateFile(file.id, { type: val as UploadsTypeOptions })}>
+                            <SelectTrigger className="h-8 text-sm w-25 shrink-0">
+                              <SelectValue placeholder="Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {USER_UPLOAD_TYPES.map((type) => (
+                                <SelectItem key={type} value={type}>
+                                  {type.charAt(0).toUpperCase() + type.slice(1)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {audioUpload && (
+                            <div className="flex items-center gap-2 min-w-0 shrink">
+                              <span className="text-xs text-muted-foreground shrink-0">Transcript</span>
+                              <input
+                                id={`transcript-${file.id}`}
+                                type="file"
+                                accept=".txt,.md,.markdown,text/plain,text/markdown"
+                                className="hidden"
+                                disabled={file.status !== "PENDING"}
+                                onChange={(e) => {
+                                  const transcript = e.target.files?.[0];
+                                  if (!transcript) {
+                                    setTranscriptFile(file.id, undefined);
+                                    return;
+                                  }
+
+                                  const ext = getExtension(transcript.name);
+                                  if (!TRANSCRIPT_EXTENSIONS.has(ext)) {
+                                    setTranscriptFile(file.id, undefined);
+                                    e.currentTarget.value = "";
+                                    return;
+                                  }
+
+                                  setTranscriptFile(file.id, transcript);
+                                }}
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8"
+                                disabled={file.status !== "PENDING"}
+                                onClick={() => {
+                                  const input = document.getElementById(`transcript-${file.id}`) as HTMLInputElement | null;
+                                  input?.click();
+                                }}
+                              >
+                                {file.transcriptFile ? "Change" : "Choose"}
+                              </Button>
+                              <span className="text-xs text-muted-foreground truncate max-w-36" title={file.transcriptFile?.name}>
+                                {file.transcriptFile?.name ?? "No file"}
+                              </span>
+                              {file.transcriptFile && file.status === "PENDING" && (
+                                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setTranscriptFile(file.id, undefined)}>
+                                  Clear
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                          <div className="w-8 shrink-0 flex justify-center">
+                            {file.status === "PENDING" && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={() => removeFile(file.id)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {file.status === "UPLOADING" && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
+                            {file.status === "SUCCESS" && <CheckCircle className="h-5 w-5 text-green-500" />}
+                            {file.status === "ERROR" && <AlertCircle className="h-5 w-5 text-red-500" />}
+                          </div>
+                        </div>
+                        <div className={`flex items-center gap-2 ${file.status === "PENDING" ? "pl-14" : "pl-9"}`}>
+                          <div className="flex items-center gap-2 flex-1">
+                            <span className="text-xs text-muted-foreground shrink-0">Authors</span>
+                            <CreatableCombobox
+                              options={authorOptions || []}
+                              value={file.subjects}
+                              className="h-8 text-sm flex-1"
+                              isMulti
+                              onSelect={(val) => {
+                                const newSubjects = file.subjects.includes(val) ? file.subjects.filter((s) => s !== val) : [...file.subjects, val];
+                                updateFile(file.id, { subjects: newSubjects });
+                              }}
+                              onCreate={(name) => {
+                                createPersonMutation.mutateAsync({ name, type: PeopleTypeOptions.author, user: getUserId() }).then((record) => {
+                                  updateFile(file.id, { subjects: [...file.subjects, record.id] });
+                                });
+                              }}
+                              placeholder="Authors..."
+                              emptyText="No authors found."
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 flex-1">
+                            <span className="text-xs text-muted-foreground shrink-0">Publication</span>
+                            <CreatableCombobox
+                              options={publicationOptions || []}
+                              value={file.publication}
+                              className="h-8 text-sm flex-1"
+                              onSelect={(val) => updateFile(file.id, { publication: val })}
+                              onCreate={(name) => {
+                                createPublicationMutation.mutateAsync({ name, user: getUserId() }).then((record) => {
+                                  updateFile(file.id, { publication: record.id });
+                                });
+                              }}
+                              placeholder="Publication..."
+                              emptyText="No publications found."
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 flex-1">
+                            <span className="text-xs text-muted-foreground shrink-0">Tags</span>
+                            <CreatableCombobox
+                              options={tagOptions || []}
+                              value={file.tags}
+                              className="h-8 text-sm flex-1"
+                              isMulti
+                              onSelect={(val) => {
+                                const newTags = file.tags.includes(val) ? file.tags.filter((t) => t !== val) : [...file.tags, val];
+                                updateFile(file.id, { tags: newTags });
+                              }}
+                              onCreate={(title) => {
+                                createTagMutation.mutateAsync({ title, user: getUserId() }).then((record) => {
+                                  updateFile(file.id, { tags: [...file.tags, record.id] });
+                                });
+                              }}
+                              placeholder="Tags..."
+                              emptyText="No tags found."
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 flex-1">
+                            <span className="text-xs text-muted-foreground shrink-0">Topics</span>
+                            <CreatableCombobox
+                              options={topicOptions || []}
+                              value={file.topics}
+                              className="h-8 text-sm flex-1"
+                              isMulti
+                              onSelect={(val) => {
+                                const newTopics = file.topics.includes(val) ? file.topics.filter((t) => t !== val) : [...file.topics, val];
+                                updateFile(file.id, { topics: newTopics });
+                              }}
+                              onCreate={(title) => {
+                                createTopicMutation.mutateAsync({ title, user: getUserId() }).then((record) => {
+                                  updateFile(file.id, { topics: [...file.topics, record.id] });
+                                });
+                              }}
+                              placeholder="Topics..."
+                              emptyText="No topics found."
+                            />
+                          </div>
+                        </div>
+                        <div
+                          className={`text-xs text-muted-foreground truncate ${file.status === "PENDING" ? "pl-14" : "pl-9"}`}
+                          title={file.file.name}
                         >
-                          <X className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {file.status === "UPLOADING" && <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />}
-                      {file.status === "SUCCESS" && <CheckCircle className="h-5 w-5 text-green-500" />}
-                      {file.status === "ERROR" && <AlertCircle className="h-5 w-5 text-red-500" />}
-                    </div>
-                  </div>
-                  <div className={`flex items-center gap-2 ${file.status === "PENDING" ? "pl-14" : "pl-9"}`}>
-                    <div className="flex items-center gap-2 flex-1">
-                      <span className="text-xs text-muted-foreground shrink-0">Authors</span>
-                      <CreatableCombobox
-                        options={authorOptions || []}
-                        value={file.subjects}
-                        className="h-8 text-sm flex-1"
-                        isMulti
-                        onSelect={(val) => {
-                          const newSubjects = file.subjects.includes(val) ? file.subjects.filter((s) => s !== val) : [...file.subjects, val];
-                          updateFile(file.id, { subjects: newSubjects });
-                        }}
-                        onCreate={(name) => {
-                          createPersonMutation.mutateAsync({ name, type: PeopleTypeOptions.author, user: getUserId() }).then((record) => {
-                            updateFile(file.id, { subjects: [...file.subjects, record.id] });
-                          });
-                        }}
-                        placeholder="Authors..."
-                        emptyText="No authors found."
-                      />
-                    </div>
-                    <div className="flex items-center gap-2 flex-1">
-                      <span className="text-xs text-muted-foreground shrink-0">Publication</span>
-                      <CreatableCombobox
-                        options={publicationOptions || []}
-                        value={file.publication}
-                        className="h-8 text-sm flex-1"
-                        onSelect={(val) => updateFile(file.id, { publication: val })}
-                        onCreate={(name) => {
-                          createPublicationMutation.mutateAsync({ name, user: getUserId() }).then((record) => {
-                            updateFile(file.id, { publication: record.id });
-                          });
-                        }}
-                        placeholder="Publication..."
-                        emptyText="No publications found."
-                      />
-                    </div>
-                    <div className="flex items-center gap-2 flex-1">
-                      <span className="text-xs text-muted-foreground shrink-0">Tags</span>
-                      <CreatableCombobox
-                        options={tagOptions || []}
-                        value={file.tags}
-                        className="h-8 text-sm flex-1"
-                        isMulti
-                        onSelect={(val) => {
-                          const newTags = file.tags.includes(val) ? file.tags.filter((t) => t !== val) : [...file.tags, val];
-                          updateFile(file.id, { tags: newTags });
-                        }}
-                        onCreate={(title) => {
-                          createTagMutation.mutateAsync({ title, user: getUserId() }).then((record) => {
-                            updateFile(file.id, { tags: [...file.tags, record.id] });
-                          });
-                        }}
-                        placeholder="Tags..."
-                        emptyText="No tags found."
-                      />
-                    </div>
-                    <div className="flex items-center gap-2 flex-1">
-                      <span className="text-xs text-muted-foreground shrink-0">Topics</span>
-                      <CreatableCombobox
-                        options={topicOptions || []}
-                        value={file.topics}
-                        className="h-8 text-sm flex-1"
-                        isMulti
-                        onSelect={(val) => {
-                          const newTopics = file.topics.includes(val) ? file.topics.filter((t) => t !== val) : [...file.topics, val];
-                          updateFile(file.id, { topics: newTopics });
-                        }}
-                        onCreate={(title) => {
-                          createTopicMutation.mutateAsync({ title, user: getUserId() }).then((record) => {
-                            updateFile(file.id, { topics: [...file.topics, record.id] });
-                          });
-                        }}
-                        placeholder="Topics..."
-                        emptyText="No topics found."
-                      />
-                    </div>
-                  </div>
-                  <div className={`text-xs text-muted-foreground truncate ${file.status === "PENDING" ? "pl-14" : "pl-9"}`} title={file.file.name}>
-                    {file.file.name} • {(file.file.size / 1024 / 1024).toFixed(2)} MB
-                  </div>
+                          {file.file.name} • {(file.file.size / 1024 / 1024).toFixed(2)} MB
+                          {file.transcriptFile ? ` • transcript: ${file.transcriptFile.name}` : ""}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               ))}
             </div>

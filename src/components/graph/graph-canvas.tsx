@@ -2,56 +2,20 @@ import { useState, useMemo, useCallback } from "react";
 import { useGraphData } from "@/lib/api/queries";
 import type { UploadFilters } from "@/lib/api/api";
 import type { EdgesResponse } from "@/lib/pocketbase-types";
-import { NodesTypeOptions, EdgesTypeOptions } from "@/lib/pocketbase-types";
+import { NodesTypeOptions, EdgesTypeOptions, UploadsTypeOptions } from "@/lib/pocketbase-types";
 import type { HighlightsRecord, BookmarksRecord, NotesRecord } from "@/lib/pocketbase-types";
 import type { EnrichedNodesResponse, UploadNodeData } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import {
-  FileText,
-  User,
-  Tag,
-  FolderOpen,
-  Highlighter,
-  Bookmark,
-  MessageSquare,
-  Eye,
-  EyeOff,
-  ChevronDown,
-  ChevronRight,
-  Filter,
-  PanelLeftClose,
-  SlidersHorizontal,
-} from "lucide-react";
+import { Eye, EyeOff, ChevronDown, ChevronRight, Filter, PanelLeftClose, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useDebounce } from "@/lib/hooks/use-debounce";
-import { ForceGraphView, type NodePreviewRequest } from "./force-graph-view";
+import { ForceGraphView, defaultGraphTuningSettings, type NodePreviewRequest } from "./force-graph-view";
 import { PreviewDialog } from "@/components/workspace/preview-dialog";
 import { GraphFiltersPanel } from "./graph-filters-panel";
-
-const nodeTypeConfig: Record<NodesTypeOptions, { icon: React.ElementType; color: string; label: string }> = {
-  [NodesTypeOptions.upload]: { icon: FileText, color: "#3b82f6", label: "Uploads" },
-  [NodesTypeOptions.author]: { icon: User, color: "#9333ea", label: "Authors" },
-  [NodesTypeOptions.tag]: { icon: Tag, color: "#22c55e", label: "Tags" },
-  [NodesTypeOptions.topic]: { icon: FolderOpen, color: "#f97316", label: "Topics" },
-  [NodesTypeOptions.highlight]: { icon: Highlighter, color: "#eab308", label: "Highlights" },
-  [NodesTypeOptions.bookmark]: { icon: Bookmark, color: "#ef4444", label: "Bookmarks" },
-  [NodesTypeOptions.note]: { icon: MessageSquare, color: "#6366f1", label: "Notes" },
-};
-
-const edgeTypeConfig: Record<EdgesTypeOptions, { color: string; label: string }> = {
-  [EdgesTypeOptions.authored_by]: { color: "#9333ea", label: "Authored by" },
-  [EdgesTypeOptions.tagged_with]: { color: "#22c55e", label: "Tagged with" },
-  [EdgesTypeOptions.belongs_to]: { color: "#f97316", label: "Belongs to" },
-  [EdgesTypeOptions.highlight_of]: { color: "#eab308", label: "Highlight of" },
-  [EdgesTypeOptions.bookmark_of]: { color: "#ef4444", label: "Bookmark of" },
-  [EdgesTypeOptions.note_of]: { color: "#6366f1", label: "Note of" },
-  [EdgesTypeOptions.published_by]: { color: "#0ea5e9", label: "Published by" },
-  [EdgesTypeOptions.about_person]: { color: "#d946ef", label: "About person" },
-  [EdgesTypeOptions.links_to]: { color: "#14b8a6", label: "Links to" },
-};
+import { edgeTypeConfig, nodeTypeConfig, uploadTypeConfig } from "./graph-style-config";
 
 export function GraphCanvas() {
   const { data: graphData, isLoading, error } = useGraphData();
@@ -62,7 +26,9 @@ export function GraphCanvas() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [hiddenNodeTypes, setHiddenNodeTypes] = useState<Set<NodesTypeOptions>>(new Set());
   const [hiddenEdgeTypes, setHiddenEdgeTypes] = useState<Set<EdgesTypeOptions>>(new Set());
+  const [hiddenUploadTypes, setHiddenUploadTypes] = useState<Set<UploadsTypeOptions>>(new Set());
   const [showNodeFilters, setShowNodeFilters] = useState(true);
+  const [showUploadTypeFilters, setShowUploadTypeFilters] = useState(true);
   const [showEdgeFilters, setShowEdgeFilters] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(false);
@@ -74,16 +40,12 @@ export function GraphCanvas() {
   const [previewUploadTitle, setPreviewUploadTitle] = useState<string | undefined>();
   const [previewPageNumber, setPreviewPageNumber] = useState<number | undefined>();
 
-  const handleSelectNode = useCallback(
-    (nodeId: string) => {
-      if (!nodeId || nodeId === selectedNodeId) {
-        setSelectedNodeId(null);
-      } else {
-        setSelectedNodeId(nodeId);
-      }
-    },
-    [selectedNodeId],
-  );
+  const handleSelectNode = useCallback((nodeId: string) => {
+    setSelectedNodeId((prev) => {
+      if (!nodeId || nodeId === prev) return null;
+      return nodeId;
+    });
+  }, []);
 
   const handlePreviewNode = useCallback((request: NodePreviewRequest) => {
     const { nodeType, uploadId, uploadTitle, pageNumber, recordData } = request;
@@ -134,7 +96,6 @@ export function GraphCanvas() {
 
     const hasUploadFilters =
       debouncedSearch ||
-      (uploadFilters.type?.length ?? 0) > 0 ||
       (uploadFilters.status?.length ?? 0) > 0 ||
       (uploadFilters.tags?.length ?? 0) > 0 ||
       (uploadFilters.topics?.length ?? 0) > 0 ||
@@ -191,13 +152,6 @@ export function GraphCanvas() {
         const search = debouncedSearch.toLowerCase();
         const title = (data?.title || node.label || "").toLowerCase();
         if (!title.includes(search)) {
-          passes = false;
-        }
-      }
-
-      // Type filter
-      if (passes && uploadFilters.type && uploadFilters.type.length > 0) {
-        if (!data?.type || !uploadFilters.type.includes(data.type)) {
           passes = false;
         }
       }
@@ -300,6 +254,88 @@ export function GraphCanvas() {
   const showAllEdges = useCallback(() => setHiddenEdgeTypes(new Set()), []);
   const hideAllEdges = useCallback(() => setHiddenEdgeTypes(new Set(Object.values(EdgesTypeOptions))), []);
 
+  const toggleUploadType = useCallback((type: UploadsTypeOptions) => {
+    setHiddenUploadTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) {
+        next.delete(type);
+      } else {
+        next.add(type);
+      }
+      return next;
+    });
+  }, []);
+
+  const showAllUploadTypes = useCallback(() => setHiddenUploadTypes(new Set()), []);
+  const hideAllUploadTypes = useCallback(() => setHiddenUploadTypes(new Set(Object.values(UploadsTypeOptions))), []);
+
+  const allNodes = (graphData?.nodes as EnrichedNodesResponse[]) || [];
+
+  const uploadTypeCounts = useMemo(() => {
+    const counts: Record<UploadsTypeOptions, number> = {
+      [UploadsTypeOptions.book]: 0,
+      [UploadsTypeOptions.article]: 0,
+      [UploadsTypeOptions.podcast]: 0,
+      [UploadsTypeOptions.lecture]: 0,
+      [UploadsTypeOptions.youtube]: 0,
+      [UploadsTypeOptions.essay]: 0,
+      [UploadsTypeOptions.summary]: 0,
+    };
+
+    for (const node of filteredNodes) {
+      if (node.type !== NodesTypeOptions.upload) continue;
+      const uploadType = (node.data as UploadNodeData | null | undefined)?.type as UploadsTypeOptions | undefined;
+      if (uploadType && uploadType in counts) {
+        counts[uploadType] += 1;
+      }
+    }
+
+    return counts;
+  }, [filteredNodes]);
+
+  const visibleUploadTypes = useMemo(() => Object.values(UploadsTypeOptions).filter((type) => (uploadTypeCounts[type] || 0) > 0), [uploadTypeCounts]);
+
+  const showUploadTypeSection = !hiddenNodeTypes.has(NodesTypeOptions.upload) && visibleUploadTypes.length > 0;
+
+  const graphNodes = useMemo(() => {
+    if (hiddenUploadTypes.size === 0) {
+      return filteredNodes;
+    }
+
+    return filteredNodes.filter((node) => {
+      if (node.type !== NodesTypeOptions.upload) {
+        return true;
+      }
+
+      const uploadType = (node.data as UploadNodeData | null | undefined)?.type as UploadsTypeOptions | undefined;
+      if (!uploadType) {
+        return true;
+      }
+
+      return !hiddenUploadTypes.has(uploadType);
+    });
+  }, [filteredNodes, hiddenUploadTypes]);
+
+  const graphEdges = useMemo(() => {
+    if (hiddenUploadTypes.size === 0) {
+      return filteredEdges;
+    }
+
+    const visibleNodeIds = new Set(graphNodes.map((n) => n.id));
+    return filteredEdges.filter((e) => visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target));
+  }, [filteredEdges, graphNodes, hiddenUploadTypes]);
+
+  const activeContentFilterCount = [
+    !!debouncedSearch,
+    (uploadFilters.status?.length ?? 0) > 0,
+    (uploadFilters.tags?.length ?? 0) > 0,
+    (uploadFilters.topics?.length ?? 0) > 0,
+    (uploadFilters.people?.length ?? 0) > 0,
+    !!uploadFilters.publication,
+  ].filter(Boolean).length;
+
+  const hasActiveUploadFilters = activeContentFilterCount > 0;
+
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center">
@@ -319,12 +355,6 @@ export function GraphCanvas() {
       </div>
     );
   }
-
-  const allNodes = (graphData?.nodes as EnrichedNodesResponse[]) || [];
-  const allEdges = (graphData?.edges as EdgesResponse[]) || [];
-
-  const hasActiveUploadFilters =
-    Object.keys(uploadFilters).filter((k) => k !== "sortBy" && k !== "sortOrder" && uploadFilters[k as keyof UploadFilters]).length > 0;
 
   return (
     <div className="flex-1 h-full flex overflow-hidden">
@@ -352,7 +382,7 @@ export function GraphCanvas() {
               Content Filters
               {hasActiveUploadFilters && (
                 <Badge variant="secondary" className="ml-auto h-5 px-1.5 text-xs">
-                  {Object.keys(uploadFilters).filter((k) => k !== "sortBy" && k !== "sortOrder" && uploadFilters[k as keyof UploadFilters]).length}
+                  {activeContentFilterCount}
                 </Badge>
               )}
             </Button>
@@ -415,6 +445,60 @@ export function GraphCanvas() {
               </>
             )}
           </div>
+          {showUploadTypeSection && (
+            <div className="p-3 border-b space-y-2">
+              <button
+                className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-full hover:text-foreground transition-colors"
+                onClick={() => setShowUploadTypeFilters(!showUploadTypeFilters)}
+              >
+                {showUploadTypeFilters ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                <Filter className="h-3 w-3" />
+                Upload Types
+              </button>
+              {showUploadTypeFilters && (
+                <>
+                  <div className="flex gap-1">
+                    <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2" onClick={showAllUploadTypes}>
+                      Show all
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-[10px] h-6 px-2" onClick={hideAllUploadTypes}>
+                      Hide all
+                    </Button>
+                  </div>
+                  <div className="space-y-0.5">
+                    {visibleUploadTypes.map((type) => {
+                      const isHidden = hiddenUploadTypes.has(type);
+                      const count = uploadTypeCounts[type] || 0;
+                      const color = uploadTypeConfig[type].color;
+                      const label = uploadTypeConfig[type].label;
+
+                      return (
+                        <button
+                          key={type}
+                          onClick={() => toggleUploadType(type)}
+                          className={cn(
+                            "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs transition-all hover:bg-accent",
+                            isHidden && "opacity-40",
+                          )}
+                        >
+                          <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                          <span className="flex-1 text-left truncate">{label}</span>
+                          <Badge variant="secondary" className="text-[10px] h-4 px-1 min-w-5 justify-center">
+                            {count}
+                          </Badge>
+                          {isHidden ? (
+                            <EyeOff className="h-3 w-3 text-muted-foreground shrink-0" />
+                          ) : (
+                            <Eye className="h-3 w-3 text-muted-foreground shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           <div className="p-3 space-y-2">
             <button
               className="flex items-center gap-1 text-xs font-semibold text-muted-foreground uppercase tracking-wide w-full hover:text-foreground transition-colors"
@@ -470,9 +554,9 @@ export function GraphCanvas() {
           <div className="p-3 text-xs text-muted-foreground space-y-1 mt-auto">
             <div>
               {allNodes.length - hiddenNodeTypes.size * 0} nodes visible /{" "}
-              {filteredNodes.filter((n) => !hiddenNodeTypes.has(n.type as NodesTypeOptions)).length} shown
+              {graphNodes.filter((n) => !hiddenNodeTypes.has(n.type as NodesTypeOptions)).length} shown
             </div>
-            <div>{filteredEdges.filter((e) => !hiddenEdgeTypes.has(e.type as EdgesTypeOptions)).length} edges shown</div>
+            <div>{graphEdges.filter((e) => !hiddenEdgeTypes.has(e.type as EdgesTypeOptions)).length} edges shown</div>
           </div>
         </div>
       )}
@@ -488,13 +572,14 @@ export function GraphCanvas() {
           </Button>
         )}
         <ForceGraphView
-          nodes={filteredNodes}
-          edges={filteredEdges}
+          nodes={graphNodes}
+          edges={graphEdges}
           selectedNodeId={selectedNodeId}
           onSelectNode={handleSelectNode}
           onPreviewNode={handlePreviewNode}
           hiddenNodeTypes={hiddenNodeTypes}
           hiddenEdgeTypes={hiddenEdgeTypes}
+          tuning={defaultGraphTuningSettings}
         />
         <PreviewDialog
           open={previewOpen}

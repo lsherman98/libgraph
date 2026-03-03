@@ -6,7 +6,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { CreatableCombobox } from "@/components/creatable-combobox";
 import { SlidersHorizontal, RotateCcw, X } from "lucide-react";
-import { UploadsTypeOptions } from "@/lib/pocketbase-types";
 
 interface GraphFiltersPanelProps {
   filters: UploadFilters;
@@ -33,7 +32,6 @@ export function GraphFiltersPanel({ filters, onFiltersChange, onClose }: GraphFi
   };
 
   const activeFilterCount = [
-    (filters.type?.length || 0) > 0,
     (filters.tags?.length || 0) > 0,
     (filters.topics?.length || 0) > 0,
     (filters.people?.length || 0) > 0,
@@ -61,16 +59,6 @@ export function GraphFiltersPanel({ filters, onFiltersChange, onClose }: GraphFi
       <Separator />
       <ScrollArea className="flex-1 [&>div>div]:block!">
         <div className="p-4 space-y-5 overflow-hidden">
-          <FilterCombobox
-            label="Type"
-            values={filters.type}
-            placeholder="All types"
-            onToggle={(value) => handleFilterToggle("type", value)}
-            options={Object.values(UploadsTypeOptions).map((type) => ({
-              value: type,
-              label: type.charAt(0).toUpperCase() + type.slice(1),
-            }))}
-          />
           <FilterCombobox
             label="Tag"
             values={filters.tags}

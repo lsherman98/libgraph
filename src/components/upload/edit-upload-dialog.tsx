@@ -19,6 +19,8 @@ import {
   type TopicsResponse,
 } from "@/lib/pocketbase-types";
 
+const USER_UPLOAD_TYPES = Object.values(UploadsTypeOptions).filter((type) => type !== UploadsTypeOptions.summary);
+
 interface EditUploadDialogProps {
   upload: UploadsResponse | null;
   open: boolean;
@@ -127,7 +129,7 @@ export function EditUploadDialog({ upload, open, onOpenChange }: EditUploadDialo
                 <SelectValue placeholder="Select type" />
               </SelectTrigger>
               <SelectContent>
-                {Object.values(UploadsTypeOptions).map((t) => (
+                {USER_UPLOAD_TYPES.map((t) => (
                   <SelectItem key={t} value={t}>
                     {t.charAt(0).toUpperCase() + t.slice(1)}
                   </SelectItem>

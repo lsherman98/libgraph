@@ -1,13 +1,16 @@
 package uploads
 
 import (
+	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 
-	"github.com/lsherman98/libgraph/pocketbase/collections"
+	"github.com/lsherman98/libgraph/pocketbase/mistral"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/processing"
+	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/proxyhooks"
+	pbgen "github.com/lsherman98/libgraph/pocketbase/pbschema/generated"
 	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/core"
 )
 
 var (
@@ -23,18 +26,29 @@ var (
 	reHR          = regexp.MustCompile(`(?m)^[-*_]{3,}\s*$`)
 	reWhitespace  = regexp.MustCompile(`\s+`)
 	reSentence    = regexp.MustCompile(`([.!?])\s+`)
+	transcriptExt = map[string]bool{
+		".txt":      true,
+		".md":       true,
+		".markdown": true,
+	}
 )
 
 func Init(app *pocketbase.PocketBase) error {
 	registerQueueHandlers(app)
+	phooks := proxyhooks.Get(app)
 
-	app.OnRecordCreateRequest(collections.Uploads).BindFunc(func(e *core.RecordRequestEvent) error {
+	phooks.OnUploadsCreateRequest.BindFunc(func(e *pbgen.UploadsRequestEvent) error {
+		upload := e.PRecord
+
+		if err := validateTranscriptAttachment(upload); err != nil {
+			return err
+		}
+
 		if err := e.Next(); err != nil {
 			return err
 		}
 
-		upload := e.Record
-		upload.Set("status", "PROCESSING")
+		upload.SetStatus(pbgen.PROCESSING)
 		if err := app.Save(upload); err != nil {
 			app.Logger().Error("[uploads] failed to set upload status=PROCESSING", "uploadId", upload.Id, "error", err)
 		}
@@ -47,10 +61,29 @@ func Init(app *pocketbase.PocketBase) error {
 			},
 			Priority:    50,
 			MaxAttempts: 5,
-			UserID:      upload.GetString("user"),
+			UserID:      upload.Record.GetString("user"),
 			UploadID:    upload.Id,
 		})
 	})
+
+	return nil
+}
+
+func validateTranscriptAttachment(upload *pbgen.Uploads) error {
+	transcriptFile := strings.TrimSpace(upload.Record.GetString("transcript_file"))
+	if transcriptFile == "" {
+		return nil
+	}
+
+	uploadFile := strings.TrimSpace(upload.File())
+	if !mistral.IsAudioFile(uploadFile) {
+		return fmt.Errorf("transcript_file can only be attached to audio uploads")
+	}
+
+	transcriptExtension := strings.ToLower(filepath.Ext(transcriptFile))
+	if !transcriptExt[transcriptExtension] {
+		return fmt.Errorf("transcript_file must be a .txt, .md, or .markdown file")
+	}
 
 	return nil
 }

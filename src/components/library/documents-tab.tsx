@@ -127,38 +127,38 @@ export function DocumentsTab() {
 
   return (
     <div className="flex flex-col min-h-0 flex-1">
-      <div className="flex items-center justify-between mb-4 gap-4 shrink-0">
-        <div className="flex-1">
-          <AdvancedFilters
-            filters={filters}
-            onFiltersChange={setFilters}
-            tags={tags || []}
-            topics={topics || []}
-            people={people || []}
-            publications={publications || []}
-          />
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {selectedIds.size > 0 && (
+      <div className="mb-4 shrink-0">
+        <AdvancedFilters
+          filters={filters}
+          onFiltersChange={setFilters}
+          tags={tags || []}
+          topics={topics || []}
+          people={people || []}
+          publications={publications || []}
+          actions={
             <>
-              <span className="text-sm text-muted-foreground">{selectedIds.size} selected</span>
-              <Button variant="outline" size="sm" onClick={clearSelection}>
-                <X className="mr-1 h-3 w-3" />
-                Clear
-              </Button>
-              <Button size="sm" onClick={() => setCreateCollectionOpen(true)}>
-                <Library className="mr-2 h-4 w-4" />
-                Create Collection
+              {selectedIds.size > 0 && (
+                <>
+                  <span className="text-sm text-muted-foreground">{selectedIds.size} selected</span>
+                  <Button variant="outline" size="sm" onClick={clearSelection}>
+                    <X className="mr-1 h-3 w-3" />
+                    Clear
+                  </Button>
+                  <Button size="sm" onClick={() => setCreateCollectionOpen(true)}>
+                    <Library className="mr-2 h-4 w-4" />
+                    Create Collection
+                  </Button>
+                </>
+              )}
+              <Button asChild>
+                <Link to="/upload">
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload
+                </Link>
               </Button>
             </>
-          )}
-          <Button asChild>
-            <Link to="/upload">
-              <Upload className="mr-2 h-4 w-4" />
-              Upload
-            </Link>
-          </Button>
-        </div>
+          }
+        />
       </div>
       {isLoading ? (
         <DocumentsTableSkeleton />

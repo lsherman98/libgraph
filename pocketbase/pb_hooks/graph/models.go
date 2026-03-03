@@ -30,6 +30,7 @@ const (
 	EdgeTypePublishedBy EdgeType = "published_by"
 	EdgeTypeAboutPerson EdgeType = "about_person"
 	EdgeTypeLinksTo     EdgeType = "links_to"
+	EdgeTypeSummaryOf   EdgeType = "summary_of"
 )
 
 type labelDataFunc func(*core.Record) (string, map[string]any)

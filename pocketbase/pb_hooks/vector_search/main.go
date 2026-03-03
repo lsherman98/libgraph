@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/google/generative-ai-go/genai"
+	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/proxyhooks"
+	pbgen "github.com/lsherman98/libgraph/pocketbase/pbschema/generated"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
@@ -27,6 +29,7 @@ func Init(app *pocketbase.PocketBase) error {
 	}
 
 	registerQueueHandlers(app)
+	phooks := proxyhooks.Get(app)
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		if err := ensureEmbeddingsTable(app); err != nil {
@@ -41,35 +44,45 @@ func Init(app *pocketbase.PocketBase) error {
 		return se.Next()
 	})
 
-	app.OnRecordAfterUpdateSuccess("document_chunks").BindFunc(func(e *core.RecordEvent) error {
-		oldContent := e.Record.Original().GetString("content")
-		newContent := e.Record.GetString("content")
+	phooks.OnDocumentChunksAfterUpdateSuccess.BindFunc(func(e *pbgen.DocumentChunksEvent) error {
+		record := e.PRecord.Record
+		oldContent := record.Original().GetString("content")
+		if originalChunk, err := pbgen.WrapRecord[pbgen.DocumentChunks](record.Original()); err == nil {
+			oldContent = originalChunk.Content()
+		}
+
+		newContent := record.GetString("content")
+		if chunk, err := pbgen.WrapRecord[pbgen.DocumentChunks](record); err == nil {
+			newContent = chunk.Content()
+		}
+
 		if oldContent == newContent {
 			return e.Next()
 		}
 
 		app.Logger().Info("[vector_search] chunk content updated; scheduling embedding reset",
-			"chunk_id", e.Record.Id,
+			"chunk_id", record.Id,
 		)
 
 		routine.FireAndForget(func() {
-			if err := deleteEmbeddingForRecord(app, e.Record.Original()); err != nil {
-				app.Logger().Error("[vector_search] failed to delete old embedding on update", "id", e.Record.Id, "error", err)
+			if err := deleteEmbeddingForRecord(app, record.Original()); err != nil {
+				app.Logger().Error("[vector_search] failed to delete old embedding on update", "id", record.Id, "error", err)
 			}
 
 			updateStmt := "UPDATE document_chunks SET vector_id = 0 WHERE id = {:chunkId}"
-			if _, err := app.DB().NewQuery(updateStmt).Bind(dbx.Params{"chunkId": e.Record.Id}).Execute(); err != nil {
-				app.Logger().Error("[vector_search] failed to reset vector_id on update", "id", e.Record.Id, "error", err)
+			if _, err := app.DB().NewQuery(updateStmt).Bind(dbx.Params{"chunkId": record.Id}).Execute(); err != nil {
+				app.Logger().Error("[vector_search] failed to reset vector_id on update", "id", record.Id, "error", err)
 			} else {
-				app.Logger().Info("[vector_search] reset vector_id after content update", "chunk_id", e.Record.Id)
+				app.Logger().Info("[vector_search] reset vector_id after content update", "chunk_id", record.Id)
 			}
 		})
 		return e.Next()
 	})
 
-	app.OnRecordAfterDeleteSuccess("document_chunks").BindFunc(func(e *core.RecordEvent) error {
-		if err := deleteEmbeddingForRecord(app, e.Record); err != nil {
-			app.Logger().Error("[vector_search] failed to delete embedding on delete", "id", e.Record.Id, "error", err)
+	phooks.OnDocumentChunksAfterDeleteSuccess.BindFunc(func(e *pbgen.DocumentChunksEvent) error {
+		record := e.PRecord.Record
+		if err := deleteEmbeddingForRecord(app, record); err != nil {
+			app.Logger().Error("[vector_search] failed to delete embedding on delete", "id", record.Id, "error", err)
 		}
 		return e.Next()
 	})
@@ -255,6 +268,10 @@ func ensureEmbeddingsTable(app *pocketbase.PocketBase) error {
 
 func deleteEmbeddingForRecord(app *pocketbase.PocketBase, record *core.Record) error {
 	vectorID := record.GetInt("vector_id")
+	if chunk, err := pbgen.WrapRecord[pbgen.DocumentChunks](record); err == nil {
+		vectorID = int(chunk.VectorId())
+	}
+
 	if vectorID == 0 {
 		return nil
 	}

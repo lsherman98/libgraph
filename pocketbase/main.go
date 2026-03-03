@@ -10,6 +10,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/lsherman98/libgraph/pocketbase/parser"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/chat"
+	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/crons"
 	fts "github.com/lsherman98/libgraph/pocketbase/pb_hooks/full_text_search"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/graph"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/processing"
@@ -67,9 +68,9 @@ func main() {
 	// 	log.Fatal("Failed to initialize API hooks: ", err)
 	// }
 
-	// if err := crons.Init(app); err != nil {
-	// 	log.Fatal("Failed to initialize cron jobs: ", err)
-	// }
+	if err := crons.Init(app); err != nil {
+		log.Fatal("Failed to initialize cron jobs: ", err)
+	}
 
 	// if err := stripe.Init(app); err != nil {
 	// 	log.Fatal("Failed to initialize Stripe hooks: ", err)

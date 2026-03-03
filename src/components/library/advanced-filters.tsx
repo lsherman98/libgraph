@@ -1,17 +1,15 @@
-import { useState } from "react";
 import type { UploadFilters } from "@/lib/api/api";
+import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
-import { Search, SlidersHorizontal, X, ArrowUpDown } from "lucide-react";
+import { Search, X, ArrowUpDown } from "lucide-react";
 import { UploadsTypeOptions, UploadsStatusOptions } from "@/lib/pocketbase-types";
 import { statusConfig } from "./constants";
+import { CreatableCombobox } from "@/components/creatable-combobox";
+
+const USER_UPLOAD_TYPES = Object.values(UploadsTypeOptions).filter((type) => type !== UploadsTypeOptions.summary);
 
 function FilterBadge({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
@@ -37,6 +35,7 @@ export function AdvancedFilters({
   topics,
   people,
   publications,
+  actions,
 }: {
   filters: UploadFilters;
   onFiltersChange: (filters: UploadFilters) => void;
@@ -44,9 +43,8 @@ export function AdvancedFilters({
   topics: { id: string; title?: string }[];
   people: { id: string; name?: string }[];
   publications: { id: string; name?: string }[];
+  actions?: ReactNode;
 }) {
-  const [filtersOpen, setFiltersOpen] = useState(false);
-
   const activeFilterCount = [
     (filters.type?.length || 0) > 0,
     (filters.status?.length || 0) > 0,
@@ -74,11 +72,40 @@ export function AdvancedFilters({
   const getTopicName = (id: string) => topics.find((t) => t.id === id)?.title || id;
   const getPersonName = (id: string) => people.find((p) => p.id === id)?.name || id;
   const getPublicationName = (id: string) => publications.find((p) => p.id === id)?.name || id;
+  const filterTypeOptions = USER_UPLOAD_TYPES.map((type) => ({
+    value: type,
+    label: type.charAt(0).toUpperCase() + type.slice(1),
+  }));
+
+  const filterStatusOptions = Object.values(UploadsStatusOptions).map((status) => ({
+    value: status,
+    label: statusConfig[status]?.label || status,
+  }));
+
+  const filterTagOptions = tags.map((tag) => ({
+    value: tag.id,
+    label: tag.title || "Untitled",
+  }));
+
+  const filterTopicOptions = topics.map((topic) => ({
+    value: topic.id,
+    label: topic.title || "Untitled",
+  }));
+
+  const filterPeopleOptions = people.map((person) => ({
+    value: person.id,
+    label: person.name || "Unknown",
+  }));
+
+  const filterPublicationOptions = publications.map((publication) => ({
+    value: publication.id,
+    label: publication.name || "Unknown",
+  }));
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1 max-w-sm">
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative w-52 sm:w-56 shrink-0">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search documents..."
@@ -87,180 +114,6 @@ export function AdvancedFilters({
             className="pl-9"
           />
         </div>
-        <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2">
-              <SlidersHorizontal className="h-4 w-4" />
-              Filters
-              {activeFilterCount > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="ml-1 h-5 w-5 rounded-full p-0 text-xs flex items-center justify-center"
-                >
-                  {activeFilterCount}
-                </Badge>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-80 p-0" align="start">
-            <div className="p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="font-medium text-sm">Filters</h4>
-                {activeFilterCount > 0 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-auto p-0 text-xs text-muted-foreground"
-                    onClick={clearAllFilters}
-                  >
-                    Clear all
-                  </Button>
-                )}
-              </div>
-              <Separator />
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Type</Label>
-                <div className="grid grid-cols-2 gap-1">
-                  {Object.values(UploadsTypeOptions).map((type) => (
-                    <label
-                      key={type}
-                      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent cursor-pointer"
-                    >
-                      <Checkbox
-                        checked={filters.type?.includes(type) || false}
-                        onCheckedChange={() => toggleArrayFilter("type", type)}
-                      />
-                      <span className="capitalize">{type}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <Separator />
-              <div className="space-y-2">
-                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</Label>
-                <div className="grid grid-cols-2 gap-1">
-                  {Object.values(UploadsStatusOptions).map((status) => {
-                    const config = statusConfig[status];
-                    return (
-                      <label
-                        key={status}
-                        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent cursor-pointer"
-                      >
-                        <Checkbox
-                          checked={filters.status?.includes(status) || false}
-                          onCheckedChange={() => toggleArrayFilter("status", status)}
-                        />
-                        <span>{config?.label || status}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-              {tags.length > 0 && (
-                <>
-                  <Separator />
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Tags</Label>
-                    <ScrollArea className="max-h-32">
-                      <div className="space-y-1">
-                        {tags.map((tag) => (
-                          <label
-                            key={tag.id}
-                            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent cursor-pointer"
-                          >
-                            <Checkbox
-                              checked={filters.tags?.includes(tag.id) || false}
-                              onCheckedChange={() => toggleArrayFilter("tags", tag.id)}
-                            />
-                            <span className="truncate">{tag.title || "Untitled"}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  </div>
-                </>
-              )}
-              {topics.length > 0 && (
-                <>
-                  <Separator />
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Topics</Label>
-                    <ScrollArea className="max-h-32">
-                      <div className="space-y-1">
-                        {topics.map((topic) => (
-                          <label
-                            key={topic.id}
-                            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent cursor-pointer"
-                          >
-                            <Checkbox
-                              checked={filters.topics?.includes(topic.id) || false}
-                              onCheckedChange={() => toggleArrayFilter("topics", topic.id)}
-                            />
-                            <span className="truncate">{topic.title || "Untitled"}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  </div>
-                </>
-              )}
-              {people.length > 0 && (
-                <>
-                  <Separator />
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Authors
-                    </Label>
-                    <ScrollArea className="max-h-32">
-                      <div className="space-y-1">
-                        {people.map((person) => (
-                          <label
-                            key={person.id}
-                            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent cursor-pointer"
-                          >
-                            <Checkbox
-                              checked={filters.people?.includes(person.id) || false}
-                              onCheckedChange={() => toggleArrayFilter("people", person.id)}
-                            />
-                            <span className="truncate">{person.name || "Unknown"}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </ScrollArea>
-                  </div>
-                </>
-              )}
-              {publications.length > 0 && (
-                <>
-                  <Separator />
-                  <div className="space-y-2">
-                    <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                      Publication
-                    </Label>
-                    <Select
-                      value={filters.publication || "all"}
-                      onValueChange={(value) =>
-                        onFiltersChange({ ...filters, publication: value === "all" ? undefined : value })
-                      }
-                    >
-                      <SelectTrigger className="h-8 text-sm">
-                        <SelectValue placeholder="All publications" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All publications</SelectItem>
-                        {publications.map((pub) => (
-                          <SelectItem key={pub.id} value={pub.id}>
-                            {pub.name || "Untitled"}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>
-              )}
-            </div>
-          </PopoverContent>
-        </Popover>
         <Select
           value={`${filters.sortBy || "created"}_${filters.sortOrder || "desc"}`}
           onValueChange={(value) => {
@@ -268,7 +121,7 @@ export function AdvancedFilters({
             onFiltersChange({ ...filters, sortBy, sortOrder });
           }}
         >
-          <SelectTrigger className="w-45 h-9">
+          <SelectTrigger className="w-36 h-9 shrink-0">
             <ArrowUpDown className="h-4 w-4 mr-2" />
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
@@ -281,6 +134,62 @@ export function AdvancedFilters({
             <SelectItem value="updated_desc">Recently updated</SelectItem>
           </SelectContent>
         </Select>
+        <FilterDropdown
+          label="Type"
+          values={filters.type}
+          placeholder="Type"
+          searchable={false}
+          options={filterTypeOptions}
+          onToggle={(value) => toggleArrayFilter("type", value)}
+          className="w-30"
+        />
+        <FilterDropdown
+          label="Status"
+          values={filters.status}
+          placeholder="Status"
+          searchable={false}
+          options={filterStatusOptions}
+          onToggle={(value) => toggleArrayFilter("status", value)}
+          className="w-32"
+        />
+        <FilterDropdown
+          label="Tags"
+          values={filters.tags}
+          placeholder="Tags"
+          searchable
+          options={filterTagOptions}
+          onToggle={(value) => toggleArrayFilter("tags", value)}
+          className="w-32"
+        />
+        <FilterDropdown
+          label="Topics"
+          values={filters.topics}
+          placeholder="Topics"
+          searchable
+          options={filterTopicOptions}
+          onToggle={(value) => toggleArrayFilter("topics", value)}
+          className="w-32"
+        />
+        <FilterDropdown
+          label="Authors"
+          values={filters.people}
+          placeholder="Authors"
+          searchable
+          options={filterPeopleOptions}
+          onToggle={(value) => toggleArrayFilter("people", value)}
+          className="w-32"
+        />
+        <div className="min-w-0 shrink-0 w-40">
+          <CreatableCombobox
+            options={filterPublicationOptions}
+            value={filters.publication}
+            onSelect={(value) => onFiltersChange({ ...filters, publication: value === filters.publication ? undefined : value })}
+            placeholder="Publication"
+            emptyText="No publications found."
+            className="h-9 text-sm"
+          />
+        </div>
+        {actions && <div className="ml-auto flex items-center gap-2 shrink-0">{actions}</div>}
       </div>
       {activeFilterCount > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
@@ -306,20 +215,43 @@ export function AdvancedFilters({
           ))}
           {filters.publication && (
             <FilterBadge
+              key={`publication-${filters.publication}`}
               label={getPublicationName(filters.publication)}
               onRemove={() => onFiltersChange({ ...filters, publication: undefined })}
             />
           )}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 text-xs px-2 text-muted-foreground"
-            onClick={clearAllFilters}
-          >
+          <Button variant="ghost" size="sm" className="h-6 text-xs px-2 text-muted-foreground" onClick={clearAllFilters}>
             Clear all
           </Button>
         </div>
       )}
+    </div>
+  );
+}
+
+interface FilterDropdownProps {
+  label: string;
+  values: string[] | undefined;
+  placeholder: string;
+  searchable: boolean;
+  options: { value: string; label: string }[];
+  onToggle: (value: string) => void;
+  className?: string;
+}
+
+function FilterDropdown({ label, values, placeholder, searchable, options, onToggle, className }: FilterDropdownProps) {
+  return (
+    <div className={`min-w-0 shrink-0 ${className ?? ""}`}>
+      <CreatableCombobox
+        options={options}
+        value={values ?? []}
+        onSelect={onToggle}
+        placeholder={placeholder}
+        emptyText="No results found."
+        isMulti
+        searchable={searchable}
+        className="h-9 text-sm"
+      />
     </div>
   );
 }
