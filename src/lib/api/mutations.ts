@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createWritingProject, updateWritingProject, deleteWritingProject, createChat, updateChat, deleteChat, createMessage, updateUpload, deleteUpload, createCollection, updateCollection, deleteCollection, sendChatMessage, upsertPreferences, upsertReadingProgress } from "./api";
+import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createWritingProject, updateWritingProject, deleteWritingProject, createChat, updateChat, deleteChat, createMessage, updateUpload, deleteUpload, createCollection, updateCollection, deleteCollection, sendChatMessage, summarizePage, upsertPreferences, upsertReadingProgress } from "./api";
 import { handleError } from "../utils";
 import { Collections, type Create, type Update } from "../pocketbase-types";
 import type { ChatFilters } from "../types";
@@ -459,6 +459,19 @@ export function useUpdateReadingProgress() {
         onError: handleError,
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.readingProgress.byUpload(variables.uploadId) });
+        },
+    });
+}
+
+export function useSummarizePage() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: summarizePage,
+        onError: handleError,
+        onSuccess: (_data, pageId) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.pages.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.summaries.bySourcePage(pageId) });
         },
     });
 }

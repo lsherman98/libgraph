@@ -1,6 +1,19 @@
 import { pb } from "../pocketbase"
-import { Collections, NodesTypeOptions, type Create, type EdgesResponse, type Update } from "../pocketbase-types"
+import { Collections, NodesTypeOptions, type Create, type EdgesResponse, type SummariesResponse, type Update } from "../pocketbase-types"
 import type { ChatFilters, ChatResponseData, EnrichedNodesResponse, FTSSearchResult } from "../types"
+import { getUserId } from "../utils"
+
+export interface PageSummaryQueuedResponseData {
+    status: string;
+    page_id: string;
+    dedupe_key: string;
+}
+
+export interface PageSummaryQueuedData {
+    status: string;
+    pageId: string;
+    dedupeKey: string;
+}
 
 export async function getPageUrl(id?: string) {
     if (!id) return null;
@@ -75,7 +88,7 @@ export interface UploadFilters {
 }
 
 export const getUploads = async (filters?: UploadFilters) => {
-    const filterParts: string[] = [];
+    const filterParts: string[] = ["is_summary = false"];
 
     if (filters?.type && filters.type.length > 0) {
         const typeFilters = filters.type.map(t => `type = "${t}"`).join(' || ');
@@ -146,6 +159,34 @@ export const getPages = async (uploadId?: string, page = 1, perPage = 10) => {
         filter: `upload = "${uploadId}"`,
         sort: 'page'
     });
+}
+
+export const summarizePage = async (pageId: string) => {
+    const response = await pb.send<PageSummaryQueuedResponseData>(`/api/pages/${pageId}/summarize`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': pb.authStore.token,
+        },
+    });
+
+    return {
+        status: response.status,
+        pageId: response.page_id,
+        dedupeKey: response.dedupe_key,
+    } satisfies PageSummaryQueuedData;
+}
+
+export const getSummaryBySourcePage = async (pageId?: string): Promise<SummariesResponse | null> => {
+    if (!pageId) return null;
+
+    try {
+        return await pb.collection(Collections.Summaries).getFirstListItem(`source_page = "${pageId}"`, {
+            sort: '-updated',
+        });
+    } catch (_err) {
+        return null;
+    }
 }
 
 export const getHighlights = async (uploadId?: string) => {
@@ -304,6 +345,7 @@ export const getWorkspaceMaterials = async () => {
     const [uploads, highlights, bookmarks, notes] = await Promise.all([
         pb.collection(Collections.Uploads).getFullList({
             sort: '-created',
+            filter: 'is_summary = false',
             expand: 'subjects,publication,tags'
         }),
         pb.collection(Collections.Highlights).getFullList({
@@ -439,11 +481,24 @@ export const updatePreferences = async (id: string, data: Update<Collections.Pre
 }
 
 export const upsertPreferences = async (data: Create<Collections.Preferences>) => {
+    const userId = getUserId();
+    if (!userId) {
+        throw new Error("User must be authenticated to save preferences");
+    }
+
     const existing = await getPreferences();
     if (existing) {
         return await updatePreferences(existing.id, data);
     }
-    return await createPreferences(data);
+
+    try {
+        return await createPreferences({ ...data, user: userId });
+    } catch (error) {
+        const fallbackExisting = await pb.collection(Collections.Preferences).getFirstListItem(
+            `user = "${userId}"`
+        );
+        return await updatePreferences(fallbackExisting.id, data);
+    }
 }
 
 export const getReadingProgress = async (uploadId: string) => {
@@ -458,12 +513,26 @@ export const upsertReadingProgress = async (
     uploadId: string,
     data: { current_page?: number; scroll_position?: number }
 ) => {
+    const userId = getUserId();
+    if (!userId) {
+        throw new Error("User must be authenticated to save reading progress");
+    }
+
     const existing = await getReadingProgress(uploadId);
     if (existing) {
         return await pb.collection(Collections.ReadingProgress).update(existing.id, data);
     }
-    return await pb.collection(Collections.ReadingProgress).create({
-        ...data,
-        upload: uploadId,
-    });
+
+    try {
+        return await pb.collection(Collections.ReadingProgress).create({
+            ...data,
+            upload: uploadId,
+            user: userId,
+        });
+    } catch (error) {
+        const fallbackExisting = await pb.collection(Collections.ReadingProgress).getFirstListItem(
+            `user = "${userId}" && upload = "${uploadId}"`
+        );
+        return await pb.collection(Collections.ReadingProgress).update(fallbackExisting.id, data);
+    }
 }

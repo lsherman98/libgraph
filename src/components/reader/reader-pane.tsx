@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { usePages, useBookmarks, useNotes, useUploadById } from "@/lib/api/queries";
-import { useCreateHighlight, useUpdateHighlight, useDeleteHighlight } from "@/lib/api/mutations";
+import { usePages, useBookmarks, useNotes, useUploadById, useSummaryBySourcePage } from "@/lib/api/queries";
+import { useCreateHighlight, useUpdateHighlight, useDeleteHighlight, useSummarizePage } from "@/lib/api/mutations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { BookMarked, ChevronLeft, ChevronRight, ChevronDown, Maximize2, Minimize2, Volume2 } from "lucide-react";
+import { BookMarked, ChevronLeft, ChevronRight, ChevronDown, Maximize2, Minimize2, Sparkles, Volume2, Eye, EyeOff } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { pb } from "@/lib/pocketbase";
 import { HighlightsColorOptions } from "@/lib/pocketbase-types";
@@ -17,11 +17,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn, getUserId } from "@/lib/utils";
 import { useSidebar } from "@/components/ui/sidebar";
 import { useReaderStore } from "@/lib/stores/reader-store";
+import { useWorkspaceTabsStore } from "@/lib/stores/workspace-tabs-store";
 import { DocumentSearchBar } from "@/components/reader/document-search-bar";
 import { QuickFontSizeControl } from "./reader-settings-controls";
 import { PageSlider } from "./page-slider";
 import { PaginatedReader } from "./paginated-reader";
 import { ScrollReader } from "./scroll-reader";
+import { toast } from "sonner";
 
 const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac", ".wma", ".webm", ".mp4"]);
 
@@ -45,9 +47,11 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isAudioOpen, setIsAudioOpen] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
+  const [queuedSummaryPageId, setQueuedSummaryPageId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const { isReadingMode, setReadingMode, setCurrentPageState, setCurrentUploadId, setNavigateToPage } = useReaderStore();
+  const { splitMode, splitTabId, tabs, openOrUpdateSummarySplitTab, closeSummarySplitTab } = useWorkspaceTabsStore();
   const readerContainerRef = useRef<HTMLDivElement>(null);
   const { setOpen, setOpenRight, open: leftSidebarOpen, openRight: rightSidebarOpen } = useSidebar();
   const previousSidebarState = useRef({ left: true, right: true });
@@ -67,6 +71,50 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
 
   const { data: currentPageData } = usePages(uploadId ?? null, pageSettings.currentPage, 1);
   const currentPageId = currentPageData?.items[0]?.id ?? null;
+
+  const isSummaryUpload = !!upload?.is_summary;
+  const shouldPollForSummary = !isSummaryUpload && !!currentPageId && queuedSummaryPageId === currentPageId;
+  const { data: pageSummaryRecord } = useSummaryBySourcePage(!isSummaryUpload ? (currentPageId ?? undefined) : undefined, {
+    pollUntilFound: shouldPollForSummary,
+  });
+  const hasExistingSummary = !!pageSummaryRecord?.summary_upload;
+
+  const linkedSummaryTab = tabId ? tabs.find((tab) => tab.type === "reader" && !!tab.isSummary && tab.summarySourceTabId === tabId) : undefined;
+  const isSummaryVisible = !!linkedSummaryTab && splitMode === "horizontal" && splitTabId === linkedSummaryTab.id;
+
+  const openSummarySplit = useCallback(
+    (summaryUploadId: string, sourcePageId: string) => {
+      if (!tabId) return;
+      const titleBase = upload?.title || "Untitled";
+      openOrUpdateSummarySplitTab({
+        sourceTabId: tabId,
+        sourcePageId,
+        summaryUploadId,
+        title: `${titleBase} — Summary (Page ${pageSettings.currentPage})`,
+      });
+    },
+    [tabId, upload?.title, pageSettings.currentPage, openOrUpdateSummarySplitTab],
+  );
+
+  useEffect(() => {
+    if (!tabId || !isSummaryVisible || !currentPageId) return;
+
+    if (!pageSummaryRecord?.summary_upload) {
+      closeSummarySplitTab(tabId);
+      return;
+    }
+
+    openSummarySplit(pageSummaryRecord.summary_upload, currentPageId);
+  }, [tabId, isSummaryVisible, currentPageId, pageSummaryRecord?.summary_upload, closeSummarySplitTab, openSummarySplit]);
+
+  useEffect(() => {
+    if (!currentPageId || queuedSummaryPageId !== currentPageId || !pageSummaryRecord?.summary_upload) return;
+    openSummarySplit(pageSummaryRecord.summary_upload, currentPageId);
+    setQueuedSummaryPageId(null);
+    toast.success("Page summarized", {
+      description: `Summary opened for page ${pageSettings.currentPage}.`,
+    });
+  }, [queuedSummaryPageId, currentPageId, pageSummaryRecord?.summary_upload, pageSettings.currentPage, openSummarySplit]);
 
   const setCurrentPageRef = useRef(setCurrentPage);
   const viewModeRef = useRef(settings.viewMode);
@@ -104,6 +152,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
   const createHighlightMutation = useCreateHighlight();
   const updateHighlightMutation = useUpdateHighlight();
   const deleteHighlightMutation = useDeleteHighlight();
+  const summarizePageMutation = useSummarizePage();
 
   const bookmarks = bookmarksData?.map((b) => ({
     id: b.id,
@@ -353,6 +402,61 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                 }}
                 isReadingMode={isReadingMode}
               />
+              {!isSummaryUpload && !hasExistingSummary && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8"
+                      disabled={!currentPageId || summarizePageMutation.isPending || shouldPollForSummary}
+                      onClick={() => {
+                        if (!currentPageId) return;
+                        summarizePageMutation.mutate(currentPageId, {
+                          onSuccess: () => {
+                            setQueuedSummaryPageId(currentPageId);
+                            toast.info("Summary queued", {
+                              description: `Generating summary for page ${pageSettings.currentPage}...`,
+                            });
+                          },
+                        });
+                      }}
+                    >
+                      <Sparkles className="h-4 w-4 mr-1" />
+                      {summarizePageMutation.isPending || shouldPollForSummary ? "Summarizing..." : "Summarize"}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Generate summary for current page</TooltipContent>
+                </Tooltip>
+              )}
+              {!isSummaryUpload && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => {
+                        if (!tabId) return;
+                        if (isSummaryVisible) {
+                          closeSummarySplitTab(tabId);
+                          return;
+                        }
+                        if (!currentPageId || !pageSummaryRecord?.summary_upload) {
+                          toast.info("No summary for this page yet", {
+                            description: "Use Summarize first, then toggle summary view.",
+                          });
+                          return;
+                        }
+                        openSummarySplit(pageSummaryRecord.summary_upload, currentPageId);
+                      }}
+                    >
+                      {isSummaryVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{isSummaryVisible ? "Hide summary" : "Show summary"}</TooltipContent>
+                </Tooltip>
+              )}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant={isReadingMode ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={toggleReadingMode}>
@@ -491,14 +595,15 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
       {totalPages > 1 && (
         <footer
           className={cn(
-            "shrink-0 border-t px-3 sm:px-6 py-2 transition-colors duration-300",
+            "shrink-0 border-t px-3 sm:px-6 py-4 transition-colors duration-300",
             isReadingMode
               ? "bg-(--reader-bg-color) border-(--reader-text-color)/10"
               : "bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60",
           )}
           style={isReadingMode ? { color: settings.textColor } : undefined}
         >
-          <div className="max-w-4xl mx-auto flex flex-col gap-1">
+          <div className="max-w-4xl mx-auto grid grid-cols-[auto_1fr_auto] items-center gap-2 text-xs opacity-50">
+            <span>1</span>
             <PageSlider
               currentPage={pageSettings.currentPage}
               totalPages={totalPages}
@@ -517,10 +622,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
               textColor={settings.textColor}
               uploadId={uploadId}
             />
-            <div className="flex items-center justify-between text-xs opacity-50">
-              <span>1</span>
-              <span>{totalPages}</span>
-            </div>
+            <span>{totalPages}</span>
           </div>
         </footer>
       )}

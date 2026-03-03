@@ -23,8 +23,11 @@ export enum Collections {
 	Pages = "pages",
 	People = "people",
 	Preferences = "preferences",
+	ProcessingJobEvents = "processing_job_events",
+	ProcessingJobs = "processing_jobs",
 	Publications = "publications",
 	ReadingProgress = "reading_progress",
+	Summaries = "summaries",
 	Tags = "tags",
 	Topics = "topics",
 	Uploads = "uploads",
@@ -253,7 +256,6 @@ export type NotesRecord = {
 export type PagesRecord = {
 	created: IsoAutoDateString
 	id: string
-	llama_file_id?: string
 	markdown: FileNameString
 	page: number
 	updated: IsoAutoDateString
@@ -287,6 +289,58 @@ export type PreferencesRecord<Treader_settings = unknown, Tui_settings = unknown
 	workspace_layout?: null | Tworkspace_layout
 }
 
+export type ProcessingJobEventsRecord<Tmeta_json = unknown> = {
+	created: IsoAutoDateString
+	event_type?: string
+	id: string
+	job: RecordIdString
+	message?: string
+	meta_json?: null | Tmeta_json
+	updated: IsoAutoDateString
+}
+
+export enum ProcessingJobsJobTypeOptions {
+	"upload.parse_or_transcribe" = "upload.parse_or_transcribe",
+	"page.persist" = "page.persist",
+	"chunk.generate" = "chunk.generate",
+	"upload.summarize" = "upload.summarize",
+	"page.summarize" = "page.summarize",
+	"chunk.embed" = "chunk.embed",
+}
+
+export enum ProcessingJobsStatusOptions {
+	"queued" = "queued",
+	"running" = "running",
+	"succeeded" = "succeeded",
+	"failed" = "failed",
+	"deadletter" = "deadletter",
+	"cancelled" = "cancelled",
+}
+export type ProcessingJobsRecord<Tpayload_json = unknown> = {
+	attempts?: number
+	chunk?: RecordIdString
+	created: IsoAutoDateString
+	dedupe_key: string
+	error_code?: string
+	error_message?: string
+	finished_at?: IsoDateString
+	id: string
+	job_type: ProcessingJobsJobTypeOptions
+	lease_until?: IsoDateString
+	max_attempts?: number
+	page?: RecordIdString
+	payload_json?: null | Tpayload_json
+	priority: number
+	scheduled_at?: IsoDateString
+	started_at?: IsoDateString
+	status: ProcessingJobsStatusOptions
+	trace_id?: string
+	updated: IsoAutoDateString
+	upload?: RecordIdString
+	user?: RecordIdString
+	worker_id?: string
+}
+
 export enum PublicationsTypeOptions {
 	"podcast" = "podcast",
 	"youtube_channel" = "youtube_channel",
@@ -311,6 +365,29 @@ export type ReadingProgressRecord = {
 	updated: IsoAutoDateString
 	upload?: RecordIdString
 	user?: RecordIdString
+}
+
+export enum SummariesStatusOptions {
+	"processing" = "processing",
+	"success" = "success",
+	"failed" = "failed",
+}
+
+export enum SummariesScopeOptions {
+	"page" = "page",
+}
+export type SummariesRecord = {
+	created: IsoAutoDateString
+	error?: string
+	id: string
+	scope?: SummariesScopeOptions
+	source_page: RecordIdString
+	source_upload: RecordIdString
+	status: SummariesStatusOptions
+	summary_page: RecordIdString
+	summary_upload: RecordIdString
+	updated: IsoAutoDateString
+	user: RecordIdString
 }
 
 export type TagsRecord = {
@@ -348,6 +425,7 @@ export type UploadsRecord = {
 	created: IsoAutoDateString
 	file: FileNameString
 	id: string
+	is_summary?: boolean
 	llama_file_id?: string
 	num_pages?: number
 	people?: RecordIdString[]
@@ -414,8 +492,11 @@ export type NotesResponse<Texpand = unknown> = Required<NotesRecord> & BaseSyste
 export type PagesResponse<Texpand = unknown> = Required<PagesRecord> & BaseSystemFields<Texpand>
 export type PeopleResponse<Texpand = unknown> = Required<PeopleRecord> & BaseSystemFields<Texpand>
 export type PreferencesResponse<Treader_settings = unknown, Tui_settings = unknown, Tworkspace_layout = unknown, Texpand = unknown> = Required<PreferencesRecord<Treader_settings, Tui_settings, Tworkspace_layout>> & BaseSystemFields<Texpand>
+export type ProcessingJobEventsResponse<Tmeta_json = unknown, Texpand = unknown> = Required<ProcessingJobEventsRecord<Tmeta_json>> & BaseSystemFields<Texpand>
+export type ProcessingJobsResponse<Tpayload_json = unknown, Texpand = unknown> = Required<ProcessingJobsRecord<Tpayload_json>> & BaseSystemFields<Texpand>
 export type PublicationsResponse<Texpand = unknown> = Required<PublicationsRecord> & BaseSystemFields<Texpand>
 export type ReadingProgressResponse<Texpand = unknown> = Required<ReadingProgressRecord> & BaseSystemFields<Texpand>
+export type SummariesResponse<Texpand = unknown> = Required<SummariesRecord> & BaseSystemFields<Texpand>
 export type TagsResponse<Texpand = unknown> = Required<TagsRecord> & BaseSystemFields<Texpand>
 export type TopicsResponse<Texpand = unknown> = Required<TopicsRecord> & BaseSystemFields<Texpand>
 export type UploadsResponse<Texpand = unknown> = Required<UploadsRecord> & BaseSystemFields<Texpand>
@@ -442,8 +523,11 @@ export type CollectionRecords = {
 	pages: PagesRecord
 	people: PeopleRecord
 	preferences: PreferencesRecord
+	processing_job_events: ProcessingJobEventsRecord
+	processing_jobs: ProcessingJobsRecord
 	publications: PublicationsRecord
 	reading_progress: ReadingProgressRecord
+	summaries: SummariesRecord
 	tags: TagsRecord
 	topics: TopicsRecord
 	uploads: UploadsRecord
@@ -469,8 +553,11 @@ export type CollectionResponses = {
 	pages: PagesResponse
 	people: PeopleResponse
 	preferences: PreferencesResponse
+	processing_job_events: ProcessingJobEventsResponse
+	processing_jobs: ProcessingJobsResponse
 	publications: PublicationsResponse
 	reading_progress: ReadingProgressResponse
+	summaries: SummariesResponse
 	tags: TagsResponse
 	topics: TopicsResponse
 	uploads: UploadsResponse

@@ -16,5 +16,8 @@ const (
 	Nodes               = "nodes"
 	Edges               = "edges"
 	Notes               = "notes"
+	Summaries           = "summaries"
 	DocumentChunks      = "document_chunks"
+	ProcessingJobs      = "processing_jobs"
+	ProcessingJobEvents = "processing_job_events"
 )

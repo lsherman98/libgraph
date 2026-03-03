@@ -51,3 +51,18 @@ type Citation struct {
 	PageNumber int    `json:"page_number"`
 	UploadID   string `json:"upload_id"`
 }
+
+type PageSummaryResponse struct {
+	SummaryID      string `json:"summary_id"`
+	SourcePageID   string `json:"source_page_id"`
+	SourceUploadID string `json:"source_upload_id"`
+	SummaryUpload  string `json:"summary_upload_id"`
+	SummaryPage    string `json:"summary_page_id"`
+	UpdatedAt      string `json:"updated_at"`
+}
+
+type PageSummaryQueuedResponse struct {
+	Status    string `json:"status"`
+	PageID    string `json:"page_id"`
+	DedupeKey string `json:"dedupe_key"`
+}

@@ -12,6 +12,7 @@ import { createFileRoute } from '@tanstack/react-router'
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppWorkspaceIndexRouteImport } from './routes/_app/workspace/index'
 import { Route as AppUploadIndexRouteImport } from './routes/_app/upload/index'
 import { Route as AppLibraryIndexRouteImport } from './routes/_app/library/index'
@@ -27,6 +28,11 @@ const SigninLazyRoute = SigninLazyRouteImport.update({
 } as any).lazy(() => import('./routes/signin.lazy').then((d) => d.Route))
 const AppRoute = AppRouteImport.update({
   id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppWorkspaceIndexRoute = AppWorkspaceIndexRouteImport.update({
@@ -56,7 +62,7 @@ const AppChatIndexRoute = AppChatIndexRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof AppRouteWithChildren
+  '/': typeof IndexRoute
   '/signin': typeof SigninLazyRoute
   '/chat/': typeof AppChatIndexRoute
   '/graph/': typeof AppGraphIndexRoute
@@ -65,7 +71,7 @@ export interface FileRoutesByFullPath {
   '/workspace/': typeof AppWorkspaceIndexRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof AppRouteWithChildren
+  '/': typeof IndexRoute
   '/signin': typeof SigninLazyRoute
   '/chat': typeof AppChatIndexRoute
   '/graph': typeof AppGraphIndexRoute
@@ -75,6 +81,7 @@ export interface FileRoutesByTo {
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
   '/_app': typeof AppRouteWithChildren
   '/signin': typeof SigninLazyRoute
   '/_app/chat/': typeof AppChatIndexRoute
@@ -104,6 +111,7 @@ export interface FileRouteTypes {
     | '/workspace'
   id:
     | '__root__'
+    | '/'
     | '/_app'
     | '/signin'
     | '/_app/chat/'
@@ -114,6 +122,7 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRouteWithChildren
   SigninLazyRoute: typeof SigninLazyRoute
 }
@@ -132,6 +141,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/workspace/': {
@@ -191,6 +207,7 @@ const AppRouteChildren: AppRouteChildren = {
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
+  IndexRoute: IndexRoute,
   AppRoute: AppRouteWithChildren,
   SigninLazyRoute: SigninLazyRoute,
 }

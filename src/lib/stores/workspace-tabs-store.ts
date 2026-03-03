@@ -9,6 +9,9 @@ export interface ReaderTab extends BaseTab {
     type: "reader";
     uploadId: string;
     currentPage: number;
+    isSummary?: boolean;
+    summarySourceTabId?: string;
+    summarySourcePageId?: string;
 }
 
 export interface WriterTab extends BaseTab {
@@ -41,6 +44,14 @@ interface WorkspaceTabsStore extends WorkspaceLayoutState {
     setSplitMode: (mode: SplitMode) => void;
     setPanelSizes: (sizes: number[]) => void;
     closeSplit: () => void;
+    openOrUpdateSummarySplitTab: (params: {
+        sourceTabId: string;
+        sourcePageId: string;
+        summaryUploadId: string;
+        title: string;
+    }) => string;
+    closeSummarySplitTab: (sourceTabId: string) => void;
+    getSummarySplitTab: (sourceTabId: string) => ReaderTab | undefined;
     getTab: (tabId: string) => WorkspaceTab | undefined;
 }
 
@@ -186,6 +197,73 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
         },
         closeSplit: () => {
             set({ splitMode: "none", splitTabId: null });
+        },
+        openOrUpdateSummarySplitTab: ({ sourceTabId, sourcePageId, summaryUploadId, title }) => {
+            const state = get();
+            const existingSummaryTab = state.tabs.find(
+                (tab): tab is ReaderTab => tab.type === "reader" && !!tab.isSummary && tab.summarySourceTabId === sourceTabId,
+            );
+
+            if (existingSummaryTab) {
+                set((prev) => ({
+                    tabs: prev.tabs.map((tab) => {
+                        if (tab.id !== existingSummaryTab.id || tab.type !== "reader") return tab;
+                        return {
+                            ...tab,
+                            uploadId: summaryUploadId,
+                            title,
+                            currentPage: 1,
+                            summarySourcePageId: sourcePageId,
+                        };
+                    }),
+                    splitMode: "horizontal",
+                    splitTabId: existingSummaryTab.id,
+                }));
+                return existingSummaryTab.id;
+            }
+
+            const newTab: ReaderTab = {
+                id: generateTabId("reader"),
+                type: "reader",
+                uploadId: summaryUploadId,
+                title,
+                currentPage: 1,
+                isSummary: true,
+                summarySourceTabId: sourceTabId,
+                summarySourcePageId: sourcePageId,
+            };
+
+            set((prev) => ({
+                tabs: [...prev.tabs, newTab],
+                splitMode: "horizontal",
+                splitTabId: newTab.id,
+            }));
+
+            return newTab.id;
+        },
+        closeSummarySplitTab: (sourceTabId: string) => {
+            const state = get();
+            const summaryTab = state.tabs.find(
+                (tab): tab is ReaderTab => tab.type === "reader" && !!tab.isSummary && tab.summarySourceTabId === sourceTabId,
+            );
+
+            if (!summaryTab) {
+                return;
+            }
+
+            const nextTabs = state.tabs.filter((tab) => tab.id !== summaryTab.id);
+            const wasSplitTab = state.splitTabId === summaryTab.id;
+
+            set({
+                tabs: nextTabs,
+                splitTabId: wasSplitTab ? null : state.splitTabId,
+                splitMode: wasSplitTab ? "none" : state.splitMode,
+            });
+        },
+        getSummarySplitTab: (sourceTabId: string) => {
+            return get().tabs.find(
+                (tab): tab is ReaderTab => tab.type === "reader" && !!tab.isSummary && tab.summarySourceTabId === sourceTabId,
+            );
         },
         getTab: (tabId: string) => {
             return get().tabs.find((t) => t.id === tabId);

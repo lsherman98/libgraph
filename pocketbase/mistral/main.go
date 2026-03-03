@@ -7,10 +7,13 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -19,6 +22,14 @@ import (
 const (
 	baseURL            = "https://api.mistral.ai"
 	transcriptionModel = "voxtral-mini-latest"
+	requestInterval    = 3 * time.Second
+	maxRetryAttempts   = 3
+	retryBaseDelay     = 1 * time.Second
+)
+
+var (
+	mistralRequestMu      sync.Mutex
+	nextMistralRequestAt  time.Time
 )
 
 var audioExtensions = map[string]bool{
@@ -108,34 +119,93 @@ func (c *Client) Transcribe(upload *core.Record) (*TranscriptionResponse, error)
 		return nil, fmt.Errorf("failed to close multipart writer: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, baseURL+"/v1/audio/transcriptions", &body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("x-api-key", c.APIKey)
-	req.Header.Set("Content-Type", writer.FormDataContentType())
+	payload := append([]byte(nil), body.Bytes()...)
+	contentType := writer.FormDataContentType()
 
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("transcription request failed: %w", err)
-	}
-	defer resp.Body.Close()
+	var lastErr error
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+	for attempt := 1; attempt <= maxRetryAttempts; attempt++ {
+		waitForNextMistralRequestSlot()
+
+		req, err := http.NewRequest(http.MethodPost, baseURL+"/v1/audio/transcriptions", bytes.NewReader(payload))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create request: %w", err)
+		}
+		req.Header.Set("x-api-key", c.APIKey)
+		req.Header.Set("Content-Type", contentType)
+
+		resp, err := c.HTTPClient.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("transcription request failed: %w", err)
+			if attempt < maxRetryAttempts && isRetryableError(err) {
+				time.Sleep(backoffForAttempt(attempt))
+				continue
+			}
+			return nil, lastErr
+		}
+
+		respBody, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = fmt.Errorf("failed to read response body: %w", err)
+			if attempt < maxRetryAttempts {
+				time.Sleep(backoffForAttempt(attempt))
+				continue
+			}
+			return nil, lastErr
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("mistral transcription API returned status %d: %s", resp.StatusCode, string(respBody))
+			if attempt < maxRetryAttempts && isRetryableStatus(resp.StatusCode) {
+				time.Sleep(backoffForAttempt(attempt))
+				continue
+			}
+			return nil, lastErr
+		}
+
+		var result TranscriptionResponse
+		if err := json.Unmarshal(respBody, &result); err != nil {
+			return nil, fmt.Errorf("failed to decode transcription response: %w", err)
+		}
+
+		return &result, nil
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("mistral transcription API returned status %d: %s", resp.StatusCode, string(respBody))
+	if lastErr != nil {
+		return nil, lastErr
 	}
 
-	var result TranscriptionResponse
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("failed to decode transcription response: %w", err)
+	return nil, errors.New("transcription request exhausted retries")
+}
+
+func waitForNextMistralRequestSlot() {
+	mistralRequestMu.Lock()
+	defer mistralRequestMu.Unlock()
+
+	now := time.Now()
+	if now.Before(nextMistralRequestAt) {
+		time.Sleep(time.Until(nextMistralRequestAt))
 	}
 
-	return &result, nil
+	nextMistralRequestAt = time.Now().Add(requestInterval)
+}
+
+func isRetryableStatus(statusCode int) bool {
+	return statusCode == http.StatusTooManyRequests || statusCode >= http.StatusInternalServerError
+}
+
+func isRetryableError(err error) bool {
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return netErr.Timeout() || netErr.Temporary()
+	}
+
+	return errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF)
+}
+
+func backoffForAttempt(attempt int) time.Duration {
+	return time.Duration(attempt) * retryBaseDelay
 }
 
 func GroupSegmentsBySpeaker(segs []TranscriptionSegment) []DiarizationSegment {

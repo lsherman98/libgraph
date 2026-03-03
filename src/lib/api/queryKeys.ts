@@ -32,6 +32,11 @@ export const queryKeys = {
         markdown: (pageId?: string) =>
             [...queryKeys.pages.all, "markdown", pageId] as const,
     },
+    summaries: {
+        all: ["summaries"] as const,
+        bySourcePage: (pageId?: string) =>
+            [...queryKeys.summaries.all, "sourcePage", pageId] as const,
+    },
     highlights: {
         all: ["highlights"] as const,
         byUpload: (uploadId?: string) =>

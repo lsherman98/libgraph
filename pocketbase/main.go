@@ -6,11 +6,13 @@ import (
 	"os"
 	"strings"
 
+	sqlite_vec "github.com/asg017/sqlite-vec-go-bindings/cgo"
 	"github.com/joho/godotenv"
 	"github.com/lsherman98/libgraph/pocketbase/parser"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/chat"
 	fts "github.com/lsherman98/libgraph/pocketbase/pb_hooks/full_text_search"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/graph"
+	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/processing"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/uploads"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/vector_search"
 	"github.com/mattn/go-sqlite3"
@@ -24,6 +26,11 @@ import (
 )
 
 func init() {
+	// Register sqlite-vec BEFORE any database connections are opened.
+	// sqlite3_auto_extension only affects connections opened after the call,
+	// so this must happen before PocketBase opens its DB.
+	sqlite_vec.Auto()
+
 	sql.Register("pb_sqlite3",
 		&sqlite3.SQLiteDriver{
 			ConnectHook: func(conn *sqlite3.SQLiteConn) error {
@@ -72,6 +79,10 @@ func main() {
 		log.Fatal("Failed to initialize Uploads hooks: ", err)
 	}
 
+	if err := processing.Init(app); err != nil {
+		log.Fatal("Failed to initialize Processing queue: ", err)
+	}
+
 	if err := vector_search.Init(app); err != nil {
 		log.Fatal("Failed to initialize Vector Search: ", err)
 	}
@@ -90,6 +101,10 @@ func main() {
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.GET("/{path...}", apis.Static(os.DirFS("./pb_public"), true))
+
+		// Recover uploads that were stuck in PROCESSING state from a previous crash.
+		uploads.RecoverStuckUploads(app)
+
 		return se.Next()
 	})
 

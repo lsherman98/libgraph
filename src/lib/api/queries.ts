@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useInfiniteQuery } from "@tanstack/react-query";
-import { getPeople, getPublications, getFirstPage, getPageByNumber, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection, fullTextSearch, getPreferences, getReadingProgress } from "./api";
+import { getPeople, getPublications, getFirstPage, getPageByNumber, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection, fullTextSearch, getPreferences, getReadingProgress, getSummaryBySourcePage } from "./api";
 import type { UploadFilters } from "./api";
 import type { NodesTypeOptions } from "../pocketbase-types";
 import { queryKeys } from "./queryKeys";
@@ -100,6 +100,19 @@ export function usePages(uploadId?: string, page: number = 1, perPage: number = 
         queryKey: queryKeys.pages.list(uploadId, page, perPage),
         queryFn: () => getPages(uploadId, page, perPage),
         enabled: !!uploadId,
+        placeholderData: keepPreviousData,
+    });
+}
+
+export function useSummaryBySourcePage(pageId?: string, options?: { pollUntilFound?: boolean }) {
+    return useQuery({
+        queryKey: queryKeys.summaries.bySourcePage(pageId),
+        queryFn: () => getSummaryBySourcePage(pageId),
+        enabled: !!pageId,
+        refetchInterval: (query) => {
+            if (!options?.pollUntilFound) return false;
+            return query.state.data ? false : 2000;
+        },
         placeholderData: keepPreviousData,
     });
 }

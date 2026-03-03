@@ -4,20 +4,29 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
 
 	"github.com/google/generative-ai-go/genai"
+	"github.com/lsherman98/libgraph/pocketbase/collections"
+	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/processing"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/vector_search"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
+	"github.com/pocketbase/pocketbase/tools/filesystem"
 	"google.golang.org/api/option"
 )
 
 var geminiClient *genai.Client
+
+type pageSummarizePayload struct {
+	PageID string `json:"page_id"`
+	UserID string `json:"user_id"`
+}
 
 func Init(app *pocketbase.PocketBase) error {
 	apiKey := os.Getenv("GEMINI_API_KEY")
@@ -30,6 +39,8 @@ func Init(app *pocketbase.PocketBase) error {
 	if err != nil {
 		return fmt.Errorf("failed to create Gemini client: %w", err)
 	}
+
+	registerQueueHandlers(app)
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.POST("/api/chat", func(e *core.RequestEvent) error {
@@ -163,10 +174,89 @@ func Init(app *pocketbase.PocketBase) error {
 			})
 		}).Bind(apis.RequireAuth())
 
+		se.Router.POST("/api/pages/{pageId}/summarize", func(e *core.RequestEvent) error {
+			pageID := strings.TrimSpace(e.Request.PathValue("pageId"))
+			if pageID == "" {
+				return e.BadRequestError("page id is required", nil)
+			}
+
+			userID := e.Auth.Id
+
+			pageRecord, err := app.FindRecordById("pages", pageID)
+			if err != nil {
+				return e.NotFoundError("page not found", err)
+			}
+
+			if pageRecord.GetString("user") != userID {
+				return e.NotFoundError("page not found", nil)
+			}
+
+			dedupeKey := fmt.Sprintf("page.summarize:%s:%s", userID, pageID)
+			if err := processing.Enqueue(app, processing.EnqueueRequest{
+				JobType:   processing.JobTypePageSummarize,
+				DedupeKey: dedupeKey,
+				Payload: map[string]any{
+					"page_id": pageID,
+					"user_id": userID,
+				},
+				Priority:    80,
+				MaxAttempts: 5,
+				UserID:      userID,
+				UploadID:    pageRecord.GetString("upload"),
+				PageID:      pageID,
+			}); err != nil {
+				app.Logger().Error("[summarize] failed to enqueue page summary", "pageId", pageID, "error", err)
+				return e.InternalServerError("failed to enqueue summary", err)
+			}
+
+			return e.JSON(http.StatusAccepted, PageSummaryQueuedResponse{
+				Status:    "queued",
+				PageID:    pageID,
+				DedupeKey: dedupeKey,
+			})
+		}).Bind(apis.RequireAuth())
+
 		return se.Next()
 	})
 
 	return nil
+}
+
+func registerQueueHandlers(app *pocketbase.PocketBase) {
+	processing.RegisterHandler(processing.JobTypePageSummarize, handlePageSummarizeJob)
+}
+
+func handlePageSummarizeJob(app *pocketbase.PocketBase, job *core.Record) error {
+	payload := pageSummarizePayload{}
+	if err := job.UnmarshalJSONField("payload_json", &payload); err != nil {
+		return fmt.Errorf("invalid payload_json: %w", err)
+	}
+
+	if strings.TrimSpace(payload.PageID) == "" || strings.TrimSpace(payload.UserID) == "" {
+		return fmt.Errorf("payload page_id and user_id are required")
+	}
+
+	pageRecord, err := app.FindRecordById(collections.Pages, payload.PageID)
+	if err != nil {
+		return err
+	}
+
+	if pageRecord.GetString("user") != payload.UserID {
+		return fmt.Errorf("page %s does not belong to user %s", payload.PageID, payload.UserID)
+	}
+
+	markdown, err := ReadPageMarkdown(app, pageRecord)
+	if err != nil {
+		return err
+	}
+
+	summary, err := GeneratePageSummary(markdown)
+	if err != nil {
+		return err
+	}
+
+	_, _, _, err = UpsertPageSummaryArtifact(app, pageRecord, payload.UserID, summary)
+	return err
 }
 
 func loadChatHistory(app *pocketbase.PocketBase, chatID string) ([]ChatMessage, error) {
@@ -469,4 +559,233 @@ func resolveFilterUploadIDs(app *pocketbase.PocketBase, filters *MetadataFilters
 
 func floatPtr(f float32) *float32 {
 	return &f
+}
+
+func ReadPageMarkdown(app *pocketbase.PocketBase, pageRecord *core.Record) (string, error) {
+	filename := pageRecord.GetString("markdown")
+	if filename == "" {
+		return "", fmt.Errorf("page markdown file is empty")
+	}
+
+	fsys, err := app.NewFilesystem()
+	if err != nil {
+		return "", fmt.Errorf("failed to create filesystem: %w", err)
+	}
+	defer fsys.Close()
+
+	filePath := pageRecord.BaseFilesPath() + "/" + filename
+	blob, err := fsys.GetReader(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read markdown from storage: %w", err)
+	}
+	defer blob.Close()
+
+	content, err := io.ReadAll(blob)
+	if err != nil {
+		return "", fmt.Errorf("failed to read markdown bytes: %w", err)
+	}
+
+	return string(content), nil
+}
+
+func GeneratePageSummary(markdown string) (string, error) {
+	trimmed := strings.TrimSpace(markdown)
+	if trimmed == "" {
+		return "", fmt.Errorf("page content is empty")
+	}
+
+	modelName := os.Getenv("GEMINI_MODEL")
+	if modelName == "" {
+		modelName = "gemini-2.5-flash"
+	}
+
+	model := geminiClient.GenerativeModel(modelName)
+	model.Temperature = floatPtr(0.2)
+	model.SystemInstruction = genai.NewUserContent(genai.Text("You summarize a single page from a user's document. Return concise markdown with 4-7 bullet points and a short 1-sentence takeaway at the end. Do not include citations, JSON, or extra preamble."))
+
+	prompt := fmt.Sprintf("Summarize this page content:\n\n%s", trimmed)
+	resp, err := model.GenerateContent(context.Background(), genai.Text(prompt))
+	if err != nil {
+		return "", err
+	}
+
+	summary := strings.TrimSpace(extractResponseText(resp))
+	if summary == "" {
+		return "", fmt.Errorf("empty summary response")
+	}
+
+	return summary, nil
+}
+
+// GenerateDocumentSummary summarises a full document (all pages concatenated).
+func GenerateDocumentSummary(allMarkdown string) (string, error) {
+	trimmed := strings.TrimSpace(allMarkdown)
+	if trimmed == "" {
+		return "", fmt.Errorf("document content is empty")
+	}
+
+	// Truncate to ~100k chars to stay within model context limits.
+	const maxChars = 100_000
+	if len(trimmed) > maxChars {
+		trimmed = trimmed[:maxChars]
+	}
+
+	modelName := os.Getenv("GEMINI_MODEL")
+	if modelName == "" {
+		modelName = "gemini-2.5-flash"
+	}
+
+	model := geminiClient.GenerativeModel(modelName)
+	model.Temperature = floatPtr(0.2)
+	model.SystemInstruction = genai.NewUserContent(genai.Text(
+		"You summarize an entire document uploaded by a user. " +
+			"Return concise markdown with a 2-3 sentence overview followed by 5-10 bullet points covering the key ideas. " +
+			"End with a one-sentence takeaway. Do not include citations, JSON, or extra preamble.",
+	))
+
+	prompt := fmt.Sprintf("Summarize this document:\n\n%s", trimmed)
+	resp, err := model.GenerateContent(context.Background(), genai.Text(prompt))
+	if err != nil {
+		return "", err
+	}
+
+	summary := strings.TrimSpace(extractResponseText(resp))
+	if summary == "" {
+		return "", fmt.Errorf("empty summary response")
+	}
+
+	return summary, nil
+}
+
+func UpsertPageSummaryArtifact(app *pocketbase.PocketBase, sourcePageRecord *core.Record, userID, summaryMarkdown string) (*core.Record, *core.Record, *core.Record, error) {
+	sourceUploadID := sourcePageRecord.GetString("upload")
+	if strings.TrimSpace(sourceUploadID) == "" {
+		return nil, nil, nil, fmt.Errorf("source page missing upload relation")
+	}
+
+	sourceUploadRecord, err := app.FindRecordById(collections.Uploads, sourceUploadID)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to load source upload: %w", err)
+	}
+
+	uploadsCollection, err := app.FindCollectionByNameOrId(collections.Uploads)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	pagesCollection, err := app.FindCollectionByNameOrId(collections.Pages)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	summariesCollection, err := app.FindCollectionByNameOrId(collections.Summaries)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	baseTitle := strings.TrimSpace(sourceUploadRecord.GetString("title"))
+	if baseTitle == "" {
+		baseTitle = "Untitled"
+	}
+	pageNumber := sourcePageRecord.GetInt("page")
+	summaryTitle := fmt.Sprintf("%s — Summary (Page %d)", baseTitle, pageNumber)
+	summaryFilename := fmt.Sprintf("summary_page_%d.md", pageNumber)
+
+	summaryRecord, err := app.FindFirstRecordByFilter(
+		collections.Summaries,
+		"user = {:userId} && source_page = {:sourcePage}",
+		dbx.Params{"userId": userID, "sourcePage": sourcePageRecord.Id},
+	)
+
+	if err == nil {
+		summaryUploadID := summaryRecord.GetString("summary_upload")
+		summaryPageID := summaryRecord.GetString("summary_page")
+
+		summaryUploadRecord, uploadErr := app.FindRecordById(collections.Uploads, summaryUploadID)
+		if uploadErr != nil {
+			return nil, nil, nil, uploadErr
+		}
+		summaryPageRecord, pageErr := app.FindRecordById(collections.Pages, summaryPageID)
+		if pageErr != nil {
+			return nil, nil, nil, pageErr
+		}
+
+		summaryUploadFile, fileErr := filesystem.NewFileFromBytes([]byte(summaryMarkdown), summaryFilename)
+		if fileErr != nil {
+			return nil, nil, nil, fileErr
+		}
+
+		summaryUploadRecord.Set("title", summaryTitle)
+		summaryUploadRecord.Set("file", summaryUploadFile)
+		summaryUploadRecord.Set("status", "SUCCESS")
+		summaryUploadRecord.Set("num_pages", 1)
+		summaryUploadRecord.Set("is_summary", true)
+		if saveErr := app.Save(summaryUploadRecord); saveErr != nil {
+			return nil, nil, nil, saveErr
+		}
+
+		summaryPageFile, fileErr := filesystem.NewFileFromBytes([]byte(summaryMarkdown), summaryFilename)
+		if fileErr != nil {
+			return nil, nil, nil, fileErr
+		}
+
+		summaryPageRecord.Set("markdown", summaryPageFile)
+		if saveErr := app.Save(summaryPageRecord); saveErr != nil {
+			return nil, nil, nil, saveErr
+		}
+
+		summaryRecord.Set("status", "success")
+		summaryRecord.Set("error", "")
+		if saveErr := app.Save(summaryRecord); saveErr != nil {
+			return nil, nil, nil, saveErr
+		}
+
+		return summaryRecord, summaryUploadRecord, summaryPageRecord, nil
+	}
+
+	summaryUploadFile, err := filesystem.NewFileFromBytes([]byte(summaryMarkdown), summaryFilename)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	summaryUploadRecord := core.NewRecord(uploadsCollection)
+	summaryUploadRecord.Set("title", summaryTitle)
+	summaryUploadRecord.Set("file", summaryUploadFile)
+	summaryUploadRecord.Set("type", sourceUploadRecord.GetString("type"))
+	summaryUploadRecord.Set("status", "SUCCESS")
+	summaryUploadRecord.Set("num_pages", 1)
+	summaryUploadRecord.Set("is_summary", true)
+	summaryUploadRecord.Set("user", userID)
+	if saveErr := app.Save(summaryUploadRecord); saveErr != nil {
+		return nil, nil, nil, saveErr
+	}
+
+	summaryPageFile, err := filesystem.NewFileFromBytes([]byte(summaryMarkdown), summaryFilename)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	summaryPageRecord := core.NewRecord(pagesCollection)
+	summaryPageRecord.Set("upload", summaryUploadRecord.Id)
+	summaryPageRecord.Set("page", 1)
+	summaryPageRecord.Set("user", userID)
+	summaryPageRecord.Set("markdown", summaryPageFile)
+	if saveErr := app.Save(summaryPageRecord); saveErr != nil {
+		return nil, nil, nil, saveErr
+	}
+
+	newSummaryRecord := core.NewRecord(summariesCollection)
+	newSummaryRecord.Set("user", userID)
+	newSummaryRecord.Set("source_upload", sourceUploadID)
+	newSummaryRecord.Set("source_page", sourcePageRecord.Id)
+	newSummaryRecord.Set("summary_upload", summaryUploadRecord.Id)
+	newSummaryRecord.Set("summary_page", summaryPageRecord.Id)
+	newSummaryRecord.Set("scope", "page")
+	newSummaryRecord.Set("status", "success")
+	newSummaryRecord.Set("error", "")
+	if saveErr := app.Save(newSummaryRecord); saveErr != nil {
+		return nil, nil, nil, saveErr
+	}
+
+	return newSummaryRecord, summaryUploadRecord, summaryPageRecord, nil
 }
