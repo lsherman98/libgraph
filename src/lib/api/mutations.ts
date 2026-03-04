@@ -472,6 +472,7 @@ export function useSummarizePage() {
         onSuccess: (_data, pageId) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.pages.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.summaries.bySourcePage(pageId) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.summaries.all });
         },
     });
 }

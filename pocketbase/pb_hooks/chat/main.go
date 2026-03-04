@@ -216,13 +216,33 @@ func Init(app *pocketbase.PocketBase) error {
 				pageUploadID = pageProxy.GetString("upload")
 			}
 
+			uploadRecord, err := app.FindRecordById(collections.Uploads, pageUploadID)
+			if err != nil {
+				return e.NotFoundError("upload not found", err)
+			}
+			uploadProxy, _ := pbgen.WrapRecord[pbgen.Uploads](uploadRecord)
+			uploadType := strings.TrimSpace(uploadRecord.GetString("type"))
+			if uploadProxy != nil {
+				uploadType = strings.TrimSpace(uploadProxy.GetString("type"))
+			}
+			if uploadType == "summary" {
+				return e.BadRequestError("cannot summarize summary uploads", nil)
+			}
+
+			fullDocument := uploadType != "book"
 			dedupeKey := fmt.Sprintf("page.summarize:%s:%s", userID, pageID)
+			if fullDocument {
+				dedupeKey = fmt.Sprintf("upload.summarize.full:%s:%s", userID, pageUploadID)
+			}
+
 			if err := processing.Enqueue(app, processing.EnqueueRequest{
 				JobType:   processing.JobTypePageSummarize,
 				DedupeKey: dedupeKey,
 				Payload: map[string]any{
-					"page_id": pageID,
-					"user_id": userID,
+					"page_id":       pageID,
+					"user_id":       userID,
+					"upload_id":     pageUploadID,
+					"full_document": fullDocument,
 				},
 				Priority:    80,
 				MaxAttempts: 5,
@@ -266,6 +286,32 @@ func handlePageSummarizeJob(app *pocketbase.PocketBase, job *core.Record) error 
 		return err
 	}
 	pageProxy, _ := pbgen.WrapRecord[pbgen.Pages](pageRecord)
+	uploadID := strings.TrimSpace(pageRecord.GetString("upload"))
+	if pageProxy != nil {
+		uploadID = strings.TrimSpace(pageProxy.GetString("upload"))
+	}
+	if uploadID == "" {
+		return fmt.Errorf("page %s missing upload relation", payload.PageID)
+	}
+
+	uploadRecord, err := app.FindRecordById(collections.Uploads, uploadID)
+	if err != nil {
+		return err
+	}
+	uploadProxy, _ := pbgen.WrapRecord[pbgen.Uploads](uploadRecord)
+	uploadType := strings.TrimSpace(uploadRecord.GetString("type"))
+	if uploadProxy != nil {
+		uploadType = strings.TrimSpace(uploadProxy.GetString("type"))
+	}
+	if uploadType == "summary" {
+		return fmt.Errorf("cannot summarize summary upload %s", uploadID)
+	}
+	if uploadType != "book" {
+		payload.FullDocument = true
+		if strings.TrimSpace(payload.UploadID) == "" {
+			payload.UploadID = uploadID
+		}
+	}
 
 	pageUserID := pageRecord.GetString("user")
 	if pageProxy != nil {

@@ -55,6 +55,11 @@ func handleUploadParseOrTranscribeJob(app *pocketbase.PocketBase, job *core.Reco
 		return err
 	}
 
+	if uploadProxy.Type() == pbgen.Summary {
+		app.Logger().Info("[uploads] skipping parse/transcribe for summary upload", "upload_id", payload.UploadID)
+		return nil
+	}
+
 	uploadProxy.SetStatus(pbgen.PROCESSING)
 	if err := app.Save(uploadProxy); err != nil {
 		return err
@@ -105,18 +110,12 @@ func enqueueSummarizeJobsForUpload(app *pocketbase.PocketBase, upload *pbgen.Upl
 		return nil
 	}
 
-	if upload.Type() != pbgen.Book {
-		anchorPage := pages[0]
-		return enqueuePageSummarizeForPage(app, upload, anchorPage, true)
+	if upload.Type() == pbgen.Book {
+		return nil
 	}
 
-	for _, page := range pages {
-		if err := enqueuePageSummarizeForPage(app, upload, page, false); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	anchorPage := pages[0]
+	return enqueuePageSummarizeForPage(app, upload, anchorPage, true)
 }
 
 func parseAudioUploadIntoPages(app *pocketbase.PocketBase, upload *pbgen.Uploads) ([]*core.Record, error) {

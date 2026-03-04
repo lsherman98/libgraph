@@ -189,6 +189,18 @@ export const getSummaryBySourcePage = async (pageId?: string): Promise<Summaries
     }
 }
 
+export const getSummaryBySourceUpload = async (uploadId?: string): Promise<SummariesResponse | null> => {
+    if (!uploadId) return null;
+
+    try {
+        return await pb.collection(Collections.Summaries).getFirstListItem(`source_upload = "${uploadId}"`, {
+            sort: '-updated',
+        });
+    } catch (_err) {
+        return null;
+    }
+}
+
 export const getHighlights = async (uploadId?: string) => {
     if (!uploadId) return null;
     return await pb.collection(Collections.Highlights).getFullList({

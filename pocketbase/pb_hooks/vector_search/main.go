@@ -87,7 +87,7 @@ func Init(app *pocketbase.PocketBase) error {
 		return e.Next()
 	})
 
-	app.Cron().MustAdd("recoverEmbeddingPollJobs", "*/1 * * * *", func() {
+	app.Cron().MustAdd("recoverEmbeddingPollJobs", "*/5 * * * *", func() {
 		enqueuePendingEmbeddingPollJobs(app, 200)
 	})
 

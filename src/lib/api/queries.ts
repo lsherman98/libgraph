@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useInfiniteQuery } from "@tanstack/react-query";
-import { getPeople, getPublications, getFirstPage, getPageByNumber, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection, fullTextSearch, getPreferences, getReadingProgress, getSummaryBySourcePage } from "./api";
+import { getPeople, getPublications, getFirstPage, getPageByNumber, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection, fullTextSearch, getPreferences, getReadingProgress, getSummaryBySourcePage, getSummaryBySourceUpload } from "./api";
 import type { UploadFilters } from "./api";
 import type { NodesTypeOptions } from "../pocketbase-types";
 import { queryKeys } from "./queryKeys";
@@ -109,6 +109,19 @@ export function useSummaryBySourcePage(pageId?: string, options?: { pollUntilFou
         queryKey: queryKeys.summaries.bySourcePage(pageId),
         queryFn: () => getSummaryBySourcePage(pageId),
         enabled: !!pageId,
+        refetchInterval: (query) => {
+            if (!options?.pollUntilFound) return false;
+            return query.state.data ? false : 2000;
+        },
+        placeholderData: keepPreviousData,
+    });
+}
+
+export function useSummaryBySourceUpload(uploadId?: string, options?: { pollUntilFound?: boolean }) {
+    return useQuery({
+        queryKey: queryKeys.summaries.bySourceUpload(uploadId),
+        queryFn: () => getSummaryBySourceUpload(uploadId),
+        enabled: !!uploadId,
         refetchInterval: (query) => {
             if (!options?.pollUntilFound) return false;
             return query.state.data ? false : 2000;

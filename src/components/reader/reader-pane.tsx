@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { usePages, useBookmarks, useNotes, useUploadById, useSummaryBySourcePage } from "@/lib/api/queries";
+import { usePages, useBookmarks, useNotes, useUploadById, useSummaryBySourcePage, useSummaryBySourceUpload } from "@/lib/api/queries";
 import { useCreateHighlight, useUpdateHighlight, useDeleteHighlight, useSummarizePage } from "@/lib/api/mutations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,16 +68,23 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
 
   const { data: firstPageData } = usePages(uploadId ?? null, 1, 1);
   const totalPages = firstPageData?.totalItems || 0;
+  const firstPageId = firstPageData?.items[0]?.id ?? null;
 
   const { data: currentPageData } = usePages(uploadId ?? null, pageSettings.currentPage, 1);
   const currentPageId = currentPageData?.items[0]?.id ?? null;
 
   const isSummaryUpload = upload?.type === "summary";
-  const shouldPollForSummary = !isSummaryUpload && !!currentPageId && queuedSummaryPageId === currentPageId;
-  const { data: pageSummaryRecord } = useSummaryBySourcePage(!isSummaryUpload ? (currentPageId ?? undefined) : undefined, {
-    pollUntilFound: shouldPollForSummary,
+  const isBookUpload = upload?.type === "book";
+  const summarySourcePageId = isBookUpload ? currentPageId : firstPageId;
+  const shouldPollForSummary = !isSummaryUpload && !!queuedSummaryPageId && queuedSummaryPageId === (isBookUpload ? currentPageId : uploadId);
+  const { data: pageSummaryRecord } = useSummaryBySourcePage(!isSummaryUpload && isBookUpload ? (currentPageId ?? undefined) : undefined, {
+    pollUntilFound: shouldPollForSummary && isBookUpload,
   });
-  const hasExistingSummary = !!pageSummaryRecord?.summary_upload;
+  const { data: uploadSummaryRecord } = useSummaryBySourceUpload(!isSummaryUpload && !isBookUpload ? uploadId : undefined, {
+    pollUntilFound: shouldPollForSummary && !isBookUpload,
+  });
+  const activeSummaryRecord = isBookUpload ? pageSummaryRecord : uploadSummaryRecord;
+  const hasExistingSummary = !!activeSummaryRecord?.summary_upload;
 
   const linkedSummaryTab = tabId ? tabs.find((tab) => tab.type === "reader" && !!tab.isSummary && tab.summarySourceTabId === tabId) : undefined;
   const isSummaryVisible = !!linkedSummaryTab && splitMode === "horizontal" && splitTabId === linkedSummaryTab.id;
@@ -97,24 +104,35 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
   );
 
   useEffect(() => {
-    if (!tabId || !isSummaryVisible || !currentPageId) return;
+    if (!tabId || !isSummaryVisible || !summarySourcePageId) return;
 
-    if (!pageSummaryRecord?.summary_upload) {
+    if (!activeSummaryRecord?.summary_upload) {
       closeSummarySplitTab(tabId);
       return;
     }
 
-    openSummarySplit(pageSummaryRecord.summary_upload, currentPageId);
-  }, [tabId, isSummaryVisible, currentPageId, pageSummaryRecord?.summary_upload, closeSummarySplitTab, openSummarySplit]);
+    openSummarySplit(activeSummaryRecord.summary_upload, summarySourcePageId);
+  }, [tabId, isSummaryVisible, summarySourcePageId, activeSummaryRecord?.summary_upload, closeSummarySplitTab, openSummarySplit]);
 
   useEffect(() => {
-    if (!currentPageId || queuedSummaryPageId !== currentPageId || !pageSummaryRecord?.summary_upload) return;
-    openSummarySplit(pageSummaryRecord.summary_upload, currentPageId);
+    const queuedTarget = isBookUpload ? currentPageId : uploadId;
+    if (!summarySourcePageId || queuedSummaryPageId !== queuedTarget || !activeSummaryRecord?.summary_upload) return;
+
+    openSummarySplit(activeSummaryRecord.summary_upload, summarySourcePageId);
     setQueuedSummaryPageId(null);
-    toast.success("Page summarized", {
-      description: `Summary opened for page ${pageSettings.currentPage}.`,
+    toast.success(isBookUpload ? "Page summarized" : "Document summarized", {
+      description: isBookUpload ? `Summary opened for page ${pageSettings.currentPage}.` : "Summary opened for this document.",
     });
-  }, [queuedSummaryPageId, currentPageId, pageSummaryRecord?.summary_upload, pageSettings.currentPage, openSummarySplit]);
+  }, [
+    queuedSummaryPageId,
+    currentPageId,
+    uploadId,
+    summarySourcePageId,
+    activeSummaryRecord?.summary_upload,
+    isBookUpload,
+    pageSettings.currentPage,
+    openSummarySplit,
+  ]);
 
   const setCurrentPageRef = useRef(setCurrentPage);
   const viewModeRef = useRef(settings.viewMode);
@@ -414,9 +432,11 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                         if (!currentPageId) return;
                         summarizePageMutation.mutate(currentPageId, {
                           onSuccess: () => {
-                            setQueuedSummaryPageId(currentPageId);
+                            setQueuedSummaryPageId(isBookUpload ? currentPageId : uploadId);
                             toast.info("Summary queued", {
-                              description: `Generating summary for page ${pageSettings.currentPage}...`,
+                              description: isBookUpload
+                                ? `Generating summary for page ${pageSettings.currentPage}...`
+                                : "Generating summary for this document...",
                             });
                           },
                         });
@@ -426,7 +446,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                       {summarizePageMutation.isPending || shouldPollForSummary ? "Summarizing..." : "Summarize"}
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Generate summary for current page</TooltipContent>
+                  <TooltipContent>{isBookUpload ? "Generate summary for current page" : "Generate summary for this document"}</TooltipContent>
                 </Tooltip>
               )}
               {!isSummaryUpload && (
@@ -442,13 +462,15 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                           closeSummarySplitTab(tabId);
                           return;
                         }
-                        if (!currentPageId || !pageSummaryRecord?.summary_upload) {
-                          toast.info("No summary for this page yet", {
-                            description: "Use Summarize first, then toggle summary view.",
+                        if (!summarySourcePageId || !activeSummaryRecord?.summary_upload) {
+                          toast.info(isBookUpload ? "No summary for this page yet" : "No summary for this document yet", {
+                            description: isBookUpload
+                              ? "Use Summarize first, then toggle summary view."
+                              : "Use Summarize first, then toggle summary view.",
                           });
                           return;
                         }
-                        openSummarySplit(pageSummaryRecord.summary_upload, currentPageId);
+                        openSummarySplit(activeSummaryRecord.summary_upload, summarySourcePageId);
                       }}
                     >
                       {isSummaryVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

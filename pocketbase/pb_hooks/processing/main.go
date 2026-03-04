@@ -23,8 +23,9 @@ const (
 )
 
 const (
-	queuePollInterval = 2 * time.Second
-	queueLeaseWindow  = 2 * time.Minute
+	queuePollInterval = 10 * time.Second
+	embedPollInterval = 120 * time.Second
+	queueLeaseWindow  = 10 * time.Minute
 	workerID          = "pb-main-worker"
 )
 
@@ -32,6 +33,7 @@ type workerSpec struct {
 	name     string
 	jobTypes []string
 	limit    int
+	interval time.Duration
 }
 
 type JobHandler func(app *pocketbase.PocketBase, job *core.Record) error
@@ -55,6 +57,28 @@ var (
 	handlers   = map[string]JobHandler{}
 )
 
+const processingJobErrorMessageMaxLen = 5000
+
+func clampProcessingJobErrorMessage(message string) string {
+	trimmed := strings.TrimSpace(message)
+	if trimmed == "" {
+		return ""
+	}
+
+	runes := []rune(trimmed)
+	if len(runes) <= processingJobErrorMessageMaxLen {
+		return trimmed
+	}
+
+	suffix := " ... (truncated)"
+	maxContentLen := processingJobErrorMessageMaxLen - len([]rune(suffix))
+	if maxContentLen <= 0 {
+		return string(runes[:processingJobErrorMessageMaxLen])
+	}
+
+	return string(runes[:maxContentLen]) + suffix
+}
+
 func RegisterHandler(jobType string, handler JobHandler) {
 	handlersMu.Lock()
 	defer handlersMu.Unlock()
@@ -64,17 +88,21 @@ func RegisterHandler(jobType string, handler JobHandler) {
 func Init(app *pocketbase.PocketBase) error {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		workers := []workerSpec{
-			{name: "upload-parse", jobTypes: []string{JobTypeUploadParseOrTranscribe}, limit: 2},
-			{name: "chunk-generate", jobTypes: []string{JobTypeChunkGenerate}, limit: 4},
-			{name: "page-summarize", jobTypes: []string{JobTypePageSummarize}, limit: 4},
-			{name: "embed-submit", jobTypes: []string{JobTypeChunkEmbedSubmit}, limit: 3},
-			{name: "embed-poll", jobTypes: []string{JobTypeChunkEmbedPoll}, limit: 8},
+			{name: "upload-parse", jobTypes: []string{JobTypeUploadParseOrTranscribe}, limit: 2, interval: queuePollInterval},
+			{name: "chunk-generate", jobTypes: []string{JobTypeChunkGenerate}, limit: 4, interval: queuePollInterval},
+			{name: "page-summarize", jobTypes: []string{JobTypePageSummarize}, limit: 4, interval: queuePollInterval},
+			{name: "embed-submit", jobTypes: []string{JobTypeChunkEmbedSubmit}, limit: 3, interval: queuePollInterval},
+			{name: "embed-poll", jobTypes: []string{JobTypeChunkEmbedPoll}, limit: 8, interval: embedPollInterval},
 		}
 
 		for _, spec := range workers {
 			spec := spec
 			routine.FireAndForget(func() {
-				ticker := time.NewTicker(queuePollInterval)
+				interval := spec.interval
+				if interval <= 0 {
+					interval = queuePollInterval
+				}
+				ticker := time.NewTicker(interval)
 				defer ticker.Stop()
 
 				for {
@@ -298,7 +326,7 @@ func handleJobFailure(app *pocketbase.PocketBase, job *pbgen.ProcessingJobs, exe
 	}
 
 	job.SetAttempts(float64(attempts))
-	job.SetErrorMessage(execErr.Error())
+	job.SetErrorMessage(clampProcessingJobErrorMessage(execErr.Error()))
 	job.Set("lease_until", nil)
 
 	if attempts >= maxAttempts {

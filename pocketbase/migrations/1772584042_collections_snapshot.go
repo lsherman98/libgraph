@@ -829,7 +829,8 @@ func init() {
 							"podcast",
 							"lecture",
 							"youtube",
-							"essay"
+							"essay",
+							"summary"
 						]
 					},
 					{
@@ -842,20 +843,6 @@ func init() {
 						"presentable": false,
 						"protected": false,
 						"required": true,
-						"system": false,
-						"thumbs": [],
-						"type": "file"
-					},
-					{
-						"hidden": false,
-						"id": "file2451137642",
-						"maxSelect": 1,
-						"maxSize": 52428800,
-						"mimeTypes": [],
-						"name": "transcript_file",
-						"presentable": false,
-						"protected": false,
-						"required": false,
 						"system": false,
 						"thumbs": [],
 						"type": "file"
@@ -965,29 +952,6 @@ func init() {
 						"required": false,
 						"system": false,
 						"type": "relation"
-					},
-					{
-						"autogeneratePattern": "",
-						"hidden": false,
-						"id": "text3399421961",
-						"max": 0,
-						"min": 0,
-						"name": "llama_file_id",
-						"pattern": "",
-						"presentable": false,
-						"primaryKey": false,
-						"required": false,
-						"system": false,
-						"type": "text"
-					},
-					{
-						"hidden": false,
-						"id": "bool3625246891",
-						"name": "is_summary",
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "bool"
 					},
 					{
 						"hidden": false,
@@ -1467,7 +1431,8 @@ func init() {
 							"note_of",
 							"published_by",
 							"about_person",
-							"links_to"
+							"links_to",
+							"summary_of"
 						]
 					},
 					{
@@ -3468,7 +3433,7 @@ func init() {
 						"type": "relation"
 					},
 					{
-						"cascadeDelete": false,
+						"cascadeDelete": true,
 						"collectionId": "pbc_3446931122",
 						"hidden": false,
 						"id": "relation3939995361",

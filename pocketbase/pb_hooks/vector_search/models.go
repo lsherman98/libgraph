@@ -39,7 +39,7 @@ type inlinedEmbedContentRequest struct {
 }
 
 type restEmbedContentRequest struct {
-	Model    string      `json:"model"`
+	Model    string      `json:"model,omitempty"`
 	Content  restContent `json:"content"`
 	TaskType string      `json:"taskType,omitempty"`
 	Title    string      `json:"title,omitempty"`
@@ -91,11 +91,16 @@ type inlinedEmbedContentResponse struct {
 
 type restEmbedContentResponse struct {
 	Embedding *restContentEmbedding `json:"embedding,omitempty"`
+	Values    []float32             `json:"values,omitempty"`
 }
 
 type restBulkEmbedContentResponse struct {
 	Embeddings []restEmbedContentResponse `json:"embeddings,omitempty"`
 	Embedding  *restContentEmbedding      `json:"embedding,omitempty"`
+}
+
+type restBulkEmbedContentRequest struct {
+	Requests []restEmbedContentRequest `json:"requests"`
 }
 
 type restContentEmbedding struct {

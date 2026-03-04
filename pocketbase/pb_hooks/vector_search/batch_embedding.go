@@ -24,7 +24,8 @@ import (
 const (
 	geminiAPIBase       = "https://generativelanguage.googleapis.com/v1beta"
 	maxBatchSize        = 500
-	defaultPollInterval = 10 * time.Second
+	maxSyncBulkRequests = 100
+	defaultPollInterval = 300 * time.Second
 )
 
 var embeddingBatchMu sync.Mutex
@@ -380,6 +381,11 @@ func embeddingPollInterval() time.Duration {
 		return defaultPollInterval
 	}
 
+	minimumSeconds := int(defaultPollInterval / time.Second)
+	if seconds < minimumSeconds {
+		return defaultPollInterval
+	}
+
 	return time.Duration(seconds) * time.Second
 }
 
@@ -469,16 +475,38 @@ func submitBulkEmbedContent(ctx context.Context, modelName string, parts []restP
 		return nil, nil
 	}
 
-	url := fmt.Sprintf("%s/models/%s:embedContent?key=%s", geminiAPIBase, modelName, apiKey)
-	body := restEmbedContentRequest{
-		Model:    fmt.Sprintf("models/%s", modelName),
-		Content:  restContent{Parts: parts},
-		TaskType: "RETRIEVAL_DOCUMENT",
+	requests := make([]restEmbedContentRequest, len(parts))
+	for i, part := range parts {
+		requests[i] = restEmbedContentRequest{
+			Model:    fmt.Sprintf("models/%s", modelName),
+			Content:  restContent{Parts: []restPart{{Text: part.Text}}},
+			TaskType: "RETRIEVAL_DOCUMENT",
+		}
+	}
+
+	vectors := make([][]float32, 0, len(requests))
+	for start := 0; start < len(requests); start += maxSyncBulkRequests {
+		end := min(start+maxSyncBulkRequests, len(requests))
+		chunkVectors, err := submitBulkEmbedContentChunk(ctx, apiKey, modelName, requests[start:end])
+		if err != nil {
+			return nil, fmt.Errorf("batchEmbedContents chunk failed (%d-%d): %w", start, end, err)
+		}
+		vectors = append(vectors, chunkVectors...)
+	}
+
+	return vectors, nil
+}
+
+func submitBulkEmbedContentChunk(ctx context.Context, apiKey, modelName string, requests []restEmbedContentRequest) ([][]float32, error) {
+
+	url := fmt.Sprintf("%s/models/%s:batchEmbedContents?key=%s", geminiAPIBase, modelName, apiKey)
+	body := restBulkEmbedContentRequest{
+		Requests: requests,
 	}
 
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("marshal embedContent request: %w", err)
+		return nil, fmt.Errorf("marshal batchEmbedContents request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
@@ -489,7 +517,7 @@ func submitBulkEmbedContent(ctx context.Context, modelName string, parts []restP
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("embedContent HTTP request failed: %w", err)
+		return nil, fmt.Errorf("batchEmbedContents HTTP request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -503,12 +531,12 @@ func submitBulkEmbedContent(ctx context.Context, modelName string, parts []restP
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("embedContent failed (HTTP %d): %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("batchEmbedContents failed (HTTP %d): %s", resp.StatusCode, string(respBody))
 	}
 
 	var parsed restBulkEmbedContentResponse
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
-		return nil, fmt.Errorf("parsing embedContent response: %w", err)
+		return nil, fmt.Errorf("parsing batchEmbedContents response: %w", err)
 	}
 
 	if len(parsed.Embeddings) == 0 && parsed.Embedding != nil {
@@ -517,11 +545,15 @@ func submitBulkEmbedContent(ctx context.Context, modelName string, parts []restP
 
 	vectors := make([][]float32, 0, len(parsed.Embeddings))
 	for _, emb := range parsed.Embeddings {
-		if emb.Embedding == nil || len(emb.Embedding.Values) == 0 {
-			vectors = append(vectors, nil)
+		if len(emb.Values) > 0 {
+			vectors = append(vectors, emb.Values)
 			continue
 		}
-		vectors = append(vectors, emb.Embedding.Values)
+		if emb.Embedding != nil && len(emb.Embedding.Values) > 0 {
+			vectors = append(vectors, emb.Embedding.Values)
+			continue
+		}
+		vectors = append(vectors, nil)
 	}
 
 	return vectors, nil

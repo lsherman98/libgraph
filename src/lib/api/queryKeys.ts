@@ -36,6 +36,8 @@ export const queryKeys = {
         all: ["summaries"] as const,
         bySourcePage: (pageId?: string) =>
             [...queryKeys.summaries.all, "sourcePage", pageId] as const,
+        bySourceUpload: (uploadId?: string) =>
+            [...queryKeys.summaries.all, "sourceUpload", uploadId] as const,
     },
     highlights: {
         all: ["highlights"] as const,

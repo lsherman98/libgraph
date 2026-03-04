@@ -6,11 +6,14 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/lsherman98/libgraph/pocketbase/collections"
 	"github.com/lsherman98/libgraph/pocketbase/mistral"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/processing"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/proxyhooks"
 	pbgen "github.com/lsherman98/libgraph/pocketbase/pbschema/generated"
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/tools/routine"
 )
 
 var (
@@ -48,22 +51,99 @@ func Init(app *pocketbase.PocketBase) error {
 			return err
 		}
 
-		upload.SetStatus(pbgen.PROCESSING)
-		if err := app.Save(upload); err != nil {
-			app.Logger().Error("[uploads] failed to set upload status=PROCESSING", "uploadId", upload.Id, "error", err)
+		uploadID := strings.TrimSpace(upload.Id)
+		if uploadID == "" {
+			return nil
 		}
 
-		return processing.Enqueue(app, processing.EnqueueRequest{
-			JobType:   processing.JobTypeUploadParseOrTranscribe,
-			DedupeKey: "upload.parse_or_transcribe:" + upload.Id,
-			Payload: map[string]any{
-				"upload_id": upload.Id,
-			},
-			Priority:    50,
-			MaxAttempts: 5,
-			UserID:      upload.Record.GetString("user"),
-			UploadID:    upload.Id,
+		routine.FireAndForget(func() {
+			uploadRecord, findErr := app.FindRecordById(collections.Uploads, uploadID)
+			if findErr != nil {
+				app.Logger().Error("[uploads] failed to reload upload for async enqueue", "uploadId", uploadID, "error", findErr)
+				return
+			}
+
+			uploadProxy, wrapErr := pbgen.WrapRecord[pbgen.Uploads](uploadRecord)
+			if wrapErr != nil {
+				app.Logger().Error("[uploads] failed to wrap upload proxy for async enqueue", "uploadId", uploadID, "error", wrapErr)
+				return
+			}
+
+			if uploadProxy.Type() == pbgen.Summary {
+				return
+			}
+
+			uploadProxy.SetStatus(pbgen.PROCESSING)
+			if saveErr := app.Save(uploadProxy); saveErr != nil {
+				app.Logger().Error("[uploads] failed to set upload status=PROCESSING", "uploadId", uploadID, "error", saveErr)
+			}
+
+			enqueueErr := processing.Enqueue(app, processing.EnqueueRequest{
+				JobType:   processing.JobTypeUploadParseOrTranscribe,
+				DedupeKey: "upload.parse_or_transcribe:" + uploadID,
+				Payload: map[string]any{
+					"upload_id": uploadID,
+				},
+				Priority:    50,
+				MaxAttempts: 5,
+				UserID:      uploadProxy.Record.GetString("user"),
+				UploadID:    uploadID,
+			})
+			if enqueueErr != nil {
+				uploadProxy.SetStatus(pbgen.FAILED)
+				if saveErr := app.Save(uploadProxy); saveErr != nil {
+					app.Logger().Error("[uploads] failed to set upload status=FAILED after enqueue failure", "uploadId", uploadID, "error", saveErr)
+				}
+				app.Logger().Error("[uploads] failed to enqueue upload processing", "uploadId", uploadID, "error", enqueueErr)
+			}
 		})
+
+		return nil
+	})
+
+	phooks.OnUploadsDeleteRequest.BindFunc(func(e *pbgen.UploadsRequestEvent) error {
+		upload := e.PRecord.Record
+		uploadID := strings.TrimSpace(upload.Id)
+		if uploadID == "" {
+			return e.Next()
+		}
+
+		summaries, err := app.FindRecordsByFilter(
+			collections.Summaries,
+			"source_upload = {:uploadId}",
+			"",
+			0,
+			0,
+			dbx.Params{"uploadId": uploadID},
+		)
+		if err != nil {
+			return err
+		}
+
+		deletedSummaryUploads := map[string]struct{}{}
+		for _, summaryRecord := range summaries {
+			summaryUploadID := strings.TrimSpace(summaryRecord.GetString("summary_upload"))
+			if summaryUploadID == "" || summaryUploadID == uploadID {
+				continue
+			}
+			if _, alreadyDeleted := deletedSummaryUploads[summaryUploadID]; alreadyDeleted {
+				continue
+			}
+
+			summaryUploadRecord, findErr := app.FindRecordById(collections.Uploads, summaryUploadID)
+			if findErr != nil {
+				app.Logger().Warn("[uploads] failed to find linked summary upload during source upload delete", "sourceUploadId", uploadID, "summaryUploadId", summaryUploadID, "error", findErr)
+				continue
+			}
+
+			if deleteErr := app.Delete(summaryUploadRecord); deleteErr != nil {
+				return deleteErr
+			}
+
+			deletedSummaryUploads[summaryUploadID] = struct{}{}
+		}
+
+		return e.Next()
 	})
 
 	return nil
