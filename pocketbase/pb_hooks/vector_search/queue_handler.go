@@ -9,7 +9,6 @@ import (
 
 	"github.com/lsherman98/libgraph/pocketbase/collections"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/processing"
-	pbgen "github.com/lsherman98/libgraph/pocketbase/pbschema/generated"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -94,17 +93,12 @@ func handleChunkEmbedSubmitJob(app *pocketbase.PocketBase, job *core.Record) err
 }
 
 func handleChunkEmbedPollJob(app *pocketbase.PocketBase, job *core.Record) error {
-	jobProxy, _ := pbgen.WrapRecord[pbgen.ProcessingJobs](job)
-
 	payload := chunkEmbedPayload{}
 	if err := job.UnmarshalJSONField("payload_json", &payload); err != nil {
 		return fmt.Errorf("invalid payload_json: %w", err)
 	}
 
 	operationID := strings.TrimSpace(payload.EmbeddingOperationID)
-	if operationID == "" && jobProxy != nil {
-		operationID = strings.TrimSpace(jobProxy.GetString("embedding_operation"))
-	}
 	if operationID == "" {
 		operationID = strings.TrimSpace(job.GetString("embedding_operation"))
 	}
@@ -116,27 +110,8 @@ func handleChunkEmbedPollJob(app *pocketbase.PocketBase, job *core.Record) error
 	if err != nil {
 		return err
 	}
-	operationProxy, _ := pbgen.WrapRecord[pbgen.EmbeddingOperations](operationRecord)
 
 	status := strings.TrimSpace(operationRecord.GetString("status"))
-	if operationProxy != nil {
-		switch operationProxy.Status() {
-		case pbgen.Succeeded2:
-			status = "succeeded"
-		case pbgen.Failing:
-			status = "failing"
-		case pbgen.Cancelled2:
-			status = "cancelled"
-		case pbgen.Expired:
-			status = "expired"
-		case pbgen.Polling:
-			status = "polling"
-		case pbgen.Submitted:
-			status = "submitted"
-		case pbgen.Queued2:
-			status = "queued"
-		}
-	}
 	if status == "succeeded" || status == "failing" || status == "cancelled" || status == "expired" {
 		return nil
 	}
@@ -144,9 +119,6 @@ func handleChunkEmbedPollJob(app *pocketbase.PocketBase, job *core.Record) error
 	now := time.Now().UTC()
 
 	providerOperationID := strings.TrimSpace(operationRecord.GetString("provider_operation_id"))
-	if operationProxy != nil {
-		providerOperationID = strings.TrimSpace(operationProxy.ProviderOperationId())
-	}
 	if providerOperationID == "" {
 		return fmt.Errorf("embedding operation missing provider_operation_id")
 	}
@@ -163,13 +135,8 @@ func handleChunkEmbedPollJob(app *pocketbase.PocketBase, job *core.Record) error
 
 	if !isDone {
 		nextPollAt := now.Add(embeddingPollInterval())
-		if operationProxy != nil {
-			operationProxy.SetStatus(pbgen.Polling)
-			operationProxy.SetErrorMessage("")
-		} else {
-			operationRecord.Set("status", "polling")
-			operationRecord.Set("error_message", "")
-		}
+		operationRecord.Set("status", "polling")
+		operationRecord.Set("error_message", "")
 		operationRecord.Set("last_polled_at", now)
 		operationRecord.Set("next_poll_at", nextPollAt)
 		if err := app.Save(operationRecord); err != nil {
@@ -185,13 +152,8 @@ func handleChunkEmbedPollJob(app *pocketbase.PocketBase, job *core.Record) error
 			errMessage = batchOperation.Error.Message
 		}
 		errMessage = clampEmbeddingOperationErrorMessage(errMessage)
-		if operationProxy != nil {
-			operationProxy.SetStatus(pbgen.Failing)
-			operationProxy.SetErrorMessage(errMessage)
-		} else {
-			operationRecord.Set("status", "failing")
-			operationRecord.Set("error_message", errMessage)
-		}
+		operationRecord.Set("status", "failing")
+		operationRecord.Set("error_message", errMessage)
 		operationRecord.Set("last_polled_at", now)
 		operationRecord.Set("finished_at", now)
 		return app.Save(operationRecord)
@@ -200,13 +162,8 @@ func handleChunkEmbedPollJob(app *pocketbase.PocketBase, job *core.Record) error
 	result, err := resolveBatchResult(batchOperation, rawBody)
 	if err != nil {
 		errMessage := clampEmbeddingOperationErrorMessage(err.Error())
-		if operationProxy != nil {
-			operationProxy.SetStatus(pbgen.Failing)
-			operationProxy.SetErrorMessage(errMessage)
-		} else {
-			operationRecord.Set("status", "failing")
-			operationRecord.Set("error_message", errMessage)
-		}
+		operationRecord.Set("status", "failing")
+		operationRecord.Set("error_message", errMessage)
 		operationRecord.Set("last_polled_at", now)
 		operationRecord.Set("finished_at", now)
 		if saveErr := app.Save(operationRecord); saveErr != nil {
@@ -230,32 +187,16 @@ func handleChunkEmbedPollJob(app *pocketbase.PocketBase, job *core.Record) error
 		return err
 	}
 
-	if operationProxy != nil {
-		operationProxy.SetSucceededChunks(float64(processed))
-		operationProxy.SetFailedChunks(float64(failed))
-		operationProxy.SetTotalChunks(float64(len(chunkRecords)))
-	} else {
-		operationRecord.Set("succeeded_chunks", processed)
-		operationRecord.Set("failed_chunks", failed)
-		operationRecord.Set("total_chunks", len(chunkRecords))
-	}
+	operationRecord.Set("succeeded_chunks", processed)
+	operationRecord.Set("failed_chunks", failed)
+	operationRecord.Set("total_chunks", len(chunkRecords))
 	operationRecord.Set("finished_at", now)
 	if failed > 0 {
-		if operationProxy != nil {
-			operationProxy.SetStatus(pbgen.Failing)
-			operationProxy.SetErrorMessage(fmt.Sprintf("embedding batch completed with failures: %d", failed))
-		} else {
-			operationRecord.Set("status", "failing")
-			operationRecord.Set("error_message", fmt.Sprintf("embedding batch completed with failures: %d", failed))
-		}
+		operationRecord.Set("status", "failing")
+		operationRecord.Set("error_message", fmt.Sprintf("embedding batch completed with failures: %d", failed))
 	} else {
-		if operationProxy != nil {
-			operationProxy.SetStatus(pbgen.Succeeded2)
-			operationProxy.SetErrorMessage("")
-		} else {
-			operationRecord.Set("status", "succeeded")
-			operationRecord.Set("error_message", "")
-		}
+		operationRecord.Set("status", "succeeded")
+		operationRecord.Set("error_message", "")
 	}
 	operationRecord.Set("last_polled_at", now)
 
@@ -295,7 +236,7 @@ func submitEmbeddingOperationAndEnqueuePoll(app *pocketbase.PocketBase, job *cor
 		return err
 	}
 
-	operationRecord, _, err := createEmbeddingOperationRecord(app, job, chunkIDs, operation.Name, modelName, len(chunks), 10)
+	operationRecord, err := createEmbeddingOperationRecord(app, job, chunkIDs, operation.Name, modelName, len(chunks), 10)
 	if err != nil {
 		return err
 	}
@@ -317,7 +258,7 @@ func submitEmbeddingOperationAndProcessSync(app *pocketbase.PocketBase, job *cor
 	modelName := embeddingModelName()
 	providerOperationID := fmt.Sprintf("sync:%s", job.Id)
 
-	operationRecord, operationProxy, err := createEmbeddingOperationRecord(app, job, chunkIDs, providerOperationID, modelName, len(chunks), 1)
+	operationRecord, err := createEmbeddingOperationRecord(app, job, chunkIDs, providerOperationID, modelName, len(chunks), 1)
 	if err != nil {
 		return err
 	}
@@ -325,17 +266,10 @@ func submitEmbeddingOperationAndProcessSync(app *pocketbase.PocketBase, job *cor
 	processed, failed, processErr := processChunkEmbeddingsSyncBulk(app, chunks, modelName)
 	now := time.Now().UTC()
 
-	if operationProxy != nil {
-		operationProxy.SetSucceededChunks(float64(processed))
-		operationProxy.SetFailedChunks(float64(failed))
-		operationProxy.SetTotalChunks(float64(len(chunks)))
-		operationProxy.SetAttempts(1)
-	} else {
-		operationRecord.Set("succeeded_chunks", processed)
-		operationRecord.Set("failed_chunks", failed)
-		operationRecord.Set("total_chunks", len(chunks))
-		operationRecord.Set("attempts", 1)
-	}
+	operationRecord.Set("succeeded_chunks", processed)
+	operationRecord.Set("failed_chunks", failed)
+	operationRecord.Set("total_chunks", len(chunks))
+	operationRecord.Set("attempts", 1)
 
 	if processErr != nil || failed > 0 {
 		errMessage := fmt.Sprintf("sync embedding completed with failures: %d", failed)
@@ -343,21 +277,11 @@ func submitEmbeddingOperationAndProcessSync(app *pocketbase.PocketBase, job *cor
 			errMessage = processErr.Error()
 		}
 		errMessage = clampEmbeddingOperationErrorMessage(errMessage)
-		if operationProxy != nil {
-			operationProxy.SetStatus(pbgen.Failing)
-			operationProxy.SetErrorMessage(errMessage)
-		} else {
-			operationRecord.Set("status", "failing")
-			operationRecord.Set("error_message", errMessage)
-		}
+		operationRecord.Set("status", "failing")
+		operationRecord.Set("error_message", errMessage)
 	} else {
-		if operationProxy != nil {
-			operationProxy.SetStatus(pbgen.Succeeded2)
-			operationProxy.SetErrorMessage("")
-		} else {
-			operationRecord.Set("status", "succeeded")
-			operationRecord.Set("error_message", "")
-		}
+		operationRecord.Set("status", "succeeded")
+		operationRecord.Set("error_message", "")
 	}
 
 	operationRecord.Set("finished_at", now)
@@ -453,103 +377,64 @@ func processChunkEmbeddingsSyncBulk(app *pocketbase.PocketBase, chunks []chunkRe
 	return processed, failed, firstErr
 }
 
-func createEmbeddingOperationRecord(app *pocketbase.PocketBase, job *core.Record, chunkIDs []string, providerOperationID string, modelName string, totalChunks int, maxAttempts int) (*core.Record, *pbgen.EmbeddingOperations, error) {
+func createEmbeddingOperationRecord(app *pocketbase.PocketBase, job *core.Record, chunkIDs []string, providerOperationID string, modelName string, totalChunks int, maxAttempts int) (*core.Record, error) {
 	collection, err := app.FindCollectionByNameOrId(collections.EmbeddingOperations)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if maxAttempts <= 0 {
 		maxAttempts = 1
 	}
 
-	jobProxy, _ := pbgen.WrapRecord[pbgen.ProcessingJobs](job)
 	operationRecord := core.NewRecord(collection)
 	operationRecord.Set("processing_job", job.Id)
 	jobUpload := job.GetString("upload")
 	jobPage := job.GetString("page")
 	jobUser := job.GetString("user")
-	if jobProxy != nil {
-		jobUpload = jobProxy.GetString("upload")
-		jobPage = jobProxy.GetString("page")
-		jobUser = jobProxy.GetString("user")
-	}
 	operationRecord.Set("upload", jobUpload)
 	operationRecord.Set("page", jobPage)
 	operationRecord.Set("user", jobUser)
 
-	operationProxy, _ := pbgen.WrapRecord[pbgen.EmbeddingOperations](operationRecord)
-	if operationProxy != nil {
-		operationProxy.SetProvider("gemini")
-		operationProxy.SetProviderOperationId(providerOperationID)
-		operationProxy.SetStatus(pbgen.Submitted)
-		operationProxy.SetModel(modelName)
-		operationProxy.SetTotalChunks(float64(totalChunks))
-		operationProxy.SetSucceededChunks(0)
-		operationProxy.SetFailedChunks(0)
-		operationProxy.SetAttempts(0)
-		operationProxy.SetMaxAttempts(float64(maxAttempts))
-		operationProxy.SetErrorMessage("")
-	} else {
-		operationRecord.Set("provider", "gemini")
-		operationRecord.Set("provider_operation_id", providerOperationID)
-		operationRecord.Set("status", "submitted")
-		operationRecord.Set("model", modelName)
-		operationRecord.Set("total_chunks", totalChunks)
-		operationRecord.Set("succeeded_chunks", 0)
-		operationRecord.Set("failed_chunks", 0)
-		operationRecord.Set("attempts", 0)
-		operationRecord.Set("max_attempts", maxAttempts)
-		operationRecord.Set("error_message", "")
-	}
+	operationRecord.Set("provider", "gemini")
+	operationRecord.Set("provider_operation_id", providerOperationID)
+	operationRecord.Set("status", "submitted")
+	operationRecord.Set("model", modelName)
+	operationRecord.Set("total_chunks", totalChunks)
+	operationRecord.Set("succeeded_chunks", 0)
+	operationRecord.Set("failed_chunks", 0)
+	operationRecord.Set("attempts", 0)
+	operationRecord.Set("max_attempts", maxAttempts)
+	operationRecord.Set("error_message", "")
 	operationRecord.Set("chunk_ids_json", chunkIDs)
 	operationRecord.Set("submitted_at", time.Now().UTC())
 	if err := app.Save(operationRecord); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return operationRecord, operationProxy, nil
+	return operationRecord, nil
 }
 
 func handleEmbeddingOperationPollError(app *pocketbase.PocketBase, job *core.Record, operationRecord *core.Record, pollErr error) error {
-	operationProxy, _ := pbgen.WrapRecord[pbgen.EmbeddingOperations](operationRecord)
-
 	now := time.Now().UTC()
 	attempts := operationRecord.GetInt("attempts") + 1
 	maxAttempts := operationRecord.GetInt("max_attempts")
-	if operationProxy != nil {
-		attempts = int(operationProxy.Attempts()) + 1
-		maxAttempts = int(operationProxy.MaxAttempts())
-	}
 	if maxAttempts <= 0 {
 		maxAttempts = 10
 	}
 
-	if operationProxy != nil {
-		operationProxy.SetAttempts(float64(attempts))
-		operationProxy.SetErrorMessage(clampEmbeddingOperationErrorMessage(pollErr.Error()))
-	} else {
-		operationRecord.Set("attempts", attempts)
-		operationRecord.Set("error_message", clampEmbeddingOperationErrorMessage(pollErr.Error()))
-	}
+	operationRecord.Set("attempts", attempts)
+	operationRecord.Set("error_message", clampEmbeddingOperationErrorMessage(pollErr.Error()))
 	operationRecord.Set("last_polled_at", now)
 
 	if attempts >= maxAttempts {
-		if operationProxy != nil {
-			operationProxy.SetStatus(pbgen.Failing)
-		} else {
-			operationRecord.Set("status", "failing")
-		}
+		operationRecord.Set("status", "failing")
 		operationRecord.Set("finished_at", now)
 		return app.Save(operationRecord)
 	}
 
 	nextPollAt := now.Add(embeddingPollInterval())
-	if operationProxy != nil {
-		operationProxy.SetStatus(pbgen.Polling)
-	} else {
-		operationRecord.Set("status", "polling")
-	}
+	operationRecord.Set("status", "polling")
 	operationRecord.Set("next_poll_at", nextPollAt)
 	if err := app.Save(operationRecord); err != nil {
 		return err
@@ -559,18 +444,11 @@ func handleEmbeddingOperationPollError(app *pocketbase.PocketBase, job *core.Rec
 }
 
 func enqueueEmbeddingPollJob(app *pocketbase.PocketBase, operationRecord *core.Record, scheduledAt time.Time) error {
-	operationProxy, _ := pbgen.WrapRecord[pbgen.EmbeddingOperations](operationRecord)
-
 	operationID := operationRecord.Id
 	dedupeKey := fmt.Sprintf("chunk.embed.poll:%s", operationID)
 	userID := operationRecord.GetString("user")
 	uploadID := operationRecord.GetString("upload")
 	pageID := operationRecord.GetString("page")
-	if operationProxy != nil {
-		userID = operationProxy.GetString("user")
-		uploadID = operationProxy.GetString("upload")
-		pageID = operationProxy.GetString("page")
-	}
 
 	return processing.Enqueue(app, processing.EnqueueRequest{
 		JobType:   processing.JobTypeChunkEmbedPoll,
@@ -589,43 +467,24 @@ func enqueueEmbeddingPollJob(app *pocketbase.PocketBase, operationRecord *core.R
 }
 
 func rescheduleEmbeddingPollJob(app *pocketbase.PocketBase, job *core.Record, operationRecord *core.Record, scheduledAt time.Time) error {
-	jobProxy, _ := pbgen.WrapRecord[pbgen.ProcessingJobs](job)
-	operationProxy, _ := pbgen.WrapRecord[pbgen.EmbeddingOperations](operationRecord)
-
 	if job == nil {
 		return enqueueEmbeddingPollJob(app, operationRecord, scheduledAt)
 	}
 
-	if jobProxy != nil {
-		jobProxy.SetStatus(pbgen.Queued)
-	} else {
-		job.Set("status", "queued")
-	}
+	job.Set("status", "queued")
 	job.Set("scheduled_at", scheduledAt)
 	job.Set("lease_until", nil)
 	job.Set("started_at", nil)
 	job.Set("finished_at", nil)
-	if jobProxy != nil {
-		jobProxy.SetErrorCode("")
-		jobProxy.SetErrorMessage("")
-	} else {
-		job.Set("error_code", "")
-		job.Set("error_message", "")
-	}
+	job.Set("error_code", "")
+	job.Set("error_message", "")
 	job.Set("payload_json", map[string]any{
 		"embedding_operation_id": operationRecord.Id,
 	})
 
 	jobDedupeKey := strings.TrimSpace(job.GetString("dedupe_key"))
-	if jobProxy != nil {
-		jobDedupeKey = strings.TrimSpace(jobProxy.DedupeKey())
-	}
 	if jobDedupeKey == "" {
-		if jobProxy != nil {
-			jobProxy.SetDedupeKey(fmt.Sprintf("chunk.embed.poll:%s", operationRecord.Id))
-		} else {
-			job.Set("dedupe_key", fmt.Sprintf("chunk.embed.poll:%s", operationRecord.Id))
-		}
+		job.Set("dedupe_key", fmt.Sprintf("chunk.embed.poll:%s", operationRecord.Id))
 	}
 
 	if strings.TrimSpace(job.GetString("embedding_operation")) == "" {
@@ -633,39 +492,18 @@ func rescheduleEmbeddingPollJob(app *pocketbase.PocketBase, job *core.Record, op
 	}
 
 	jobUser := strings.TrimSpace(job.GetString("user"))
-	if jobProxy != nil {
-		jobUser = strings.TrimSpace(jobProxy.GetString("user"))
-	}
 	if jobUser == "" {
-		operationUser := operationRecord.GetString("user")
-		if operationProxy != nil {
-			operationUser = operationProxy.GetString("user")
-		}
-		job.Set("user", operationUser)
+		job.Set("user", operationRecord.GetString("user"))
 	}
 
 	jobUpload := strings.TrimSpace(job.GetString("upload"))
-	if jobProxy != nil {
-		jobUpload = strings.TrimSpace(jobProxy.GetString("upload"))
-	}
 	if jobUpload == "" {
-		operationUpload := operationRecord.GetString("upload")
-		if operationProxy != nil {
-			operationUpload = operationProxy.GetString("upload")
-		}
-		job.Set("upload", operationUpload)
+		job.Set("upload", operationRecord.GetString("upload"))
 	}
 
 	jobPage := strings.TrimSpace(job.GetString("page"))
-	if jobProxy != nil {
-		jobPage = strings.TrimSpace(jobProxy.GetString("page"))
-	}
 	if jobPage == "" {
-		operationPage := operationRecord.GetString("page")
-		if operationProxy != nil {
-			operationPage = operationProxy.GetString("page")
-		}
-		job.Set("page", operationPage)
+		job.Set("page", operationRecord.GetString("page"))
 	}
 
 	return app.Save(job)
@@ -691,7 +529,6 @@ func enqueuePendingEmbeddingPollJobs(app *pocketbase.PocketBase, limit int) {
 	}
 
 	for _, operationRecord := range operations {
-		operationProxy, _ := pbgen.WrapRecord[pbgen.EmbeddingOperations](operationRecord)
 		opID := operationRecord.Id
 		existingJobs, err := app.FindRecordsByFilter(
 			collections.ProcessingJobs,
@@ -717,9 +554,6 @@ func enqueuePendingEmbeddingPollJobs(app *pocketbase.PocketBase, limit int) {
 		}
 
 		operationRecord.Set("next_poll_at", nextPollAt)
-		if operationProxy != nil {
-			operationRecord.Set("next_poll_at", nextPollAt)
-		}
 		if saveErr := app.Save(operationRecord); saveErr != nil {
 			app.Logger().Warn("[vector_search] failed to update next_poll_at", "operation_id", opID, "error", saveErr)
 		}
@@ -733,12 +567,8 @@ func loadEmbeddableChunkRecords(app *pocketbase.PocketBase, chunkIDs []string) (
 		if err != nil {
 			return nil, err
 		}
-		chunkProxy, _ := pbgen.WrapRecord[pbgen.DocumentChunks](record)
 
 		uploadID := strings.TrimSpace(record.GetString("upload"))
-		if chunkProxy != nil {
-			uploadID = strings.TrimSpace(chunkProxy.GetString("upload"))
-		}
 		if uploadID == "" {
 			continue
 		}
@@ -746,11 +576,7 @@ func loadEmbeddableChunkRecords(app *pocketbase.PocketBase, chunkIDs []string) (
 		if err != nil {
 			return nil, err
 		}
-		uploadProxy, _ := pbgen.WrapRecord[pbgen.Uploads](uploadRecord)
 		uploadType := strings.TrimSpace(uploadRecord.GetString("type"))
-		if uploadProxy != nil {
-			uploadType = strings.TrimSpace(uploadProxy.GetString("type"))
-		}
 		if uploadType == "summary" {
 			continue
 		}
@@ -763,9 +589,6 @@ func loadEmbeddableChunkRecords(app *pocketbase.PocketBase, chunkIDs []string) (
 
 func embeddingOperationChunkIDs(operationRecord *core.Record) ([]string, error) {
 	raw := operationRecord.GetString("chunk_ids_json")
-	if operationProxy, err := pbgen.WrapRecord[pbgen.EmbeddingOperations](operationRecord); err == nil {
-		raw = operationProxy.ChunkIdsJson()
-	}
 	if strings.TrimSpace(raw) == "" {
 		return nil, fmt.Errorf("embedding operation %s has empty chunk_ids_json", operationRecord.Id)
 	}

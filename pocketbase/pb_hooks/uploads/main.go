@@ -12,8 +12,7 @@ import (
 	"github.com/lsherman98/libgraph/pocketbase/collections"
 	"github.com/lsherman98/libgraph/pocketbase/mistral"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/processing"
-	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/proxyhooks"
-	pbgen "github.com/lsherman98/libgraph/pocketbase/pbschema/generated"
+	"github.com/lsherman98/libgraph/pocketbase/vars"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -45,10 +44,9 @@ const optimizedAudioSuffix = "_optimized"
 
 func Init(app *pocketbase.PocketBase) error {
 	registerQueueHandlers(app)
-	phooks := proxyhooks.Get(app)
 
-	phooks.OnUploadsCreateRequest.BindFunc(func(e *pbgen.UploadsRequestEvent) error {
-		upload := e.PRecord
+	app.OnRecordCreateRequest(collections.Uploads).BindFunc(func(e *core.RecordRequestEvent) error {
+		upload := e.Record
 
 		if err := validateTranscriptAttachment(upload); err != nil {
 			return err
@@ -70,18 +68,12 @@ func Init(app *pocketbase.PocketBase) error {
 				return
 			}
 
-			uploadProxy, wrapErr := pbgen.WrapRecord[pbgen.Uploads](uploadRecord)
-			if wrapErr != nil {
-				app.Logger().Error("[uploads] failed to wrap upload proxy for async enqueue", "uploadId", uploadID, "error", wrapErr)
+			if strings.EqualFold(uploadRecord.GetString("type"), vars.UploadTypeSummary) {
 				return
 			}
 
-			if uploadProxy.Type() == pbgen.Summary {
-				return
-			}
-
-			uploadProxy.SetStatus(pbgen.PROCESSING)
-			if saveErr := app.Save(uploadProxy); saveErr != nil {
+			uploadRecord.Set("status", vars.UploadStatusProcessing)
+			if saveErr := app.Save(uploadRecord); saveErr != nil {
 				app.Logger().Error("[uploads] failed to set upload status=PROCESSING", "uploadId", uploadID, "error", saveErr)
 			}
 
@@ -93,12 +85,12 @@ func Init(app *pocketbase.PocketBase) error {
 				},
 				Priority:    50,
 				MaxAttempts: 5,
-				UserID:      uploadProxy.Record.GetString("user"),
+				UserID:      uploadRecord.GetString("user"),
 				UploadID:    uploadID,
 			})
 			if enqueueErr != nil {
-				uploadProxy.SetStatus(pbgen.FAILED)
-				if saveErr := app.Save(uploadProxy); saveErr != nil {
+				uploadRecord.Set("status", vars.UploadStatusFailed)
+				if saveErr := app.Save(uploadRecord); saveErr != nil {
 					app.Logger().Error("[uploads] failed to set upload status=FAILED after enqueue failure", "uploadId", uploadID, "error", saveErr)
 				}
 				app.Logger().Error("[uploads] failed to enqueue upload processing", "uploadId", uploadID, "error", enqueueErr)
@@ -108,8 +100,8 @@ func Init(app *pocketbase.PocketBase) error {
 		return nil
 	})
 
-	phooks.OnUploadsDeleteRequest.BindFunc(func(e *pbgen.UploadsRequestEvent) error {
-		upload := e.PRecord.Record
+	app.OnRecordDeleteRequest(collections.Uploads).BindFunc(func(e *core.RecordRequestEvent) error {
+		upload := e.Record
 		uploadID := strings.TrimSpace(upload.Id)
 		if uploadID == "" {
 			return e.Next()
@@ -153,8 +145,8 @@ func Init(app *pocketbase.PocketBase) error {
 		return e.Next()
 	})
 
-	phooks.OnUploadsAfterUpdateSuccess.BindFunc(func(e *pbgen.UploadsEvent) error {
-		record := e.PRecord.Record
+	app.OnRecordAfterUpdateSuccess(collections.Uploads).BindFunc(func(e *core.RecordEvent) error {
+		record := e.Record
 		newFile := strings.TrimSpace(record.GetString("file"))
 		if newFile == "" {
 			return e.Next()
@@ -185,20 +177,14 @@ func Init(app *pocketbase.PocketBase) error {
 				return
 			}
 
-			uploadProxy, wrapErr := pbgen.WrapRecord[pbgen.Uploads](uploadRecord)
-			if wrapErr != nil {
-				app.Logger().Error("[uploads] failed to wrap upload for audio optimization", "uploadId", uploadID, "error", wrapErr)
-				return
-			}
-
-			optimized, optimizeErr := optimizeAudioUploadFile(app, uploadProxy)
+			optimized, optimizeErr := optimizeAudioUploadFile(app, uploadRecord)
 			if optimizeErr != nil {
 				app.Logger().Warn("[uploads] audio optimization failed; continuing with original file", "uploadId", uploadID, "error", optimizeErr)
 				return
 			}
 
 			if optimized {
-				app.Logger().Info("[uploads] optimized updated audio file", "uploadId", uploadID, "file", uploadProxy.File())
+				app.Logger().Info("[uploads] optimized updated audio file", "uploadId", uploadID, "file", uploadRecord.GetString("file"))
 			}
 		})
 
@@ -218,8 +204,8 @@ func isOptimizedAudioFilename(filename string) bool {
 	return strings.HasSuffix(base, optimizedAudioSuffix+".ogg")
 }
 
-func optimizeAudioUploadFile(app *pocketbase.PocketBase, upload *pbgen.Uploads) (bool, error) {
-	sourceFile := strings.TrimSpace(upload.File())
+func optimizeAudioUploadFile(app *pocketbase.PocketBase, upload *core.Record) (bool, error) {
+	sourceFile := strings.TrimSpace(upload.GetString("file"))
 	if sourceFile == "" {
 		return false, fmt.Errorf("upload file is empty")
 	}
@@ -310,13 +296,12 @@ func optimizeAudioUploadFile(app *pocketbase.PocketBase, upload *pbgen.Uploads) 
 		return false, fmt.Errorf("failed to create optimized file object: %w", err)
 	}
 
-	upload.SetFile(optimizedFile.Name)
 	upload.Set("file", optimizedFile)
 	if err := app.Save(upload); err != nil {
 		return false, fmt.Errorf("failed to save optimized upload file: %w", err)
 	}
 
-	if err := scheduleUploadReprocessing(app, upload.Record); err != nil {
+	if err := scheduleUploadReprocessing(app, upload); err != nil {
 		app.Logger().Warn("[uploads] failed to enqueue reprocessing after audio optimization", "uploadId", upload.Id, "error", err)
 	}
 
@@ -324,18 +309,13 @@ func optimizeAudioUploadFile(app *pocketbase.PocketBase, upload *pbgen.Uploads) 
 }
 
 func scheduleUploadReprocessing(app *pocketbase.PocketBase, uploadRecord *core.Record) error {
-	uploadProxy, err := pbgen.WrapRecord[pbgen.Uploads](uploadRecord)
-	if err != nil {
-		return err
-	}
-
-	uploadID := strings.TrimSpace(uploadProxy.Id)
-	if uploadID == "" || uploadProxy.Type() == pbgen.Summary {
+	uploadID := strings.TrimSpace(uploadRecord.Id)
+	if uploadID == "" || strings.EqualFold(uploadRecord.GetString("type"), vars.UploadTypeSummary) {
 		return nil
 	}
 
-	uploadProxy.SetStatus(pbgen.PROCESSING)
-	if err := app.Save(uploadProxy); err != nil {
+	uploadRecord.Set("status", vars.UploadStatusProcessing)
+	if err := app.Save(uploadRecord); err != nil {
 		return err
 	}
 
@@ -347,18 +327,18 @@ func scheduleUploadReprocessing(app *pocketbase.PocketBase, uploadRecord *core.R
 		},
 		Priority:    50,
 		MaxAttempts: 5,
-		UserID:      uploadProxy.Record.GetString("user"),
+		UserID:      uploadRecord.GetString("user"),
 		UploadID:    uploadID,
 	})
 }
 
-func validateTranscriptAttachment(upload *pbgen.Uploads) error {
-	transcriptFile := strings.TrimSpace(upload.Record.GetString("transcript_file"))
+func validateTranscriptAttachment(upload *core.Record) error {
+	transcriptFile := strings.TrimSpace(upload.GetString("transcript_file"))
 	if transcriptFile == "" {
 		return nil
 	}
 
-	uploadFile := strings.TrimSpace(upload.File())
+	uploadFile := strings.TrimSpace(upload.GetString("file"))
 	if !mistral.IsAudioFile(uploadFile) {
 		return fmt.Errorf("transcript_file can only be attached to audio uploads")
 	}

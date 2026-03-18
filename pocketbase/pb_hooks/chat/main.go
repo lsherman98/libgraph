@@ -13,7 +13,6 @@ import (
 	"github.com/lsherman98/libgraph/pocketbase/collections"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/processing"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/vector_search"
-	pbgen "github.com/lsherman98/libgraph/pocketbase/pbschema/generated"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
@@ -84,22 +83,9 @@ func Init(app *pocketbase.PocketBase) error {
 				}
 
 				chatRecord := core.NewRecord(chatsCollection)
-				chatProxy, _ := pbgen.WrapRecord[pbgen.Chats](chatRecord)
-				if chatProxy != nil {
-					chatProxy.SetTitle(title)
-				} else {
-					chatRecord.Set("title", title)
-				}
+				chatRecord.Set("title", title)
 				chatRecord.Set("user", userID)
-				if chatProxy != nil {
-					if chatType, ok := chatTypeFromMode(body.Mode); ok {
-						chatProxy.SetType(chatType)
-					} else {
-						chatRecord.Set("type", body.Mode)
-					}
-				} else {
-					chatRecord.Set("type", body.Mode)
-				}
+				chatRecord.Set("type", body.Mode)
 				if err := app.Save(chatRecord); err != nil {
 					return e.InternalServerError("failed to create chat", err)
 				}
@@ -202,29 +188,18 @@ func Init(app *pocketbase.PocketBase) error {
 			if err != nil {
 				return e.NotFoundError("page not found", err)
 			}
-			pageProxy, _ := pbgen.WrapRecord[pbgen.Pages](pageRecord)
 
 			pageUserID := pageRecord.GetString("user")
-			if pageProxy != nil {
-				pageUserID = pageProxy.GetString("user")
-			}
 			if pageUserID != userID {
 				return e.NotFoundError("page not found", nil)
 			}
 			pageUploadID := pageRecord.GetString("upload")
-			if pageProxy != nil {
-				pageUploadID = pageProxy.GetString("upload")
-			}
 
 			uploadRecord, err := app.FindRecordById(collections.Uploads, pageUploadID)
 			if err != nil {
 				return e.NotFoundError("upload not found", err)
 			}
-			uploadProxy, _ := pbgen.WrapRecord[pbgen.Uploads](uploadRecord)
 			uploadType := strings.TrimSpace(uploadRecord.GetString("type"))
-			if uploadProxy != nil {
-				uploadType = strings.TrimSpace(uploadProxy.GetString("type"))
-			}
 			if uploadType == "summary" {
 				return e.BadRequestError("cannot summarize summary uploads", nil)
 			}
@@ -285,11 +260,7 @@ func handlePageSummarizeJob(app *pocketbase.PocketBase, job *core.Record) error 
 	if err != nil {
 		return err
 	}
-	pageProxy, _ := pbgen.WrapRecord[pbgen.Pages](pageRecord)
 	uploadID := strings.TrimSpace(pageRecord.GetString("upload"))
-	if pageProxy != nil {
-		uploadID = strings.TrimSpace(pageProxy.GetString("upload"))
-	}
 	if uploadID == "" {
 		return fmt.Errorf("page %s missing upload relation", payload.PageID)
 	}
@@ -298,11 +269,7 @@ func handlePageSummarizeJob(app *pocketbase.PocketBase, job *core.Record) error 
 	if err != nil {
 		return err
 	}
-	uploadProxy, _ := pbgen.WrapRecord[pbgen.Uploads](uploadRecord)
 	uploadType := strings.TrimSpace(uploadRecord.GetString("type"))
-	if uploadProxy != nil {
-		uploadType = strings.TrimSpace(uploadProxy.GetString("type"))
-	}
 	if uploadType == "summary" {
 		return fmt.Errorf("cannot summarize summary upload %s", uploadID)
 	}
@@ -314,9 +281,6 @@ func handlePageSummarizeJob(app *pocketbase.PocketBase, job *core.Record) error 
 	}
 
 	pageUserID := pageRecord.GetString("user")
-	if pageProxy != nil {
-		pageUserID = pageProxy.GetString("user")
-	}
 	if pageUserID != payload.UserID {
 		return fmt.Errorf("page %s does not belong to user %s", payload.PageID, payload.UserID)
 	}
@@ -331,9 +295,6 @@ func handlePageSummarizeJob(app *pocketbase.PocketBase, job *core.Record) error 
 		uploadID := strings.TrimSpace(payload.UploadID)
 		if uploadID == "" {
 			uploadID = strings.TrimSpace(pageRecord.GetString("upload"))
-			if pageProxy != nil {
-				uploadID = strings.TrimSpace(pageProxy.GetString("upload"))
-			}
 		}
 		if uploadID == "" {
 			return fmt.Errorf("upload_id is required for full document summary")
@@ -400,13 +361,8 @@ func loadChatHistory(app *pocketbase.PocketBase, chatID string) ([]ChatMessage, 
 
 	messages := make([]ChatMessage, 0, len(records))
 	for _, r := range records {
-		msgProxy, _ := pbgen.WrapRecord[pbgen.Messages](r)
 		role := r.GetString("role")
 		content := r.GetString("content")
-		if msgProxy != nil {
-			role = messageRoleToString(msgProxy.Role())
-			content = msgProxy.Content()
-		}
 		messages = append(messages, ChatMessage{
 			Role:    role,
 			Content: content,
@@ -422,31 +378,17 @@ func saveMessage(app *pocketbase.PocketBase, chatID, userID, role, content strin
 	}
 
 	record := core.NewRecord(messagesCollection)
-	messageProxy, _ := pbgen.WrapRecord[pbgen.Messages](record)
 	record.Set("chat", chatID)
 	record.Set("user", userID)
-	if messageProxy != nil {
-		if parsedRole, ok := messageRoleFromString(role); ok {
-			messageProxy.SetRole(parsedRole)
-		} else {
-			record.Set("role", role)
-		}
-		messageProxy.SetContent(content)
-	} else {
-		record.Set("role", role)
-		record.Set("content", content)
-	}
+	record.Set("role", role)
+	record.Set("content", content)
 
 	if sources != nil {
 		sourcesJSON, err := json.Marshal(sources)
 		if err != nil {
 			return "", err
 		}
-		if messageProxy != nil {
-			messageProxy.SetSources(string(sourcesJSON))
-		} else {
-			record.Set("sources", string(sourcesJSON))
-		}
+		record.Set("sources", string(sourcesJSON))
 	}
 
 	if err := app.Save(record); err != nil {
@@ -710,9 +652,6 @@ func floatPtr(f float32) *float32 {
 
 func ReadPageMarkdown(app *pocketbase.PocketBase, pageRecord *core.Record) (string, error) {
 	filename := pageRecord.GetString("markdown")
-	if pageProxy, err := pbgen.WrapRecord[pbgen.Pages](pageRecord); err == nil {
-		filename = pageProxy.Markdown()
-	}
 	if filename == "" {
 		return "", fmt.Errorf("page markdown file is empty")
 	}
@@ -767,14 +706,12 @@ func GeneratePageSummary(markdown string) (string, error) {
 	return summary, nil
 }
 
-// GenerateDocumentSummary summarises a full document (all pages concatenated).
 func GenerateDocumentSummary(allMarkdown string) (string, error) {
 	trimmed := strings.TrimSpace(allMarkdown)
 	if trimmed == "" {
 		return "", fmt.Errorf("document content is empty")
 	}
 
-	// Truncate to ~100k chars to stay within model context limits.
 	const maxChars = 100_000
 	if len(trimmed) > maxChars {
 		trimmed = trimmed[:maxChars]
@@ -808,11 +745,7 @@ func GenerateDocumentSummary(allMarkdown string) (string, error) {
 }
 
 func UpsertPageSummaryArtifact(app *pocketbase.PocketBase, sourcePageRecord *core.Record, userID, summaryMarkdown string, fullDocument bool) (*core.Record, *core.Record, *core.Record, error) {
-	sourcePageProxy, _ := pbgen.WrapRecord[pbgen.Pages](sourcePageRecord)
 	sourceUploadID := sourcePageRecord.GetString("upload")
-	if sourcePageProxy != nil {
-		sourceUploadID = sourcePageProxy.GetString("upload")
-	}
 	if strings.TrimSpace(sourceUploadID) == "" {
 		return nil, nil, nil, fmt.Errorf("source page missing upload relation")
 	}
@@ -821,8 +754,6 @@ func UpsertPageSummaryArtifact(app *pocketbase.PocketBase, sourcePageRecord *cor
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to load source upload: %w", err)
 	}
-	sourceUploadProxy, _ := pbgen.WrapRecord[pbgen.Uploads](sourceUploadRecord)
-
 	uploadsCollection, err := app.FindCollectionByNameOrId(collections.Uploads)
 	if err != nil {
 		return nil, nil, nil, err
@@ -839,16 +770,10 @@ func UpsertPageSummaryArtifact(app *pocketbase.PocketBase, sourcePageRecord *cor
 	}
 
 	baseTitle := strings.TrimSpace(sourceUploadRecord.GetString("title"))
-	if sourceUploadProxy != nil {
-		baseTitle = strings.TrimSpace(sourceUploadProxy.Title())
-	}
 	if baseTitle == "" {
 		baseTitle = "Untitled"
 	}
 	pageNumber := sourcePageRecord.GetInt("page")
-	if sourcePageProxy != nil {
-		pageNumber = int(sourcePageProxy.Page())
-	}
 	summaryTitle := fmt.Sprintf("%s — Summary (Page %d)", baseTitle, pageNumber)
 	summaryFilename := fmt.Sprintf("summary_page_%d.md", pageNumber)
 	if fullDocument {
@@ -863,43 +788,28 @@ func UpsertPageSummaryArtifact(app *pocketbase.PocketBase, sourcePageRecord *cor
 	)
 
 	if err == nil {
-		summaryProxy, _ := pbgen.WrapRecord[pbgen.Summaries](summaryRecord)
 		summaryUploadID := summaryRecord.GetString("summary_upload")
 		summaryPageID := summaryRecord.GetString("summary_page")
-		if summaryProxy != nil {
-			summaryUploadID = summaryProxy.GetString("summary_upload")
-			summaryPageID = summaryProxy.GetString("summary_page")
-		}
 
 		summaryUploadRecord, uploadErr := app.FindRecordById(collections.Uploads, summaryUploadID)
 		if uploadErr != nil {
 			return nil, nil, nil, uploadErr
 		}
-		summaryUploadProxy, _ := pbgen.WrapRecord[pbgen.Uploads](summaryUploadRecord)
 		summaryPageRecord, pageErr := app.FindRecordById(collections.Pages, summaryPageID)
 		if pageErr != nil {
 			return nil, nil, nil, pageErr
 		}
-		summaryPageProxy, _ := pbgen.WrapRecord[pbgen.Pages](summaryPageRecord)
 
 		summaryUploadFile, fileErr := filesystem.NewFileFromBytes([]byte(summaryMarkdown), summaryFilename)
 		if fileErr != nil {
 			return nil, nil, nil, fileErr
 		}
 
-		if summaryUploadProxy != nil {
-			summaryUploadProxy.SetTitle(summaryTitle)
-			summaryUploadRecord.Set("file", summaryUploadFile)
-			summaryUploadProxy.SetStatus(pbgen.SUCCESS)
-			summaryUploadProxy.SetNumPages(1)
-			summaryUploadProxy.SetType(pbgen.Summary)
-		} else {
-			summaryUploadRecord.Set("title", summaryTitle)
-			summaryUploadRecord.Set("file", summaryUploadFile)
-			summaryUploadRecord.Set("status", "SUCCESS")
-			summaryUploadRecord.Set("num_pages", 1)
-			summaryUploadRecord.Set("type", "summary")
-		}
+		summaryUploadRecord.Set("title", summaryTitle)
+		summaryUploadRecord.Set("file", summaryUploadFile)
+		summaryUploadRecord.Set("status", "SUCCESS")
+		summaryUploadRecord.Set("num_pages", 1)
+		summaryUploadRecord.Set("type", "summary")
 		if saveErr := app.Save(summaryUploadRecord); saveErr != nil {
 			return nil, nil, nil, saveErr
 		}
@@ -909,23 +819,13 @@ func UpsertPageSummaryArtifact(app *pocketbase.PocketBase, sourcePageRecord *cor
 			return nil, nil, nil, fileErr
 		}
 
-		if summaryPageProxy != nil {
-			summaryPageProxy.SetMarkdown(summaryPageFile.Name)
-			summaryPageRecord.Set("markdown", summaryPageFile)
-		} else {
-			summaryPageRecord.Set("markdown", summaryPageFile)
-		}
+		summaryPageRecord.Set("markdown", summaryPageFile)
 		if saveErr := app.Save(summaryPageRecord); saveErr != nil {
 			return nil, nil, nil, saveErr
 		}
 
-		if summaryProxy != nil {
-			summaryProxy.SetStatus(pbgen.Success)
-			summaryProxy.SetError("")
-		} else {
-			summaryRecord.Set("status", "success")
-			summaryRecord.Set("error", "")
-		}
+		summaryRecord.Set("status", "success")
+		summaryRecord.Set("error", "")
 		if saveErr := app.Save(summaryRecord); saveErr != nil {
 			return nil, nil, nil, saveErr
 		}
@@ -939,22 +839,11 @@ func UpsertPageSummaryArtifact(app *pocketbase.PocketBase, sourcePageRecord *cor
 	}
 
 	summaryUploadRecord := core.NewRecord(uploadsCollection)
-	summaryUploadProxy, _ := pbgen.WrapRecord[pbgen.Uploads](summaryUploadRecord)
-	if summaryUploadProxy != nil {
-		summaryUploadProxy.SetTitle(summaryTitle)
-	} else {
-		summaryUploadRecord.Set("title", summaryTitle)
-	}
+	summaryUploadRecord.Set("title", summaryTitle)
 	summaryUploadRecord.Set("file", summaryUploadFile)
-	if sourceUploadProxy != nil && summaryUploadProxy != nil {
-		summaryUploadProxy.SetType(pbgen.Summary)
-		summaryUploadProxy.SetStatus(pbgen.SUCCESS)
-		summaryUploadProxy.SetNumPages(1)
-	} else {
-		summaryUploadRecord.Set("type", "summary")
-		summaryUploadRecord.Set("status", "SUCCESS")
-		summaryUploadRecord.Set("num_pages", 1)
-	}
+	summaryUploadRecord.Set("type", "summary")
+	summaryUploadRecord.Set("status", "SUCCESS")
+	summaryUploadRecord.Set("num_pages", 1)
 	summaryUploadRecord.Set("user", userID)
 	if saveErr := app.Save(summaryUploadRecord); saveErr != nil {
 		return nil, nil, nil, saveErr
@@ -966,13 +855,8 @@ func UpsertPageSummaryArtifact(app *pocketbase.PocketBase, sourcePageRecord *cor
 	}
 
 	summaryPageRecord := core.NewRecord(pagesCollection)
-	summaryPageProxy, _ := pbgen.WrapRecord[pbgen.Pages](summaryPageRecord)
 	summaryPageRecord.Set("upload", summaryUploadRecord.Id)
-	if summaryPageProxy != nil {
-		summaryPageProxy.SetPage(1)
-	} else {
-		summaryPageRecord.Set("page", 1)
-	}
+	summaryPageRecord.Set("page", 1)
 	summaryPageRecord.Set("user", userID)
 	summaryPageRecord.Set("markdown", summaryPageFile)
 	if saveErr := app.Save(summaryPageRecord); saveErr != nil {
@@ -980,55 +864,17 @@ func UpsertPageSummaryArtifact(app *pocketbase.PocketBase, sourcePageRecord *cor
 	}
 
 	newSummaryRecord := core.NewRecord(summariesCollection)
-	newSummaryProxy, _ := pbgen.WrapRecord[pbgen.Summaries](newSummaryRecord)
 	newSummaryRecord.Set("user", userID)
 	newSummaryRecord.Set("source_upload", sourceUploadID)
 	newSummaryRecord.Set("source_page", sourcePageRecord.Id)
 	newSummaryRecord.Set("summary_upload", summaryUploadRecord.Id)
 	newSummaryRecord.Set("summary_page", summaryPageRecord.Id)
-	if newSummaryProxy != nil {
-		newSummaryProxy.SetScope(pbgen.Page)
-		newSummaryProxy.SetStatus(pbgen.Success)
-		newSummaryProxy.SetError("")
-	} else {
-		newSummaryRecord.Set("scope", "page")
-		newSummaryRecord.Set("status", "success")
-		newSummaryRecord.Set("error", "")
-	}
+	newSummaryRecord.Set("scope", "page")
+	newSummaryRecord.Set("status", "success")
+	newSummaryRecord.Set("error", "")
 	if saveErr := app.Save(newSummaryRecord); saveErr != nil {
 		return nil, nil, nil, saveErr
 	}
 
 	return newSummaryRecord, summaryUploadRecord, summaryPageRecord, nil
-}
-
-func chatTypeFromMode(mode string) (pbgen.TypeSelectType6, bool) {
-	switch mode {
-	case "search":
-		return pbgen.Search, true
-	case "chat":
-		return pbgen.Chat, true
-	default:
-		return 0, false
-	}
-}
-
-func messageRoleFromString(role string) (pbgen.RoleSelectType, bool) {
-	switch role {
-	case "user":
-		return pbgen.User, true
-	case "assistant":
-		return pbgen.Assistant, true
-	default:
-		return 0, false
-	}
-}
-
-func messageRoleToString(role pbgen.RoleSelectType) string {
-	switch role {
-	case pbgen.Assistant:
-		return "assistant"
-	default:
-		return "user"
-	}
 }

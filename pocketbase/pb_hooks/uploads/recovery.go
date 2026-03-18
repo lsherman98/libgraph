@@ -6,7 +6,6 @@ import (
 
 	"github.com/lsherman98/libgraph/pocketbase/collections"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/processing"
-	pbgen "github.com/lsherman98/libgraph/pocketbase/pbschema/generated"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 )
@@ -34,13 +33,7 @@ func RecoverStuckUploads(app *pocketbase.PocketBase) {
 	app.Logger().Info("[recovery] found stuck uploads, re-enqueueing", "count", len(stuckUploads))
 
 	for _, upload := range stuckUploads {
-		uploadProxy, err := pbgen.WrapRecord[pbgen.Uploads](upload)
-		if err != nil {
-			app.Logger().Error("[recovery] failed to wrap upload proxy", "uploadID", upload.Id, "error", err)
-			continue
-		}
-
-		uploadID := uploadProxy.Id
+		uploadID := upload.Id
 		if err := processing.Enqueue(app, processing.EnqueueRequest{
 			JobType:   processing.JobTypeUploadParseOrTranscribe,
 			DedupeKey: "upload.parse_or_transcribe:" + uploadID,
@@ -49,7 +42,7 @@ func RecoverStuckUploads(app *pocketbase.PocketBase) {
 			},
 			Priority:    50,
 			MaxAttempts: 5,
-			UserID:      uploadProxy.GetString("user"),
+			UserID:      upload.GetString("user"),
 			UploadID:    uploadID,
 		}); err != nil {
 			app.Logger().Error("[recovery] failed to enqueue stuck upload", "uploadID", uploadID, "error", err)
@@ -62,12 +55,7 @@ func RecoverStuckUploads(app *pocketbase.PocketBase) {
 
 // readPageMarkdown reads the markdown content from a page record's stored file.
 func readPageMarkdown(app *pocketbase.PocketBase, pageRecord *core.Record) (string, error) {
-	page, err := pbgen.WrapRecord[pbgen.Pages](pageRecord)
-	if err != nil {
-		return "", err
-	}
-
-	filename := page.Markdown()
+	filename := pageRecord.GetString("markdown")
 	if filename == "" {
 		return "", fmt.Errorf("page has no markdown file")
 	}

@@ -15,7 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	pbgen "github.com/lsherman98/libgraph/pocketbase/pbschema/generated"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -65,11 +64,6 @@ func collectChunkRecords(app *pocketbase.PocketBase, records []*core.Record) []c
 		content := record.GetString("content")
 		vectorID := float64(record.GetInt("vector_id"))
 		uploadID := record.GetString("upload")
-		if chunk, err := pbgen.WrapRecord[pbgen.DocumentChunks](record); err == nil {
-			content = chunk.Content()
-			vectorID = chunk.VectorId()
-			uploadID = chunk.GetString("upload")
-		}
 
 		if content == "" {
 			continue
@@ -84,9 +78,6 @@ func collectChunkRecords(app *pocketbase.PocketBase, records []*core.Record) []c
 				uploadLookupDone[uploadID] = true
 				if upload, err := app.FindRecordById("uploads", uploadID); err == nil {
 					uploadTitle := upload.GetString("title")
-					if uploadProxy, wrapErr := pbgen.WrapRecord[pbgen.Uploads](upload); wrapErr == nil {
-						uploadTitle = uploadProxy.Title()
-					}
 					uploadTitleCache[uploadID] = uploadTitle
 				} else {
 					app.Logger().Warn("[vector_search] failed to resolve upload title for chunk",

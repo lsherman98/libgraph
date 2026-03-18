@@ -12,8 +12,8 @@ import (
 	"strings"
 	"sync"
 
-	pbgen "github.com/lsherman98/libgraph/pocketbase/pbschema/generated"
 	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/core"
 )
 
 const tmpBaseDir = "tmp"
@@ -41,8 +41,8 @@ func CleanupTmp() error {
 	return os.RemoveAll(baseDir)
 }
 
-func (p *Parser) ParseUpload(upload *pbgen.Uploads, onPage func(Page) error) (*ParseResult, error) {
-	filename := upload.File()
+func (p *Parser) ParseUpload(upload *core.Record, onPage func(Page) error) (*ParseResult, error) {
+	filename := upload.GetString("file")
 
 	if filename == "" {
 		return nil, fmt.Errorf("upload record has no file")

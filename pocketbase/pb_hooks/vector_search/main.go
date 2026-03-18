@@ -7,8 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/generative-ai-go/genai"
-	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/proxyhooks"
-	pbgen "github.com/lsherman98/libgraph/pocketbase/pbschema/generated"
+	"github.com/lsherman98/libgraph/pocketbase/collections"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
@@ -29,7 +28,6 @@ func Init(app *pocketbase.PocketBase) error {
 	}
 
 	registerQueueHandlers(app)
-	phooks := proxyhooks.Get(app)
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		if err := ensureEmbeddingsTable(app); err != nil {
@@ -44,17 +42,11 @@ func Init(app *pocketbase.PocketBase) error {
 		return se.Next()
 	})
 
-	phooks.OnDocumentChunksAfterUpdateSuccess.BindFunc(func(e *pbgen.DocumentChunksEvent) error {
-		record := e.PRecord.Record
+	app.OnRecordAfterUpdateSuccess(collections.DocumentChunks).BindFunc(func(e *core.RecordEvent) error {
+		record := e.Record
 		oldContent := record.Original().GetString("content")
-		if originalChunk, err := pbgen.WrapRecord[pbgen.DocumentChunks](record.Original()); err == nil {
-			oldContent = originalChunk.Content()
-		}
 
 		newContent := record.GetString("content")
-		if chunk, err := pbgen.WrapRecord[pbgen.DocumentChunks](record); err == nil {
-			newContent = chunk.Content()
-		}
 
 		if oldContent == newContent {
 			return e.Next()
@@ -79,8 +71,8 @@ func Init(app *pocketbase.PocketBase) error {
 		return e.Next()
 	})
 
-	phooks.OnDocumentChunksAfterDeleteSuccess.BindFunc(func(e *pbgen.DocumentChunksEvent) error {
-		record := e.PRecord.Record
+	app.OnRecordAfterDeleteSuccess(collections.DocumentChunks).BindFunc(func(e *core.RecordEvent) error {
+		record := e.Record
 		if err := deleteEmbeddingForRecord(app, record); err != nil {
 			app.Logger().Error("[vector_search] failed to delete embedding on delete", "id", record.Id, "error", err)
 		}
@@ -268,9 +260,6 @@ func ensureEmbeddingsTable(app *pocketbase.PocketBase) error {
 
 func deleteEmbeddingForRecord(app *pocketbase.PocketBase, record *core.Record) error {
 	vectorID := record.GetInt("vector_id")
-	if chunk, err := pbgen.WrapRecord[pbgen.DocumentChunks](record); err == nil {
-		vectorID = int(chunk.VectorId())
-	}
 
 	if vectorID == 0 {
 		return nil

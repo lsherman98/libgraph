@@ -12,7 +12,7 @@ import (
 	"github.com/lsherman98/libgraph/pocketbase/mistral"
 	"github.com/lsherman98/libgraph/pocketbase/parser"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/processing"
-	pbgen "github.com/lsherman98/libgraph/pocketbase/pbschema/generated"
+	"github.com/lsherman98/libgraph/pocketbase/vars"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -50,18 +50,13 @@ func handleUploadParseOrTranscribeJob(app *pocketbase.PocketBase, job *core.Reco
 	if err != nil {
 		return err
 	}
-	uploadProxy, err := pbgen.WrapRecord[pbgen.Uploads](upload)
-	if err != nil {
-		return err
-	}
-
-	if uploadProxy.Type() == pbgen.Summary {
+	if strings.EqualFold(upload.GetString("type"), vars.UploadTypeSummary) {
 		app.Logger().Info("[uploads] skipping parse/transcribe for summary upload", "upload_id", payload.UploadID)
 		return nil
 	}
 
-	uploadProxy.SetStatus(pbgen.PROCESSING)
-	if err := app.Save(uploadProxy); err != nil {
+	upload.Set("status", vars.UploadStatusProcessing)
+	if err := app.Save(upload); err != nil {
 		return err
 	}
 
@@ -71,46 +66,46 @@ func handleUploadParseOrTranscribeJob(app *pocketbase.PocketBase, job *core.Reco
 		"+page",
 		0,
 		0,
-		dbx.Params{"uploadId": uploadProxy.Id},
+		dbx.Params{"uploadId": upload.Id},
 	)
 	if err != nil {
 		return err
 	}
 
 	if len(pages) == 0 {
-		if mistral.IsAudioFile(uploadProxy.File()) {
-			pages, err = parseAudioUploadIntoPages(app, uploadProxy)
+		if mistral.IsAudioFile(upload.GetString("file")) {
+			pages, err = parseAudioUploadIntoPages(app, upload)
 		} else {
-			pages, err = parseDocumentUploadIntoPages(app, uploadProxy)
+			pages, err = parseDocumentUploadIntoPages(app, upload)
 		}
 		if err != nil {
-			uploadProxy.SetStatus(pbgen.FAILED)
-			_ = app.Save(uploadProxy)
+			upload.Set("status", vars.UploadStatusFailed)
+			_ = app.Save(upload)
 			return err
 		}
 	}
 
 	for _, page := range pages {
-		if err := enqueueChunkGenerateForPage(app, uploadProxy, page); err != nil {
+		if err := enqueueChunkGenerateForPage(app, upload, page); err != nil {
 			return err
 		}
 	}
 
-	if err := enqueueSummarizeJobsForUpload(app, uploadProxy, pages); err != nil {
+	if err := enqueueSummarizeJobsForUpload(app, upload, pages); err != nil {
 		return err
 	}
 
-	uploadProxy.SetNumPages(float64(len(pages)))
-	uploadProxy.SetStatus(pbgen.PROCESSING)
-	return app.Save(uploadProxy)
+	upload.Set("num_pages", len(pages))
+	upload.Set("status", vars.UploadStatusProcessing)
+	return app.Save(upload)
 }
 
-func enqueueSummarizeJobsForUpload(app *pocketbase.PocketBase, upload *pbgen.Uploads, pages []*core.Record) error {
-	if upload.Type() == pbgen.Summary || len(pages) == 0 {
+func enqueueSummarizeJobsForUpload(app *pocketbase.PocketBase, upload *core.Record, pages []*core.Record) error {
+	if strings.EqualFold(upload.GetString("type"), vars.UploadTypeSummary) || len(pages) == 0 {
 		return nil
 	}
 
-	if upload.Type() == pbgen.Book {
+	if strings.EqualFold(upload.GetString("type"), vars.UploadTypeBook) {
 		return nil
 	}
 
@@ -118,8 +113,8 @@ func enqueueSummarizeJobsForUpload(app *pocketbase.PocketBase, upload *pbgen.Upl
 	return enqueuePageSummarizeForPage(app, upload, anchorPage, true)
 }
 
-func parseAudioUploadIntoPages(app *pocketbase.PocketBase, upload *pbgen.Uploads) ([]*core.Record, error) {
-	title := upload.Title()
+func parseAudioUploadIntoPages(app *pocketbase.PocketBase, upload *core.Record) ([]*core.Record, error) {
+	title := upload.GetString("title")
 	transcriptMarkdown, err := readTranscriptMarkdown(app, upload)
 	if err != nil {
 		return nil, err
@@ -160,7 +155,7 @@ func parseAudioUploadIntoPages(app *pocketbase.PocketBase, upload *pbgen.Uploads
 	return []*core.Record{page}, nil
 }
 
-func readTranscriptMarkdown(app *pocketbase.PocketBase, upload *pbgen.Uploads) (string, error) {
+func readTranscriptMarkdown(app *pocketbase.PocketBase, upload *core.Record) (string, error) {
 	transcriptFile := strings.TrimSpace(upload.GetString("transcript_file"))
 	if transcriptFile == "" {
 		return "", nil
@@ -197,8 +192,8 @@ func readTranscriptMarkdown(app *pocketbase.PocketBase, upload *pbgen.Uploads) (
 	return mistral.FormatPlainTranscriptMarkdown(transcriptText), nil
 }
 
-func parseDocumentUploadIntoPages(app *pocketbase.PocketBase, upload *pbgen.Uploads) ([]*core.Record, error) {
-	title := upload.Title()
+func parseDocumentUploadIntoPages(app *pocketbase.PocketBase, upload *core.Record) ([]*core.Record, error) {
+	title := upload.GetString("title")
 	docParser := parser.New(app)
 	pagesCollection, err := app.FindCollectionByNameOrId(collections.Pages)
 	if err != nil {
@@ -209,19 +204,15 @@ func parseDocumentUploadIntoPages(app *pocketbase.PocketBase, upload *pbgen.Uplo
 
 	onPage := func(page parser.Page) error {
 		newPage := core.NewRecord(pagesCollection)
-		pageProxy, wrapErr := pbgen.WrapRecord[pbgen.Pages](newPage)
-		if wrapErr != nil {
-			return wrapErr
-		}
 		newPage.Set("upload", upload.Id)
-		pageProxy.SetPage(float64(page.PageNumber))
+		newPage.Set("page", page.PageNumber)
 		newPage.Set("user", upload.GetString("user"))
 
 		f, err := filesystem.NewFileFromBytes([]byte(page.Markdown), fmt.Sprintf("%s_page_%d.md", title, page.PageNumber))
 		if err != nil {
 			return err
 		}
-		pageProxy.SetMarkdown(f.Name)
+		newPage.Set("markdown", f.Name)
 		newPage.Set("markdown", f)
 		if err = app.Save(newPage); err != nil {
 			return err
@@ -238,19 +229,15 @@ func parseDocumentUploadIntoPages(app *pocketbase.PocketBase, upload *pbgen.Uplo
 	return persistedPages, nil
 }
 
-func createPageRecord(app *pocketbase.PocketBase, upload *pbgen.Uploads, pageNumber int, filename string, markdown string) (*core.Record, error) {
+func createPageRecord(app *pocketbase.PocketBase, upload *core.Record, pageNumber int, filename string, markdown string) (*core.Record, error) {
 	pagesCollection, err := app.FindCollectionByNameOrId(collections.Pages)
 	if err != nil {
 		return nil, err
 	}
 
 	newPage := core.NewRecord(pagesCollection)
-	pageProxy, wrapErr := pbgen.WrapRecord[pbgen.Pages](newPage)
-	if wrapErr != nil {
-		return nil, wrapErr
-	}
 	newPage.Set("upload", upload.Id)
-	pageProxy.SetPage(float64(pageNumber))
+	newPage.Set("page", pageNumber)
 	newPage.Set("user", upload.GetString("user"))
 
 	f, err := filesystem.NewFileFromBytes([]byte(markdown), filename)
@@ -258,7 +245,7 @@ func createPageRecord(app *pocketbase.PocketBase, upload *pbgen.Uploads, pageNum
 		return nil, err
 	}
 
-	pageProxy.SetMarkdown(f.Name)
+	newPage.Set("markdown", f.Name)
 	newPage.Set("markdown", f)
 	if err := app.Save(newPage); err != nil {
 		return nil, err
@@ -266,12 +253,8 @@ func createPageRecord(app *pocketbase.PocketBase, upload *pbgen.Uploads, pageNum
 	return newPage, nil
 }
 
-func enqueueChunkGenerateForPage(app *pocketbase.PocketBase, upload *pbgen.Uploads, page *core.Record) error {
-	pageProxy, err := pbgen.WrapRecord[pbgen.Pages](page)
-	if err != nil {
-		return err
-	}
-	pageNumber := int(pageProxy.Page())
+func enqueueChunkGenerateForPage(app *pocketbase.PocketBase, upload *core.Record, page *core.Record) error {
+	pageNumber := page.GetInt("page")
 	return processing.Enqueue(app, processing.EnqueueRequest{
 		JobType:   processing.JobTypeChunkGenerate,
 		DedupeKey: fmt.Sprintf("chunk.generate:%s:%s", upload.Id, page.Id),
@@ -289,17 +272,12 @@ func enqueueChunkGenerateForPage(app *pocketbase.PocketBase, upload *pbgen.Uploa
 	})
 }
 
-func enqueuePageSummarizeForPage(app *pocketbase.PocketBase, upload *pbgen.Uploads, page *core.Record, fullDocument bool) error {
-	if upload.Type() == pbgen.Summary {
+func enqueuePageSummarizeForPage(app *pocketbase.PocketBase, upload *core.Record, page *core.Record, fullDocument bool) error {
+	if strings.EqualFold(upload.GetString("type"), vars.UploadTypeSummary) {
 		return nil
 	}
 
-	pageProxy, err := pbgen.WrapRecord[pbgen.Pages](page)
-	if err != nil {
-		return err
-	}
-
-	userID := strings.TrimSpace(pageProxy.GetString("user"))
+	userID := strings.TrimSpace(page.GetString("user"))
 	if userID == "" {
 		userID = strings.TrimSpace(upload.GetString("user"))
 	}
@@ -352,12 +330,7 @@ func handleChunkGenerateJob(app *pocketbase.PocketBase, job *core.Record) error 
 		return err
 	}
 
-	uploadProxy, err := pbgen.WrapRecord[pbgen.Uploads](uploadRecord)
-	if err != nil {
-		return err
-	}
-
-	if uploadProxy.Type() == pbgen.Summary {
+	if strings.EqualFold(uploadRecord.GetString("type"), vars.UploadTypeSummary) {
 		app.Logger().Info("[uploads] skipping chunk generation for summary upload", "upload_id", payload.UploadID, "page_id", payload.PageID)
 		return nil
 	}
@@ -392,15 +365,11 @@ func handleChunkGenerateJob(app *pocketbase.PocketBase, job *core.Record) error 
 		}
 
 		chunkRecord := core.NewRecord(chunksCollection)
-		chunkProxy, wrapErr := pbgen.WrapRecord[pbgen.DocumentChunks](chunkRecord)
-		if wrapErr != nil {
-			return wrapErr
-		}
 		chunkRecord.Set("upload", payload.UploadID)
 		chunkRecord.Set("page", payload.PageID)
-		chunkProxy.SetPageNumber(float64(payload.PageNumber))
-		chunkProxy.SetChunkIndex(float64(chunkIndex))
-		chunkProxy.SetContent(content)
+		chunkRecord.Set("page_number", payload.PageNumber)
+		chunkRecord.Set("chunk_index", chunkIndex)
+		chunkRecord.Set("content", content)
 		chunkRecord.Set("user", payload.UserID)
 
 		err := app.Save(chunkRecord)
@@ -418,12 +387,8 @@ func handleChunkGenerateJob(app *pocketbase.PocketBase, job *core.Record) error 
 				return err
 			}
 
-			chunkProxy, wrapErr := pbgen.WrapRecord[pbgen.DocumentChunks](chunkRecord)
-			if wrapErr != nil {
-				return wrapErr
-			}
-			if chunkProxy.Content() != content {
-				chunkProxy.SetContent(content)
+			if chunkRecord.GetString("content") != content {
+				chunkRecord.Set("content", content)
 				if saveErr := app.Save(chunkRecord); saveErr != nil {
 					return saveErr
 				}
@@ -480,11 +445,7 @@ func enqueueUploadChunkEmbeds(app *pocketbase.PocketBase, uploadID string, userI
 	}
 	embedChunkRefs := make([]embedChunkRef, 0, len(chunkRecords))
 	for _, chunkRecord := range chunkRecords {
-		chunkProxy, wrapErr := pbgen.WrapRecord[pbgen.DocumentChunks](chunkRecord)
-		if wrapErr != nil {
-			return wrapErr
-		}
-		content := strings.TrimSpace(chunkProxy.Content())
+		content := strings.TrimSpace(chunkRecord.GetString("content"))
 		if content == "" {
 			continue
 		}

@@ -5,19 +5,16 @@ import (
 	"fmt"
 
 	"github.com/lsherman98/libgraph/pocketbase/collections"
-	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/proxyhooks"
-	pbgen "github.com/lsherman98/libgraph/pocketbase/pbschema/generated"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 )
 
 func Init(app *pocketbase.PocketBase) error {
-	phooks := proxyhooks.Get(app)
-	registerUploadHooks(app, phooks)
-	registerSimpleNodeHooks(app, phooks)
-	registerAnnotationCreateHooks(app, phooks)
-	registerSummaryHooks(app, phooks)
+	registerUploadHooks(app)
+	registerSimpleNodeHooks(app)
+	registerAnnotationCreateHooks(app)
+	registerSummaryHooks(app)
 
 	return nil
 }
@@ -29,27 +26,15 @@ func createNode(app *pocketbase.PocketBase, recordId string, nodeType NodeType, 
 	}
 
 	node := core.NewRecord(nodesCollection)
-	nodeProxy, _ := pbgen.WrapRecord[pbgen.Nodes](node)
 	node.Set("record_id", recordId)
 	node.Set("type", string(nodeType))
 	node.Set("user", userId)
-	if nodeProxy != nil {
-		nodeProxy.SetLabel(label)
-	} else {
-		node.Set("label", label)
-	}
-	if nodeProxy != nil {
-		nodeProxy.SetRecordId(recordId)
-	}
+	node.Set("label", label)
 
 	if data != nil {
 		jsonData, err := json.Marshal(data)
 		if err == nil {
-			if nodeProxy != nil {
-				nodeProxy.SetData(string(jsonData))
-			} else {
-				node.Set("data", string(jsonData))
-			}
+			node.Set("data", string(jsonData))
 		}
 	}
 
@@ -66,21 +51,12 @@ func updateNodeData(app *pocketbase.PocketBase, recordId string, userId string, 
 		return err
 	}
 
-	nodeProxy, _ := pbgen.WrapRecord[pbgen.Nodes](node)
-	if nodeProxy != nil {
-		nodeProxy.SetLabel(label)
-	} else {
-		node.Set("label", label)
-	}
+	node.Set("label", label)
 
 	if data != nil {
 		jsonData, err := json.Marshal(data)
 		if err == nil {
-			if nodeProxy != nil {
-				nodeProxy.SetData(string(jsonData))
-			} else {
-				node.Set("data", string(jsonData))
-			}
+			node.Set("data", string(jsonData))
 		}
 	}
 
@@ -88,15 +64,9 @@ func updateNodeData(app *pocketbase.PocketBase, recordId string, userId string, 
 }
 
 func getUploadLabelAndData(record *core.Record) (string, map[string]any) {
-	uploadProxy, _ := pbgen.WrapRecord[pbgen.Uploads](record)
 	title := record.GetString("title")
 	typeValue := record.GetString("type")
 	numPages := record.GetInt("num_pages")
-	if uploadProxy != nil {
-		title = uploadProxy.Title()
-		typeValue = uploadProxy.Record.GetString("type")
-		numPages = int(uploadProxy.NumPages())
-	}
 	if title == "" {
 		title = "Untitled Upload"
 	}
@@ -111,15 +81,9 @@ func getUploadLabelAndData(record *core.Record) (string, map[string]any) {
 }
 
 func getPersonLabelAndData(record *core.Record) (string, map[string]any) {
-	personProxy, _ := pbgen.WrapRecord[pbgen.People](record)
 	name := record.GetString("name")
 	typeValue := record.GetString("type")
 	source := record.GetString("source")
-	if personProxy != nil {
-		name = personProxy.Name()
-		typeValue = personProxy.Record.GetString("type")
-		source = personProxy.Source()
-	}
 	if name == "" {
 		name = "Unknown Person"
 	}
@@ -134,15 +98,9 @@ func getPersonLabelAndData(record *core.Record) (string, map[string]any) {
 }
 
 func getPublicationLabelAndData(record *core.Record) (string, map[string]any) {
-	publicationProxy, _ := pbgen.WrapRecord[pbgen.Publications](record)
 	name := record.GetString("name")
 	typeValue := record.GetString("type")
 	url := record.GetString("url")
-	if publicationProxy != nil {
-		name = publicationProxy.Name()
-		typeValue = publicationProxy.Record.GetString("type")
-		url = publicationProxy.Url()
-	}
 	if name == "" {
 		name = "Unknown Publication"
 	}
@@ -157,11 +115,7 @@ func getPublicationLabelAndData(record *core.Record) (string, map[string]any) {
 }
 
 func getTagLabelAndData(record *core.Record) (string, map[string]any) {
-	tagProxy, _ := pbgen.WrapRecord[pbgen.Tags](record)
 	title := record.GetString("title")
-	if tagProxy != nil {
-		title = tagProxy.Title()
-	}
 	if title == "" {
 		title = "Untitled Tag"
 	}
@@ -174,11 +128,7 @@ func getTagLabelAndData(record *core.Record) (string, map[string]any) {
 }
 
 func getTopicLabelAndData(record *core.Record) (string, map[string]any) {
-	topicProxy, _ := pbgen.WrapRecord[pbgen.Topics](record)
 	title := record.GetString("title")
-	if topicProxy != nil {
-		title = topicProxy.Title()
-	}
 	if title == "" {
 		title = "Untitled Topic"
 	}
@@ -191,15 +141,9 @@ func getTopicLabelAndData(record *core.Record) (string, map[string]any) {
 }
 
 func getHighlightLabelAndData(record *core.Record) (string, map[string]any) {
-	highlightProxy, _ := pbgen.WrapRecord[pbgen.Highlights](record)
 	text := record.GetString("text")
 	color := record.GetString("color")
 	comment := record.GetString("comment")
-	if highlightProxy != nil {
-		text = highlightProxy.Text()
-		color = highlightProxy.Record.GetString("color")
-		comment = highlightProxy.Comment()
-	}
 	label := text
 	if len(label) > 40 {
 		label = label[:40] + "..."
@@ -218,13 +162,8 @@ func getHighlightLabelAndData(record *core.Record) (string, map[string]any) {
 }
 
 func getBookmarkLabelAndData(record *core.Record) (string, map[string]any) {
-	bookmarkProxy, _ := pbgen.WrapRecord[pbgen.Bookmarks](record)
 	comment := record.GetString("comment")
 	pageNum := record.GetInt("page_number")
-	if bookmarkProxy != nil {
-		comment = bookmarkProxy.Comment()
-		pageNum = int(bookmarkProxy.PageNumber())
-	}
 	label := comment
 	if label == "" {
 		if pageNum > 0 {
@@ -246,13 +185,8 @@ func getBookmarkLabelAndData(record *core.Record) (string, map[string]any) {
 }
 
 func getNoteLabelAndData(record *core.Record) (string, map[string]any) {
-	noteProxy, _ := pbgen.WrapRecord[pbgen.Notes](record)
 	content := record.GetString("content")
 	pageNum := record.GetInt("page_number")
-	if noteProxy != nil {
-		content = noteProxy.Content()
-		pageNum = int(noteProxy.PageNumber())
-	}
 	label := content
 	if len(label) > 40 {
 		label = label[:40] + "..."
@@ -280,14 +214,10 @@ func createEdge(app *pocketbase.PocketBase, sourceNodeId string, targetNodeId st
 	}
 
 	edge := core.NewRecord(edgesCollection)
-	edgeProxy, _ := pbgen.WrapRecord[pbgen.Edges](edge)
 	edge.Set("source", sourceNodeId)
 	edge.Set("target", targetNodeId)
 	edge.Set("type", string(edgeType))
 	edge.Set("user", userId)
-	if edgeProxy != nil {
-		edgeProxy.SetProxyRecord(edge)
-	}
 
 	return app.Save(edge)
 }
@@ -336,13 +266,8 @@ func syncEdgesForRelation(app *pocketbase.PocketBase, sourceNodeId string, targe
 
 	existingMap := map[string]*core.Record{}
 	for _, edge := range existingEdges {
-		edgeProxy, _ := pbgen.WrapRecord[pbgen.Edges](edge)
 		sourceID := edge.GetString("source")
 		targetID := edge.GetString("target")
-		if edgeProxy != nil {
-			sourceID = edgeProxy.GetString("source")
-			targetID = edgeProxy.GetString("target")
-		}
 		if sourceIsTarget {
 			existingMap[sourceID] = edge
 		} else {
@@ -422,13 +347,6 @@ func resolveSummaryFields(app *pocketbase.PocketBase, summaryRecord *core.Record
 	sourcePageID := summaryRecord.GetString("source_page")
 	summaryUploadID := summaryRecord.GetString("summary_upload")
 
-	if summaryProxy, err := pbgen.WrapRecord[pbgen.Summaries](summaryRecord); err == nil {
-		userId = summaryProxy.GetString("user")
-		sourceUploadID = summaryProxy.GetString("source_upload")
-		sourcePageID = summaryProxy.GetString("source_page")
-		summaryUploadID = summaryProxy.GetString("summary_upload")
-	}
-
 	if sourceUploadID == "" && sourcePageID != "" {
 		sourcePageRecord, err := app.FindRecordById(collections.Pages, sourcePageID)
 		if err != nil {
@@ -436,9 +354,6 @@ func resolveSummaryFields(app *pocketbase.PocketBase, summaryRecord *core.Record
 		}
 
 		sourceUploadID = sourcePageRecord.GetString("upload")
-		if sourcePageProxy, err := pbgen.WrapRecord[pbgen.Pages](sourcePageRecord); err == nil {
-			sourceUploadID = sourcePageProxy.GetString("upload")
-		}
 	}
 
 	return userId, sourceUploadID, summaryUploadID, nil
@@ -525,14 +440,10 @@ func syncSummaryGraphEdgesForUpload(app *pocketbase.PocketBase, uploadRecordID s
 	}
 }
 
-func registerUploadHooks(app *pocketbase.PocketBase, phooks *pbgen.ProxyHooks) {
-	phooks.OnUploadsAfterCreateSuccess.BindFunc(func(e *pbgen.UploadsEvent) error {
-		upload := e.PRecord.Record
-		uploadProxy, _ := pbgen.WrapRecord[pbgen.Uploads](upload)
+func registerUploadHooks(app *pocketbase.PocketBase) {
+	app.OnRecordAfterCreateSuccess(collections.Uploads).BindFunc(func(e *core.RecordEvent) error {
+		upload := e.Record
 		userId := upload.GetString("user")
-		if uploadProxy != nil {
-			userId = uploadProxy.Record.GetString("user")
-		}
 
 		label, data := getUploadLabelAndData(upload)
 		nodeId, err := createNode(app, upload.Id, NodeTypeUpload, userId, label, data)
@@ -542,9 +453,6 @@ func registerUploadHooks(app *pocketbase.PocketBase, phooks *pbgen.ProxyHooks) {
 		}
 
 		subjects := upload.GetStringSlice("people")
-		if uploadProxy != nil {
-			subjects = uploadProxy.Record.GetStringSlice("people")
-		}
 		for _, subjectId := range subjects {
 			subjectNode, _ := findNodeByRecord(app, subjectId, userId, NodeTypeAuthor)
 			if subjectNode != nil {
@@ -553,9 +461,6 @@ func registerUploadHooks(app *pocketbase.PocketBase, phooks *pbgen.ProxyHooks) {
 		}
 
 		publicationId := upload.GetString("publication")
-		if uploadProxy != nil {
-			publicationId = uploadProxy.Record.GetString("publication")
-		}
 		if publicationId != "" {
 			pubNode, _ := findNodeByRecord(app, publicationId, userId, NodeTypePublication)
 			if pubNode != nil {
@@ -564,9 +469,6 @@ func registerUploadHooks(app *pocketbase.PocketBase, phooks *pbgen.ProxyHooks) {
 		}
 
 		tags := upload.GetStringSlice("tags")
-		if uploadProxy != nil {
-			tags = uploadProxy.Record.GetStringSlice("tags")
-		}
 		for _, tagId := range tags {
 			tagNode, _ := findNodeByRecord(app, tagId, userId, NodeTypeTag)
 			if tagNode != nil {
@@ -575,9 +477,6 @@ func registerUploadHooks(app *pocketbase.PocketBase, phooks *pbgen.ProxyHooks) {
 		}
 
 		topics := upload.GetStringSlice("topics")
-		if uploadProxy != nil {
-			topics = uploadProxy.Record.GetStringSlice("topics")
-		}
 		for _, topicId := range topics {
 			topicNode, _ := findNodeByRecord(app, topicId, userId, NodeTypeTopic)
 			if topicNode != nil {
@@ -586,9 +485,6 @@ func registerUploadHooks(app *pocketbase.PocketBase, phooks *pbgen.ProxyHooks) {
 		}
 
 		relatedUploads := upload.GetStringSlice("uploads")
-		if uploadProxy != nil {
-			relatedUploads = uploadProxy.Record.GetStringSlice("uploads")
-		}
 		for _, relatedId := range relatedUploads {
 			relatedNode, _ := findNodeByRecord(app, relatedId, userId, NodeTypeUpload)
 			if relatedNode != nil {
@@ -601,13 +497,9 @@ func registerUploadHooks(app *pocketbase.PocketBase, phooks *pbgen.ProxyHooks) {
 		return e.Next()
 	})
 
-	phooks.OnUploadsAfterDeleteSuccess.BindFunc(func(e *pbgen.UploadsEvent) error {
-		record := e.PRecord.Record
-		uploadProxy, _ := pbgen.WrapRecord[pbgen.Uploads](record)
+	app.OnRecordAfterDeleteSuccess(collections.Uploads).BindFunc(func(e *core.RecordEvent) error {
+		record := e.Record
 		userId := record.GetString("user")
-		if uploadProxy != nil {
-			userId = uploadProxy.Record.GetString("user")
-		}
 		if err := deleteNodeAndEdges(app, record.Id, userId, NodeTypeUpload); err != nil {
 			e.App.Logger().Error("failed to delete node and edges for upload", "error", err)
 		}
@@ -617,13 +509,9 @@ func registerUploadHooks(app *pocketbase.PocketBase, phooks *pbgen.ProxyHooks) {
 		return e.Next()
 	})
 
-	phooks.OnUploadsAfterUpdateSuccess.BindFunc(func(e *pbgen.UploadsEvent) error {
-		upload := e.PRecord.Record
-		uploadProxy, _ := pbgen.WrapRecord[pbgen.Uploads](upload)
+	app.OnRecordAfterUpdateSuccess(collections.Uploads).BindFunc(func(e *core.RecordEvent) error {
+		upload := e.Record
 		userId := upload.GetString("user")
-		if uploadProxy != nil {
-			userId = uploadProxy.Record.GetString("user")
-		}
 		label, data := getUploadLabelAndData(upload)
 		if err := updateNodeData(app, upload.Id, userId, NodeTypeUpload, label, data); err != nil {
 			e.App.Logger().Error("failed to update node data for upload", "error", err)
@@ -636,41 +524,26 @@ func registerUploadHooks(app *pocketbase.PocketBase, phooks *pbgen.ProxyHooks) {
 		}
 
 		subjects := upload.GetStringSlice("people")
-		if uploadProxy != nil {
-			subjects = uploadProxy.Record.GetStringSlice("people")
-		}
 		if err := syncEdgesForRelation(app, uploadNode.Id, subjects, NodeTypeAuthor, EdgeTypeAboutPerson, userId, true); err != nil {
 			e.App.Logger().Error("failed to sync subject edges", "error", err)
 		}
 
 		publicationId := upload.GetString("publication")
-		if uploadProxy != nil {
-			publicationId = uploadProxy.Record.GetString("publication")
-		}
 		if err := syncSingleEdge(app, uploadNode.Id, publicationId, NodeTypePublication, EdgeTypePublishedBy, userId, true); err != nil {
 			e.App.Logger().Error("failed to sync publication edge", "error", err)
 		}
 
 		tags := upload.GetStringSlice("tags")
-		if uploadProxy != nil {
-			tags = uploadProxy.Record.GetStringSlice("tags")
-		}
 		if err := syncEdgesForRelation(app, uploadNode.Id, tags, NodeTypeTag, EdgeTypeTaggedWith, userId, true); err != nil {
 			e.App.Logger().Error("failed to sync tag edges", "error", err)
 		}
 
 		topics := upload.GetStringSlice("topics")
-		if uploadProxy != nil {
-			topics = uploadProxy.Record.GetStringSlice("topics")
-		}
 		if err := syncEdgesForRelation(app, uploadNode.Id, topics, NodeTypeTopic, EdgeTypeBelongsTo, userId, true); err != nil {
 			e.App.Logger().Error("failed to sync topic edges", "error", err)
 		}
 
 		relatedUploads := upload.GetStringSlice("uploads")
-		if uploadProxy != nil {
-			relatedUploads = uploadProxy.Record.GetStringSlice("uploads")
-		}
 		if err := syncEdgesForRelation(app, uploadNode.Id, relatedUploads, NodeTypeUpload, EdgeTypeLinksTo, userId, false); err != nil {
 			e.App.Logger().Error("failed to sync related upload edges", "error", err)
 		}
@@ -681,7 +554,7 @@ func registerUploadHooks(app *pocketbase.PocketBase, phooks *pbgen.ProxyHooks) {
 	})
 }
 
-func registerSimpleNodeHooks(app *pocketbase.PocketBase, phooks *pbgen.ProxyHooks) {
+func registerSimpleNodeHooks(app *pocketbase.PocketBase) {
 	bindSimpleCreate := func(record *core.Record) {
 		collName := record.Collection().Name
 		userId := record.GetString("user")
@@ -692,94 +565,64 @@ func registerSimpleNodeHooks(app *pocketbase.PocketBase, phooks *pbgen.ProxyHook
 		}
 	}
 
-	phooks.OnPeopleAfterCreateSuccess.BindFunc(func(e *pbgen.PeopleEvent) error {
-		bindSimpleCreate(e.PRecord.Record)
+	app.OnRecordAfterCreateSuccess(collections.People).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleCreate(e.Record)
 		return e.Next()
 	})
-	phooks.OnPublicationsAfterCreateSuccess.BindFunc(func(e *pbgen.PublicationsEvent) error {
-		bindSimpleCreate(e.PRecord.Record)
+	app.OnRecordAfterCreateSuccess(collections.Publications).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleCreate(e.Record)
 		return e.Next()
 	})
-	phooks.OnTagsAfterCreateSuccess.BindFunc(func(e *pbgen.TagsEvent) error {
-		bindSimpleCreate(e.PRecord.Record)
+	app.OnRecordAfterCreateSuccess(collections.Tags).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleCreate(e.Record)
 		return e.Next()
 	})
-	phooks.OnTopicsAfterCreateSuccess.BindFunc(func(e *pbgen.TopicsEvent) error {
-		bindSimpleCreate(e.PRecord.Record)
+	app.OnRecordAfterCreateSuccess(collections.Topics).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleCreate(e.Record)
 		return e.Next()
 	})
 
 	bindSimpleDelete := func(record *core.Record) {
 		collName := record.Collection().Name
 		userId := record.GetString("user")
-		if proxy, err := pbgen.WrapRecord[pbgen.Highlights](record); err == nil {
-			userId = proxy.GetString("user")
-		} else if proxy, err := pbgen.WrapRecord[pbgen.Bookmarks](record); err == nil {
-			userId = proxy.GetString("user")
-		} else if proxy, err := pbgen.WrapRecord[pbgen.Notes](record); err == nil {
-			userId = proxy.GetString("user")
-		} else if proxy, err := pbgen.WrapRecord[pbgen.People](record); err == nil {
-			userId = proxy.GetString("user")
-		} else if proxy, err := pbgen.WrapRecord[pbgen.Publications](record); err == nil {
-			userId = proxy.GetString("user")
-		} else if proxy, err := pbgen.WrapRecord[pbgen.Tags](record); err == nil {
-			userId = proxy.GetString("user")
-		} else if proxy, err := pbgen.WrapRecord[pbgen.Topics](record); err == nil {
-			userId = proxy.GetString("user")
-		}
 
 		if err := deleteNodeAndEdges(app, record.Id, userId, collectionNodeType[collName]); err != nil {
 			app.Logger().Error("failed to delete node and edges", "collection", collName, "error", err)
 		}
 	}
 
-	phooks.OnPeopleAfterDeleteSuccess.BindFunc(func(e *pbgen.PeopleEvent) error {
-		bindSimpleDelete(e.PRecord.Record)
+	app.OnRecordAfterDeleteSuccess(collections.People).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleDelete(e.Record)
 		return e.Next()
 	})
-	phooks.OnPublicationsAfterDeleteSuccess.BindFunc(func(e *pbgen.PublicationsEvent) error {
-		bindSimpleDelete(e.PRecord.Record)
+	app.OnRecordAfterDeleteSuccess(collections.Publications).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleDelete(e.Record)
 		return e.Next()
 	})
-	phooks.OnTagsAfterDeleteSuccess.BindFunc(func(e *pbgen.TagsEvent) error {
-		bindSimpleDelete(e.PRecord.Record)
+	app.OnRecordAfterDeleteSuccess(collections.Tags).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleDelete(e.Record)
 		return e.Next()
 	})
-	phooks.OnTopicsAfterDeleteSuccess.BindFunc(func(e *pbgen.TopicsEvent) error {
-		bindSimpleDelete(e.PRecord.Record)
+	app.OnRecordAfterDeleteSuccess(collections.Topics).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleDelete(e.Record)
 		return e.Next()
 	})
-	phooks.OnHighlightsAfterDeleteSuccess.BindFunc(func(e *pbgen.HighlightsEvent) error {
-		bindSimpleDelete(e.PRecord.Record)
+	app.OnRecordAfterDeleteSuccess(collections.Highlights).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleDelete(e.Record)
 		return e.Next()
 	})
-	phooks.OnBookmarksAfterDeleteSuccess.BindFunc(func(e *pbgen.BookmarksEvent) error {
-		bindSimpleDelete(e.PRecord.Record)
+	app.OnRecordAfterDeleteSuccess(collections.Bookmarks).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleDelete(e.Record)
 		return e.Next()
 	})
-	phooks.OnNotesAfterDeleteSuccess.BindFunc(func(e *pbgen.NotesEvent) error {
-		bindSimpleDelete(e.PRecord.Record)
+	app.OnRecordAfterDeleteSuccess(collections.Notes).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleDelete(e.Record)
 		return e.Next()
 	})
 
 	bindSimpleUpdate := func(record *core.Record) {
 		collName := record.Collection().Name
 		userId := record.GetString("user")
-		if proxy, err := pbgen.WrapRecord[pbgen.Highlights](record); err == nil {
-			userId = proxy.GetString("user")
-		} else if proxy, err := pbgen.WrapRecord[pbgen.Bookmarks](record); err == nil {
-			userId = proxy.GetString("user")
-		} else if proxy, err := pbgen.WrapRecord[pbgen.Notes](record); err == nil {
-			userId = proxy.GetString("user")
-		} else if proxy, err := pbgen.WrapRecord[pbgen.People](record); err == nil {
-			userId = proxy.GetString("user")
-		} else if proxy, err := pbgen.WrapRecord[pbgen.Publications](record); err == nil {
-			userId = proxy.GetString("user")
-		} else if proxy, err := pbgen.WrapRecord[pbgen.Tags](record); err == nil {
-			userId = proxy.GetString("user")
-		} else if proxy, err := pbgen.WrapRecord[pbgen.Topics](record); err == nil {
-			userId = proxy.GetString("user")
-		}
 
 		label, data := collectionLabelData[collName](record)
 		if err := updateNodeData(app, record.Id, userId, collectionNodeType[collName], label, data); err != nil {
@@ -787,47 +630,40 @@ func registerSimpleNodeHooks(app *pocketbase.PocketBase, phooks *pbgen.ProxyHook
 		}
 	}
 
-	phooks.OnPeopleAfterUpdateSuccess.BindFunc(func(e *pbgen.PeopleEvent) error {
-		bindSimpleUpdate(e.PRecord.Record)
+	app.OnRecordAfterUpdateSuccess(collections.People).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleUpdate(e.Record)
 		return e.Next()
 	})
-	phooks.OnPublicationsAfterUpdateSuccess.BindFunc(func(e *pbgen.PublicationsEvent) error {
-		bindSimpleUpdate(e.PRecord.Record)
+	app.OnRecordAfterUpdateSuccess(collections.Publications).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleUpdate(e.Record)
 		return e.Next()
 	})
-	phooks.OnTagsAfterUpdateSuccess.BindFunc(func(e *pbgen.TagsEvent) error {
-		bindSimpleUpdate(e.PRecord.Record)
+	app.OnRecordAfterUpdateSuccess(collections.Tags).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleUpdate(e.Record)
 		return e.Next()
 	})
-	phooks.OnTopicsAfterUpdateSuccess.BindFunc(func(e *pbgen.TopicsEvent) error {
-		bindSimpleUpdate(e.PRecord.Record)
+	app.OnRecordAfterUpdateSuccess(collections.Topics).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleUpdate(e.Record)
 		return e.Next()
 	})
-	phooks.OnHighlightsAfterUpdateSuccess.BindFunc(func(e *pbgen.HighlightsEvent) error {
-		bindSimpleUpdate(e.PRecord.Record)
+	app.OnRecordAfterUpdateSuccess(collections.Highlights).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleUpdate(e.Record)
 		return e.Next()
 	})
-	phooks.OnBookmarksAfterUpdateSuccess.BindFunc(func(e *pbgen.BookmarksEvent) error {
-		bindSimpleUpdate(e.PRecord.Record)
+	app.OnRecordAfterUpdateSuccess(collections.Bookmarks).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleUpdate(e.Record)
 		return e.Next()
 	})
-	phooks.OnNotesAfterUpdateSuccess.BindFunc(func(e *pbgen.NotesEvent) error {
-		bindSimpleUpdate(e.PRecord.Record)
+	app.OnRecordAfterUpdateSuccess(collections.Notes).BindFunc(func(e *core.RecordEvent) error {
+		bindSimpleUpdate(e.Record)
 		return e.Next()
 	})
 }
 
-func registerAnnotationCreateHooks(app *pocketbase.PocketBase, phooks *pbgen.ProxyHooks) {
+func registerAnnotationCreateHooks(app *pocketbase.PocketBase) {
 	bindAnnotationCreate := func(record *core.Record) {
 		collName := record.Collection().Name
 		userId := record.GetString("user")
-		if proxy, err := pbgen.WrapRecord[pbgen.Highlights](record); err == nil {
-			userId = proxy.GetString("user")
-		} else if proxy, err := pbgen.WrapRecord[pbgen.Bookmarks](record); err == nil {
-			userId = proxy.GetString("user")
-		} else if proxy, err := pbgen.WrapRecord[pbgen.Notes](record); err == nil {
-			userId = proxy.GetString("user")
-		}
 
 		label, data := collectionLabelData[collName](record)
 		nodeId, err := createNode(app, record.Id, collectionNodeType[collName], userId, label, data)
@@ -853,33 +689,33 @@ func registerAnnotationCreateHooks(app *pocketbase.PocketBase, phooks *pbgen.Pro
 		}
 	}
 
-	phooks.OnHighlightsAfterCreateSuccess.BindFunc(func(e *pbgen.HighlightsEvent) error {
-		bindAnnotationCreate(e.PRecord.Record)
+	app.OnRecordAfterCreateSuccess(collections.Highlights).BindFunc(func(e *core.RecordEvent) error {
+		bindAnnotationCreate(e.Record)
 		return e.Next()
 	})
-	phooks.OnBookmarksAfterCreateSuccess.BindFunc(func(e *pbgen.BookmarksEvent) error {
-		bindAnnotationCreate(e.PRecord.Record)
+	app.OnRecordAfterCreateSuccess(collections.Bookmarks).BindFunc(func(e *core.RecordEvent) error {
+		bindAnnotationCreate(e.Record)
 		return e.Next()
 	})
-	phooks.OnNotesAfterCreateSuccess.BindFunc(func(e *pbgen.NotesEvent) error {
-		bindAnnotationCreate(e.PRecord.Record)
+	app.OnRecordAfterCreateSuccess(collections.Notes).BindFunc(func(e *core.RecordEvent) error {
+		bindAnnotationCreate(e.Record)
 		return e.Next()
 	})
 }
 
-func registerSummaryHooks(app *pocketbase.PocketBase, phooks *pbgen.ProxyHooks) {
-	phooks.OnSummariesAfterCreateSuccess.BindFunc(func(e *pbgen.SummariesEvent) error {
-		syncSummaryGraphEdge(app, e.PRecord.Record)
+func registerSummaryHooks(app *pocketbase.PocketBase) {
+	app.OnRecordAfterCreateSuccess(collections.Summaries).BindFunc(func(e *core.RecordEvent) error {
+		syncSummaryGraphEdge(app, e.Record)
 		return e.Next()
 	})
 
-	phooks.OnSummariesAfterUpdateSuccess.BindFunc(func(e *pbgen.SummariesEvent) error {
-		syncSummaryGraphEdge(app, e.PRecord.Record)
+	app.OnRecordAfterUpdateSuccess(collections.Summaries).BindFunc(func(e *core.RecordEvent) error {
+		syncSummaryGraphEdge(app, e.Record)
 		return e.Next()
 	})
 
-	phooks.OnSummariesAfterDeleteSuccess.BindFunc(func(e *pbgen.SummariesEvent) error {
-		clearSummaryGraphEdge(app, e.PRecord.Record)
+	app.OnRecordAfterDeleteSuccess(collections.Summaries).BindFunc(func(e *core.RecordEvent) error {
+		clearSummaryGraphEdge(app, e.Record)
 		return e.Next()
 	})
 }

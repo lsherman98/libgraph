@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/lsherman98/libgraph/pocketbase/collections"
-	pbgen "github.com/lsherman98/libgraph/pocketbase/pbschema/generated"
+	"github.com/lsherman98/libgraph/pocketbase/vars"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -144,28 +144,23 @@ func Enqueue(app *pocketbase.PocketBase, req EnqueueRequest) error {
 		dbx.Params{"dedupeKey": req.DedupeKey},
 	)
 	if err == nil {
-		existingProxy, wrapErr := pbgen.WrapRecord[pbgen.ProcessingJobs](existing)
-		if wrapErr != nil {
-			return wrapErr
-		}
-
-		switch existingProxy.Status() {
-		case pbgen.Queued, pbgen.Running, pbgen.Succeeded:
+		switch strings.TrimSpace(existing.GetString("status")) {
+		case vars.QueueStatusQueued, vars.QueueStatusRunning, vars.QueueStatusSucceeded:
 			return nil
-		case pbgen.Failed, pbgen.Deadletter, pbgen.Cancelled:
-			existingProxy.SetStatus(pbgen.Queued)
-			existingProxy.SetAttempts(0)
-			existingProxy.Set("scheduled_at", scheduledAt)
-			existingProxy.Set("lease_until", nil)
-			existingProxy.Set("started_at", nil)
-			existingProxy.Set("finished_at", nil)
-			existingProxy.SetErrorCode("")
-			existingProxy.SetErrorMessage("")
-			existingProxy.Set("payload_json", req.Payload)
-			existingProxy.SetPriority(float64(req.Priority))
-			existingProxy.SetMaxAttempts(float64(req.MaxAttempts))
-			setOptionalRelations(existingProxy.Record, req)
-			return app.Save(existingProxy)
+		case vars.QueueStatusFailed, vars.QueueStatusDeadletter, vars.QueueStatusCancelled:
+			existing.Set("status", vars.QueueStatusQueued)
+			existing.Set("attempts", 0)
+			existing.Set("scheduled_at", scheduledAt)
+			existing.Set("lease_until", nil)
+			existing.Set("started_at", nil)
+			existing.Set("finished_at", nil)
+			existing.Set("error_code", "")
+			existing.Set("error_message", "")
+			existing.Set("payload_json", req.Payload)
+			existing.Set("priority", req.Priority)
+			existing.Set("max_attempts", req.MaxAttempts)
+			setOptionalRelations(existing, req)
+			return app.Save(existing)
 		default:
 			return nil
 		}
@@ -177,32 +172,28 @@ func Enqueue(app *pocketbase.PocketBase, req EnqueueRequest) error {
 	}
 
 	record := core.NewRecord(jobsCollection)
-	recordProxy, wrapErr := pbgen.WrapRecord[pbgen.ProcessingJobs](record)
-	if wrapErr != nil {
-		return wrapErr
-	}
-	jobType := pbgen.UploadParseOrTranscribe
+	jobType := JobTypeUploadParseOrTranscribe
 	switch req.JobType {
 	case JobTypeChunkGenerate:
-		jobType = pbgen.ChunkGenerate
+		jobType = JobTypeChunkGenerate
 	case JobTypePageSummarize:
-		jobType = pbgen.PageSummarize
+		jobType = JobTypePageSummarize
 	case JobTypeChunkEmbedSubmit:
-		jobType = pbgen.ChunkEmbedSubmit
+		jobType = JobTypeChunkEmbedSubmit
 	case JobTypeChunkEmbedPoll:
-		jobType = pbgen.ChunkEmbedPoll
+		jobType = JobTypeChunkEmbedPoll
 	}
-	recordProxy.SetJobType(jobType)
-	recordProxy.SetStatus(pbgen.Queued)
-	recordProxy.SetPriority(float64(req.Priority))
-	recordProxy.SetAttempts(0)
-	recordProxy.SetMaxAttempts(float64(req.MaxAttempts))
-	recordProxy.Set("scheduled_at", scheduledAt)
-	recordProxy.SetDedupeKey(req.DedupeKey)
-	recordProxy.Set("payload_json", req.Payload)
-	setOptionalRelations(recordProxy.Record, req)
+	record.Set("job_type", jobType)
+	record.Set("status", vars.QueueStatusQueued)
+	record.Set("priority", req.Priority)
+	record.Set("attempts", 0)
+	record.Set("max_attempts", req.MaxAttempts)
+	record.Set("scheduled_at", scheduledAt)
+	record.Set("dedupe_key", req.DedupeKey)
+	record.Set("payload_json", req.Payload)
+	setOptionalRelations(record, req)
 
-	saveErr := app.Save(recordProxy)
+	saveErr := app.Save(record)
 	if saveErr != nil && strings.Contains(strings.ToLower(saveErr.Error()), "unique") {
 		return nil
 	}
@@ -257,53 +248,47 @@ func processDueJobs(app *pocketbase.PocketBase, worker workerSpec) {
 	}
 
 	for _, job := range records {
-		jobProxy, wrapErr := pbgen.WrapRecord[pbgen.ProcessingJobs](job)
-		if wrapErr != nil {
-			app.Logger().Warn("[processing] failed to wrap job proxy", "jobId", job.Id, "error", wrapErr)
-			continue
-		}
-
-		if err := claimJob(app, jobProxy, worker.name); err != nil {
+		if err := claimJob(app, job, worker.name); err != nil {
 			app.Logger().Warn("[processing] failed to claim job", "jobId", job.Id, "error", err)
 			continue
 		}
 
-		execErr := executeJob(app, jobProxy)
+		execErr := executeJob(app, job)
 		if execErr != nil {
-			handleJobFailure(app, jobProxy, execErr)
+			handleJobFailure(app, job, execErr)
 			continue
 		}
 
-		if jobProxy.Status() != pbgen.Running {
+		if strings.TrimSpace(job.GetString("status")) != vars.QueueStatusRunning {
 			continue
 		}
 
-		jobProxy.SetStatus(pbgen.Succeeded)
-		jobProxy.Set("finished_at", time.Now().UTC())
-		jobProxy.Set("lease_until", nil)
-		jobProxy.SetErrorCode("")
-		jobProxy.SetErrorMessage("")
-		if err := app.Save(jobProxy); err != nil {
+		job.Set("status", vars.QueueStatusSucceeded)
+		job.Set("finished_at", time.Now().UTC())
+		job.Set("lease_until", nil)
+		job.Set("error_code", "")
+		job.Set("error_message", "")
+		if err := app.Save(job); err != nil {
 			app.Logger().Error("[processing] failed to mark job as succeeded", "jobId", job.Id, "error", err)
 			continue
 		}
 
-		reconcileUploadStatus(app, strings.TrimSpace(jobProxy.GetString("upload")))
+		reconcileUploadStatus(app, strings.TrimSpace(job.GetString("upload")))
 	}
 }
 
-func claimJob(app *pocketbase.PocketBase, job *pbgen.ProcessingJobs, workerName string) error {
+func claimJob(app *pocketbase.PocketBase, job *core.Record, workerName string) error {
 	now := time.Now().UTC()
-	job.SetStatus(pbgen.Running)
+	job.Set("status", vars.QueueStatusRunning)
 	job.Set("lease_until", now.Add(queueLeaseWindow))
 	job.Set("started_at", now)
-	job.SetWorkerId(fmt.Sprintf("%s:%s", workerID, workerName))
-	job.SetErrorCode("")
-	job.SetErrorMessage("")
+	job.Set("worker_id", fmt.Sprintf("%s:%s", workerID, workerName))
+	job.Set("error_code", "")
+	job.Set("error_message", "")
 	return app.Save(job)
 }
 
-func executeJob(app *pocketbase.PocketBase, job *pbgen.ProcessingJobs) error {
+func executeJob(app *pocketbase.PocketBase, job *core.Record) error {
 	jobType := job.GetString("job_type")
 
 	handlersMu.RLock()
@@ -314,23 +299,23 @@ func executeJob(app *pocketbase.PocketBase, job *pbgen.ProcessingJobs) error {
 		return fmt.Errorf("no handler registered for job_type=%s", jobType)
 	}
 
-	return handler(app, job.Record)
+	return handler(app, job)
 }
 
-func handleJobFailure(app *pocketbase.PocketBase, job *pbgen.ProcessingJobs, execErr error) {
+func handleJobFailure(app *pocketbase.PocketBase, job *core.Record, execErr error) {
 	now := time.Now().UTC()
-	attempts := int(job.Attempts()) + 1
-	maxAttempts := int(job.MaxAttempts())
+	attempts := job.GetInt("attempts") + 1
+	maxAttempts := job.GetInt("max_attempts")
 	if maxAttempts <= 0 {
 		maxAttempts = 5
 	}
 
-	job.SetAttempts(float64(attempts))
-	job.SetErrorMessage(clampProcessingJobErrorMessage(execErr.Error()))
+	job.Set("attempts", attempts)
+	job.Set("error_message", clampProcessingJobErrorMessage(execErr.Error()))
 	job.Set("lease_until", nil)
 
 	if attempts >= maxAttempts {
-		job.SetStatus(pbgen.Deadletter)
+		job.Set("status", vars.QueueStatusDeadletter)
 		job.Set("finished_at", now)
 		if err := app.Save(job); err != nil {
 			app.Logger().Error("[processing] failed to deadletter job", "jobId", job.Id, "error", err)
@@ -342,7 +327,7 @@ func handleJobFailure(app *pocketbase.PocketBase, job *pbgen.ProcessingJobs, exe
 	}
 
 	backoff := time.Duration(1<<maxInt(0, attempts-1)) * 15 * time.Second
-	job.SetStatus(pbgen.Queued)
+	job.Set("status", vars.QueueStatusQueued)
 	job.Set("scheduled_at", now.Add(backoff))
 	if err := app.Save(job); err != nil {
 		app.Logger().Error("[processing] failed to reschedule job", "jobId", job.Id, "error", err)
@@ -361,12 +346,6 @@ func reconcileUploadStatus(app *pocketbase.PocketBase, uploadID string) {
 		return
 	}
 
-	uploadProxy, wrapErr := pbgen.WrapRecord[pbgen.Uploads](upload)
-	if wrapErr != nil {
-		app.Logger().Warn("[processing] unable to wrap upload proxy", "uploadId", uploadID, "error", wrapErr)
-		return
-	}
-
 	inProgressJobs, err := app.FindRecordsByFilter(
 		collections.ProcessingJobs,
 		"upload = {:uploadId} && (status = 'queued' || status = 'running')",
@@ -381,9 +360,9 @@ func reconcileUploadStatus(app *pocketbase.PocketBase, uploadID string) {
 	}
 
 	if len(inProgressJobs) > 0 {
-		if uploadProxy.Status() != pbgen.PROCESSING {
-			uploadProxy.SetStatus(pbgen.PROCESSING)
-			if saveErr := app.Save(uploadProxy); saveErr != nil {
+		if !strings.EqualFold(upload.GetString("status"), vars.UploadStatusProcessing) {
+			upload.Set("status", vars.UploadStatusProcessing)
+			if saveErr := app.Save(upload); saveErr != nil {
 				app.Logger().Warn("[processing] failed to set upload status=PROCESSING", "uploadId", uploadID, "error", saveErr)
 			}
 		}
@@ -403,17 +382,17 @@ func reconcileUploadStatus(app *pocketbase.PocketBase, uploadID string) {
 		return
 	}
 
-	desiredStatus := "SUCCESS"
+	desiredStatus := vars.UploadStatusSuccess
 	if len(failedJobs) > 0 {
-		desiredStatus = "FAILED"
+		desiredStatus = vars.UploadStatusFailed
 	}
 
-	if strings.EqualFold(uploadProxy.GetString("status"), desiredStatus) {
+	if strings.EqualFold(upload.GetString("status"), desiredStatus) {
 		return
 	}
 
-	uploadProxy.Set("status", desiredStatus)
-	if err := app.Save(uploadProxy); err != nil {
+	upload.Set("status", desiredStatus)
+	if err := app.Save(upload); err != nil {
 		app.Logger().Warn("[processing] failed to reconcile upload status", "uploadId", uploadID, "status", desiredStatus, "error", err)
 	}
 }

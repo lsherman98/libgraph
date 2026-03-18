@@ -15,8 +15,8 @@ import (
 	"sync"
 	"time"
 
-	pbgen "github.com/lsherman98/libgraph/pocketbase/pbschema/generated"
 	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/core"
 )
 
 const (
@@ -68,8 +68,8 @@ func New(app *pocketbase.PocketBase) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) Transcribe(upload *pbgen.Uploads) (*TranscriptionResponse, error) {
-	filename := upload.File()
+func (c *Client) Transcribe(upload *core.Record) (*TranscriptionResponse, error) {
+	filename := upload.GetString("file")
 	if filename == "" {
 		return nil, errors.New("upload record has no file")
 	}
@@ -99,6 +99,7 @@ func (c *Client) Transcribe(upload *pbgen.Uploads) (*TranscriptionResponse, erro
 	if err != nil {
 		return nil, fmt.Errorf("failed to create form file: %w", err)
 	}
+	
 	if _, err := part.Write(fileBytes); err != nil {
 		return nil, fmt.Errorf("failed to write file bytes: %w", err)
 	}

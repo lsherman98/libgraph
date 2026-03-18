@@ -16,7 +16,7 @@ export enum Collections {
 	Collections = "collections",
 	DocumentChunks = "document_chunks",
 	Edges = "edges",
-	EmbeddingOperations = "embedding_operations",
+	EmbeddingJobs = "embedding_jobs",
 	Highlights = "highlights",
 	Messages = "messages",
 	Nodes = "nodes",
@@ -24,9 +24,8 @@ export enum Collections {
 	Pages = "pages",
 	People = "people",
 	Preferences = "preferences",
-	ProcessingJobEvents = "processing_job_events",
-	ProcessingJobs = "processing_jobs",
 	Publications = "publications",
+	Queue = "queue",
 	ReadingProgress = "reading_progress",
 	Summaries = "summaries",
 	Tags = "tags",
@@ -185,40 +184,27 @@ export type EdgesRecord = {
 	user: RecordIdString
 }
 
-export enum EmbeddingOperationsStatusOptions {
+export enum EmbeddingJobsStatusOptions {
 	"queued" = "queued",
 	"submitted" = "submitted",
 	"polling" = "polling",
 	"succeeded" = "succeeded",
-	"failing" = "failing",
-	"cancelled" = "cancelled",
-	"expired" = "expired",
+	"failed" = "failed",
 }
-export type EmbeddingOperationsRecord<Tchunk_ids_json = unknown> = {
-	attempts?: number
+export type EmbeddingJobsRecord<Tchunk_ids_json = unknown> = {
+	batch?: boolean
+	batch_id?: string
 	chunk_ids_json?: null | Tchunk_ids_json
 	created: IsoAutoDateString
 	error_message?: string
-	failed_chunks?: number
 	finished_at?: IsoDateString
 	id: string
+	job?: RecordIdString
 	last_polled_at?: IsoDateString
-	lease_until?: IsoDateString
-	max_attempts?: number
-	model?: string
-	next_poll_at?: IsoDateString
-	page?: RecordIdString
-	processing_job?: RecordIdString
-	provider?: string
-	provider_operation_id?: string
-	status?: EmbeddingOperationsStatusOptions
-	submitted_at?: IsoDateString
-	succeeded_chunks?: number
-	total_chunks?: number
+	status?: EmbeddingJobsStatusOptions
 	updated: IsoAutoDateString
 	upload?: RecordIdString
 	user?: RecordIdString
-	worker_id?: string
 }
 
 export enum HighlightsColorOptions {
@@ -327,59 +313,6 @@ export type PreferencesRecord<Treader_settings = unknown, Tui_settings = unknown
 	workspace_layout?: null | Tworkspace_layout
 }
 
-export type ProcessingJobEventsRecord<Tmeta_json = unknown> = {
-	created: IsoAutoDateString
-	event_type?: string
-	id: string
-	job: RecordIdString
-	message?: string
-	meta_json?: null | Tmeta_json
-	updated: IsoAutoDateString
-}
-
-export enum ProcessingJobsJobTypeOptions {
-	"upload.parse_or_transcribe" = "upload.parse_or_transcribe",
-	"chunk.generate" = "chunk.generate",
-	"page.summarize" = "page.summarize",
-	"chunk.embed" = "chunk.embed",
-	"chunk.embed.submit" = "chunk.embed.submit",
-	"chunk.embed.poll" = "chunk.embed.poll",
-}
-
-export enum ProcessingJobsStatusOptions {
-	"queued" = "queued",
-	"running" = "running",
-	"succeeded" = "succeeded",
-	"failed" = "failed",
-	"deadletter" = "deadletter",
-	"cancelled" = "cancelled",
-}
-export type ProcessingJobsRecord<Tpayload_json = unknown> = {
-	attempts?: number
-	chunk?: RecordIdString
-	created: IsoAutoDateString
-	dedupe_key: string
-	embedding_operation?: RecordIdString
-	error_code?: string
-	error_message?: string
-	finished_at?: IsoDateString
-	id: string
-	job_type: ProcessingJobsJobTypeOptions
-	lease_until?: IsoDateString
-	max_attempts?: number
-	page?: RecordIdString
-	payload_json?: null | Tpayload_json
-	priority: number
-	scheduled_at?: IsoDateString
-	started_at?: IsoDateString
-	status: ProcessingJobsStatusOptions
-	trace_id?: string
-	updated: IsoAutoDateString
-	upload?: RecordIdString
-	user?: RecordIdString
-	worker_id?: string
-}
-
 export enum PublicationsTypeOptions {
 	"podcast" = "podcast",
 	"youtube_channel" = "youtube_channel",
@@ -394,6 +327,39 @@ export type PublicationsRecord = {
 	updated: IsoAutoDateString
 	url?: string
 	user: RecordIdString
+}
+
+export enum QueueJobTypeOptions {
+	"chunk.generate" = "chunk.generate",
+	"page.summarize" = "page.summarize",
+	"chunk.embed" = "chunk.embed",
+	"upload.parse" = "upload.parse",
+	"upload.transcribe" = "upload.transcribe",
+}
+
+export enum QueueStatusOptions {
+	"queued" = "queued",
+	"running" = "running",
+	"failed" = "failed",
+	"cancelled" = "cancelled",
+	"success" = "success",
+}
+export type QueueRecord<Tpayload_json = unknown> = {
+	created: IsoAutoDateString
+	dedupe_key: string
+	error_code?: string
+	error_message?: string
+	finished_at?: IsoDateString
+	id: string
+	job_type: QueueJobTypeOptions
+	page?: RecordIdString
+	payload_json?: null | Tpayload_json
+	started_at?: IsoDateString
+	status: QueueStatusOptions
+	updated: IsoAutoDateString
+	upload?: RecordIdString
+	user?: RecordIdString
+	worker_id?: string
 }
 
 export type ReadingProgressRecord = {
@@ -523,7 +489,7 @@ export type ChatsResponse<Texpand = unknown> = Required<ChatsRecord> & BaseSyste
 export type CollectionsResponse<Texpand = unknown> = Required<CollectionsRecord> & BaseSystemFields<Texpand>
 export type DocumentChunksResponse<Texpand = unknown> = Required<DocumentChunksRecord> & BaseSystemFields<Texpand>
 export type EdgesResponse<Texpand = unknown> = Required<EdgesRecord> & BaseSystemFields<Texpand>
-export type EmbeddingOperationsResponse<Tchunk_ids_json = unknown, Texpand = unknown> = Required<EmbeddingOperationsRecord<Tchunk_ids_json>> & BaseSystemFields<Texpand>
+export type EmbeddingJobsResponse<Tchunk_ids_json = unknown, Texpand = unknown> = Required<EmbeddingJobsRecord<Tchunk_ids_json>> & BaseSystemFields<Texpand>
 export type HighlightsResponse<Texpand = unknown> = Required<HighlightsRecord> & BaseSystemFields<Texpand>
 export type MessagesResponse<Tsources = unknown, Texpand = unknown> = Required<MessagesRecord<Tsources>> & BaseSystemFields<Texpand>
 export type NodesResponse<Tdata = unknown, Texpand = unknown> = Required<NodesRecord<Tdata>> & BaseSystemFields<Texpand>
@@ -531,9 +497,8 @@ export type NotesResponse<Texpand = unknown> = Required<NotesRecord> & BaseSyste
 export type PagesResponse<Texpand = unknown> = Required<PagesRecord> & BaseSystemFields<Texpand>
 export type PeopleResponse<Texpand = unknown> = Required<PeopleRecord> & BaseSystemFields<Texpand>
 export type PreferencesResponse<Treader_settings = unknown, Tui_settings = unknown, Tworkspace_layout = unknown, Texpand = unknown> = Required<PreferencesRecord<Treader_settings, Tui_settings, Tworkspace_layout>> & BaseSystemFields<Texpand>
-export type ProcessingJobEventsResponse<Tmeta_json = unknown, Texpand = unknown> = Required<ProcessingJobEventsRecord<Tmeta_json>> & BaseSystemFields<Texpand>
-export type ProcessingJobsResponse<Tpayload_json = unknown, Texpand = unknown> = Required<ProcessingJobsRecord<Tpayload_json>> & BaseSystemFields<Texpand>
 export type PublicationsResponse<Texpand = unknown> = Required<PublicationsRecord> & BaseSystemFields<Texpand>
+export type QueueResponse<Tpayload_json = unknown, Texpand = unknown> = Required<QueueRecord<Tpayload_json>> & BaseSystemFields<Texpand>
 export type ReadingProgressResponse<Texpand = unknown> = Required<ReadingProgressRecord> & BaseSystemFields<Texpand>
 export type SummariesResponse<Texpand = unknown> = Required<SummariesRecord> & BaseSystemFields<Texpand>
 export type TagsResponse<Texpand = unknown> = Required<TagsRecord> & BaseSystemFields<Texpand>
@@ -555,7 +520,7 @@ export type CollectionRecords = {
 	collections: CollectionsRecord
 	document_chunks: DocumentChunksRecord
 	edges: EdgesRecord
-	embedding_operations: EmbeddingOperationsRecord
+	embedding_jobs: EmbeddingJobsRecord
 	highlights: HighlightsRecord
 	messages: MessagesRecord
 	nodes: NodesRecord
@@ -563,9 +528,8 @@ export type CollectionRecords = {
 	pages: PagesRecord
 	people: PeopleRecord
 	preferences: PreferencesRecord
-	processing_job_events: ProcessingJobEventsRecord
-	processing_jobs: ProcessingJobsRecord
 	publications: PublicationsRecord
+	queue: QueueRecord
 	reading_progress: ReadingProgressRecord
 	summaries: SummariesRecord
 	tags: TagsRecord
@@ -586,7 +550,7 @@ export type CollectionResponses = {
 	collections: CollectionsResponse
 	document_chunks: DocumentChunksResponse
 	edges: EdgesResponse
-	embedding_operations: EmbeddingOperationsResponse
+	embedding_jobs: EmbeddingJobsResponse
 	highlights: HighlightsResponse
 	messages: MessagesResponse
 	nodes: NodesResponse
@@ -594,9 +558,8 @@ export type CollectionResponses = {
 	pages: PagesResponse
 	people: PeopleResponse
 	preferences: PreferencesResponse
-	processing_job_events: ProcessingJobEventsResponse
-	processing_jobs: ProcessingJobsResponse
 	publications: PublicationsResponse
+	queue: QueueResponse
 	reading_progress: ReadingProgressResponse
 	summaries: SummariesResponse
 	tags: TagsResponse
