@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
 import { X, Upload, File as FileIcon, Loader2, CheckCircle, AlertCircle, Plus } from "lucide-react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +61,7 @@ function RouteComponent() {
   const DOCUMENT_EXTENSIONS = new Set([".pdf", ".epub", ".txt", ".md", ".markdown"]);
   const TRANSCRIPT_EXTENSIONS = new Set([".txt", ".md", ".markdown"]);
   const ALLOWED_EXTENSIONS = new Set([...AUDIO_EXTENSIONS, ...DOCUMENT_EXTENSIONS]);
+  const MAX_AUDIO_DURATION_SECONDS = 60 * 60;
 
   const getExtension = (filename: string) => {
     const dotIndex = filename.lastIndexOf(".");
@@ -70,6 +72,32 @@ function RouteComponent() {
   const getNormalizedBaseName = (filename: string) => getBaseName(filename).trim().toLowerCase();
   const isAudioFile = (filename: string) => AUDIO_EXTENSIONS.has(getExtension(filename));
   const isTranscriptFile = (filename: string) => TRANSCRIPT_EXTENSIONS.has(getExtension(filename));
+
+  const getAudioDurationSeconds = (file: File): Promise<number> =>
+    new Promise((resolve, reject) => {
+      const audio = document.createElement("audio");
+      const objectUrl = URL.createObjectURL(file);
+
+      audio.preload = "metadata";
+      audio.onloadedmetadata = () => {
+        const duration = audio.duration;
+        URL.revokeObjectURL(objectUrl);
+
+        if (!Number.isFinite(duration) || duration <= 0) {
+          reject(new Error("Invalid audio duration"));
+          return;
+        }
+
+        resolve(duration);
+      };
+
+      audio.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject(new Error("Unable to read audio metadata"));
+      };
+
+      audio.src = objectUrl;
+    });
 
   const createFileMetadata = (file: File, transcriptFile?: File): FileMetadata => {
     const ext = getExtension(file.name);
@@ -89,11 +117,44 @@ function RouteComponent() {
     };
   };
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
-    const filtered = acceptedFiles.filter((file) => {
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+    const extensionFiltered = acceptedFiles.filter((file) => {
       const ext = getExtension(file.name);
       return ALLOWED_EXTENSIONS.has(ext);
     });
+
+    const filtered: File[] = [];
+    const rejectedLongAudio: string[] = [];
+
+    for (const file of extensionFiltered) {
+      if (!isAudioFile(file.name)) {
+        filtered.push(file);
+        continue;
+      }
+
+      try {
+        const durationSeconds = await getAudioDurationSeconds(file);
+        if (durationSeconds > MAX_AUDIO_DURATION_SECONDS) {
+          rejectedLongAudio.push(file.name);
+          continue;
+        }
+      } catch {
+        toast.warning(`Could not verify duration for ${file.name}; server will enforce the 60 minute limit.`);
+      }
+
+      filtered.push(file);
+    }
+
+    if (rejectedLongAudio.length > 0) {
+      const rejectedList = rejectedLongAudio.slice(0, 3).join(", ");
+      const hasMore = rejectedLongAudio.length > 3;
+      toast.error(
+        `${rejectedLongAudio.length} audio file${rejectedLongAudio.length > 1 ? "s are" : " is"} over the 60 minute limit and were not added.`,
+        {
+          description: hasMore ? `${rejectedList}, and ${rejectedLongAudio.length - 3} more.` : rejectedList,
+        },
+      );
+    }
 
     const transcriptPool = new Map<string, File[]>();
     for (const file of filtered) {
@@ -285,7 +346,7 @@ function RouteComponent() {
           <div className="flex flex-col items-center gap-2">
             <Upload className="h-10 w-10 text-muted-foreground" />
             <p className="text-lg font-medium">Drop files here or click to select</p>
-            <p className="text-sm text-muted-foreground">Supports PDFs, EPUBs, Text, Markdown, and audio files.</p>
+            <p className="text-sm text-muted-foreground">Supports PDFs, EPUBs, Text, Markdown, and audio files (max 60 minutes).</p>
             <p className="text-xs text-muted-foreground">Tip: same-name .txt/.md files are auto-added as transcripts for audio uploads.</p>
           </div>
         </div>

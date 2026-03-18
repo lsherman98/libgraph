@@ -115,6 +115,10 @@ func enqueueSummarizeJobsForUpload(app *pocketbase.PocketBase, upload *core.Reco
 
 func parseAudioUploadIntoPages(app *pocketbase.PocketBase, upload *core.Record) ([]*core.Record, error) {
 	title := upload.GetString("title")
+	if err := validateAudioDurationLimit(upload); err != nil {
+		return nil, err
+	}
+
 	transcriptMarkdown, err := readTranscriptMarkdown(app, upload)
 	if err != nil {
 		return nil, err

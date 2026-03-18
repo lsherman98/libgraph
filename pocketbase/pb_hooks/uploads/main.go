@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/lsherman98/libgraph/pocketbase/collections"
@@ -40,7 +41,10 @@ var (
 	}
 )
 
-const optimizedAudioSuffix = "_optimized"
+const (
+	optimizedAudioSuffix                 = "_optimized"
+	maxTranscriptionAudioDurationSeconds = 60 * 60
+)
 
 func Init(app *pocketbase.PocketBase) error {
 	registerQueueHandlers(app)
@@ -349,6 +353,60 @@ func validateTranscriptAttachment(upload *core.Record) error {
 	}
 
 	return nil
+}
+
+func validateAudioDurationLimit(upload *core.Record) error {
+	uploadFile := strings.TrimSpace(upload.GetString("file"))
+	if uploadFile == "" || !mistral.IsAudioFile(uploadFile) {
+		return nil
+	}
+
+	filePath := upload.BaseFilesPath() + "/" + uploadFile
+	durationSeconds, err := probeAudioDurationSeconds(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to validate audio duration: %w", err)
+	}
+
+	if durationSeconds > maxTranscriptionAudioDurationSeconds {
+		return fmt.Errorf("audio duration %.0f minutes exceeds the 60 minute transcription limit", durationSeconds/60)
+	}
+
+	return nil
+}
+
+func probeAudioDurationSeconds(filePath string) (float64, error) {
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		return 0, fmt.Errorf("ffprobe is required for audio duration validation: %w", err)
+	}
+
+	cmd := exec.Command(
+		"ffprobe",
+		"-v", "error",
+		"-show_entries", "format=duration",
+		"-of", "default=noprint_wrappers=1:nokey=1",
+		filePath,
+	)
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return 0, fmt.Errorf("ffprobe failed: %w (%s)", err, strings.TrimSpace(string(output)))
+	}
+
+	durationValue := strings.TrimSpace(string(output))
+	if durationValue == "" {
+		return 0, fmt.Errorf("ffprobe returned empty duration")
+	}
+
+	durationSeconds, err := strconv.ParseFloat(durationValue, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid duration value %q: %w", durationValue, err)
+	}
+
+	if durationSeconds <= 0 {
+		return 0, fmt.Errorf("audio duration must be greater than 0 seconds")
+	}
+
+	return durationSeconds, nil
 }
 
 func chunkMarkdown(markdown string) []string {
