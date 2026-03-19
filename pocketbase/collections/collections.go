@@ -14,8 +14,9 @@ const (
 	Edges               = "edges"
 	Notes               = "notes"
 	Summaries           = "summaries"
+	ChatContexts        = "chat_contexts"
 	DocumentChunks      = "document_chunks"
 	EmbeddingOperations = "embedding_operations"
-	ProcessingJobs      = "processing_jobs"
+	ProcessingJobs      = "queue"
 	ProcessingJobEvents = "processing_job_events"
 )

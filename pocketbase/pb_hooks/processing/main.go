@@ -15,17 +15,16 @@ import (
 )
 
 const (
-	JobTypeUploadParseOrTranscribe = "upload.parse_or_transcribe"
+	JobTypeUploadParseOrTranscribe = "upload.parse"
 	JobTypeChunkGenerate           = "chunk.generate"
 	JobTypePageSummarize           = "page.summarize"
-	JobTypeChunkEmbedSubmit        = "chunk.embed.submit"
+	JobTypeChunkEmbedSubmit        = "chunk.embed"
 	JobTypeChunkEmbedPoll          = "chunk.embed.poll"
 )
 
 const (
 	queuePollInterval = 10 * time.Second
 	embedPollInterval = 120 * time.Second
-	queueLeaseWindow  = 10 * time.Minute
 	workerID          = "pb-main-worker"
 )
 
@@ -132,12 +131,6 @@ func Enqueue(app *pocketbase.PocketBase, req EnqueueRequest) error {
 		req.MaxAttempts = 5
 	}
 
-	now := time.Now().UTC()
-	scheduledAt := now
-	if req.ScheduledAt != nil {
-		scheduledAt = req.ScheduledAt.UTC()
-	}
-
 	existing, err := app.FindFirstRecordByFilter(
 		collections.ProcessingJobs,
 		"dedupe_key = {:dedupeKey}",
@@ -145,20 +138,15 @@ func Enqueue(app *pocketbase.PocketBase, req EnqueueRequest) error {
 	)
 	if err == nil {
 		switch strings.TrimSpace(existing.GetString("status")) {
-		case vars.QueueStatusQueued, vars.QueueStatusRunning, vars.QueueStatusSucceeded:
+		case vars.QueueStatusQueued, vars.QueueStatusRunning, vars.QueueStatusSuccess, "succeeded":
 			return nil
-		case vars.QueueStatusFailed, vars.QueueStatusDeadletter, vars.QueueStatusCancelled:
+		case vars.QueueStatusFailed, vars.QueueStatusCancelled, "deadletter":
 			existing.Set("status", vars.QueueStatusQueued)
-			existing.Set("attempts", 0)
-			existing.Set("scheduled_at", scheduledAt)
-			existing.Set("lease_until", nil)
 			existing.Set("started_at", nil)
 			existing.Set("finished_at", nil)
 			existing.Set("error_code", "")
 			existing.Set("error_message", "")
 			existing.Set("payload_json", req.Payload)
-			existing.Set("priority", req.Priority)
-			existing.Set("max_attempts", req.MaxAttempts)
 			setOptionalRelations(existing, req)
 			return app.Save(existing)
 		default:
@@ -172,8 +160,10 @@ func Enqueue(app *pocketbase.PocketBase, req EnqueueRequest) error {
 	}
 
 	record := core.NewRecord(jobsCollection)
-	jobType := JobTypeUploadParseOrTranscribe
+	jobType := req.JobType
 	switch req.JobType {
+	case JobTypeUploadParseOrTranscribe:
+		jobType = JobTypeUploadParseOrTranscribe
 	case JobTypeChunkGenerate:
 		jobType = JobTypeChunkGenerate
 	case JobTypePageSummarize:
@@ -182,13 +172,11 @@ func Enqueue(app *pocketbase.PocketBase, req EnqueueRequest) error {
 		jobType = JobTypeChunkEmbedSubmit
 	case JobTypeChunkEmbedPoll:
 		jobType = JobTypeChunkEmbedPoll
+	default:
+		return fmt.Errorf("processing enqueue: unsupported job type: %s", req.JobType)
 	}
 	record.Set("job_type", jobType)
 	record.Set("status", vars.QueueStatusQueued)
-	record.Set("priority", req.Priority)
-	record.Set("attempts", 0)
-	record.Set("max_attempts", req.MaxAttempts)
-	record.Set("scheduled_at", scheduledAt)
 	record.Set("dedupe_key", req.DedupeKey)
 	record.Set("payload_json", req.Payload)
 	setOptionalRelations(record, req)
@@ -236,8 +224,8 @@ func processDueJobs(app *pocketbase.PocketBase, worker workerSpec) {
 
 	records, err := app.FindRecordsByFilter(
 		collections.ProcessingJobs,
-		"((status = 'queued' && (scheduled_at = '' || scheduled_at = null || scheduled_at <= {:now})) || (status = 'running' && lease_until != null && lease_until <= {:now})) && "+jobTypeClause,
-		"priority,scheduled_at,created",
+		"status = 'queued' && "+jobTypeClause,
+		"created",
 		worker.limit,
 		0,
 		params,
@@ -263,9 +251,8 @@ func processDueJobs(app *pocketbase.PocketBase, worker workerSpec) {
 			continue
 		}
 
-		job.Set("status", vars.QueueStatusSucceeded)
+		job.Set("status", vars.QueueStatusSuccess)
 		job.Set("finished_at", time.Now().UTC())
-		job.Set("lease_until", nil)
 		job.Set("error_code", "")
 		job.Set("error_message", "")
 		if err := app.Save(job); err != nil {
@@ -280,7 +267,6 @@ func processDueJobs(app *pocketbase.PocketBase, worker workerSpec) {
 func claimJob(app *pocketbase.PocketBase, job *core.Record, workerName string) error {
 	now := time.Now().UTC()
 	job.Set("status", vars.QueueStatusRunning)
-	job.Set("lease_until", now.Add(queueLeaseWindow))
 	job.Set("started_at", now)
 	job.Set("worker_id", fmt.Sprintf("%s:%s", workerID, workerName))
 	job.Set("error_code", "")
@@ -299,39 +285,43 @@ func executeJob(app *pocketbase.PocketBase, job *core.Record) error {
 		return fmt.Errorf("no handler registered for job_type=%s", jobType)
 	}
 
-	return handler(app, job)
+	err := handler(app, job)
+	if err == nil {
+		return nil
+	}
+
+	if isNoRowsError(err) {
+		app.Logger().Info("[processing] skipping job because related record no longer exists", "jobId", job.Id, "jobType", jobType, "error", err)
+		return nil
+	}
+
+	return err
+}
+
+func isNoRowsError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	message := strings.ToLower(strings.TrimSpace(err.Error()))
+	if message == "" {
+		return false
+	}
+
+	return strings.Contains(message, "no rows in result set")
 }
 
 func handleJobFailure(app *pocketbase.PocketBase, job *core.Record, execErr error) {
 	now := time.Now().UTC()
-	attempts := job.GetInt("attempts") + 1
-	maxAttempts := job.GetInt("max_attempts")
-	if maxAttempts <= 0 {
-		maxAttempts = 5
-	}
-
-	job.Set("attempts", attempts)
+	job.Set("status", vars.QueueStatusFailed)
+	job.Set("finished_at", now)
 	job.Set("error_message", clampProcessingJobErrorMessage(execErr.Error()))
-	job.Set("lease_until", nil)
-
-	if attempts >= maxAttempts {
-		job.Set("status", vars.QueueStatusDeadletter)
-		job.Set("finished_at", now)
-		if err := app.Save(job); err != nil {
-			app.Logger().Error("[processing] failed to deadletter job", "jobId", job.Id, "error", err)
-			return
-		}
-
-		reconcileUploadStatus(app, strings.TrimSpace(job.GetString("upload")))
+	if err := app.Save(job); err != nil {
+		app.Logger().Error("[processing] failed to mark job as failed", "jobId", job.Id, "error", err)
 		return
 	}
 
-	backoff := time.Duration(1<<maxInt(0, attempts-1)) * 15 * time.Second
-	job.Set("status", vars.QueueStatusQueued)
-	job.Set("scheduled_at", now.Add(backoff))
-	if err := app.Save(job); err != nil {
-		app.Logger().Error("[processing] failed to reschedule job", "jobId", job.Id, "error", err)
-	}
+	reconcileUploadStatus(app, strings.TrimSpace(job.GetString("upload")))
 }
 
 func reconcileUploadStatus(app *pocketbase.PocketBase, uploadID string) {
@@ -371,7 +361,7 @@ func reconcileUploadStatus(app *pocketbase.PocketBase, uploadID string) {
 
 	failedJobs, err := app.FindRecordsByFilter(
 		collections.ProcessingJobs,
-		"upload = {:uploadId} && (status = 'failed' || status = 'deadletter' || status = 'cancelled')",
+		"upload = {:uploadId} && (status = 'failed' || status = 'cancelled' || status = 'deadletter')",
 		"",
 		1,
 		0,
@@ -395,11 +385,4 @@ func reconcileUploadStatus(app *pocketbase.PocketBase, uploadID string) {
 	if err := app.Save(upload); err != nil {
 		app.Logger().Warn("[processing] failed to reconcile upload status", "uploadId", uploadID, "status", desiredStatus, "error", err)
 	}
-}
-
-func maxInt(a int, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

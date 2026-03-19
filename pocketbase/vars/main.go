@@ -11,9 +11,10 @@ const (
 
 	QueueStatusQueued     = "queued"
 	QueueStatusRunning    = "running"
-	QueueStatusSucceeded  = "succeeded"
+	QueueStatusSuccess    = "success"
+	QueueStatusSucceeded  = QueueStatusSuccess
 	QueueStatusFailed     = "failed"
-	QueueStatusDeadletter = "deadletter"
+	QueueStatusDeadletter = QueueStatusFailed
 	QueueStatusCancelled  = "cancelled"
 
 	EmbeddingStatusQueued    = "queued"

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { usePages, useBookmarks, useNotes, useUploadById, useSummaryBySourcePage, useSummaryBySourceUpload } from "@/lib/api/queries";
-import { useCreateHighlight, useUpdateHighlight, useDeleteHighlight, useSummarizePage } from "@/lib/api/mutations";
+import { useCreateHighlight, useUpdateHighlight, useDeleteHighlight, useSummarizePage, useSummarizePages } from "@/lib/api/mutations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -24,6 +24,8 @@ import { PageSlider } from "./page-slider";
 import { PaginatedReader } from "./paginated-reader";
 import { ScrollReader } from "./scroll-reader";
 import { toast } from "sonner";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { getPageByNumber } from "@/lib/api/api";
 
 const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac", ".wma", ".webm", ".mp4"]);
 
@@ -48,6 +50,11 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
   const [isAudioOpen, setIsAudioOpen] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [queuedSummaryPageId, setQueuedSummaryPageId] = useState<string | null>(null);
+  const [isSummarizePopoverOpen, setIsSummarizePopoverOpen] = useState(false);
+  const [summarizeMode, setSummarizeMode] = useState<"page" | "range">("page");
+  const [rangeStartPage, setRangeStartPage] = useState<string>("");
+  const [rangeEndPage, setRangeEndPage] = useState<string>("");
+  const [isRangeSummaryPending, setIsRangeSummaryPending] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const { isReadingMode, setReadingMode, setCurrentPageState, setCurrentUploadId, setNavigateToPage } = useReaderStore();
@@ -171,6 +178,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
   const updateHighlightMutation = useUpdateHighlight();
   const deleteHighlightMutation = useDeleteHighlight();
   const summarizePageMutation = useSummarizePage();
+  const summarizePagesMutation = useSummarizePages();
 
   const bookmarks = bookmarksData?.map((b) => ({
     id: b.id,
@@ -227,6 +235,80 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
     },
     [deleteHighlightMutation],
   );
+
+  const queueCurrentPageSummary = useCallback(() => {
+    if (!currentPageId) return;
+
+    summarizePageMutation.mutate(currentPageId, {
+      onSuccess: () => {
+        setQueuedSummaryPageId(currentPageId);
+        setIsSummarizePopoverOpen(false);
+        toast.info("Summary queued", {
+          description: `Generating summary for page ${pageSettings.currentPage}...`,
+        });
+      },
+    });
+  }, [currentPageId, summarizePageMutation, pageSettings.currentPage]);
+
+  const queueRangeSummary = useCallback(async () => {
+    if (!isBookUpload || !uploadId || totalPages < 1) return;
+
+    const parsedStart = Number.parseInt(rangeStartPage, 10);
+    const parsedEnd = Number.parseInt(rangeEndPage, 10);
+
+    if (!Number.isFinite(parsedStart) || !Number.isFinite(parsedEnd)) {
+      toast.error("Enter valid page numbers.");
+      return;
+    }
+
+    const boundedStart = Math.max(1, Math.min(totalPages, parsedStart));
+    const boundedEnd = Math.max(1, Math.min(totalPages, parsedEnd));
+    const start = Math.min(boundedStart, boundedEnd);
+    const end = Math.max(boundedStart, boundedEnd);
+
+    const pageNumbers = Array.from({ length: end - start + 1 }, (_, index) => start + index);
+    if (pageNumbers.length === 0) {
+      toast.error("No pages selected.");
+      return;
+    }
+
+    setIsRangeSummaryPending(true);
+
+    try {
+      const pageRecords = await Promise.all(
+        pageNumbers.map(async (pageNumber) => {
+          try {
+            const page = await getPageByNumber(uploadId, pageNumber);
+            return { pageNumber, pageId: page.id, ok: true };
+          } catch {
+            return { pageNumber, pageId: "", ok: false };
+          }
+        }),
+      );
+
+      const validPageRecords = pageRecords.filter((record) => record.ok && record.pageId);
+      if (validPageRecords.length === 0) {
+        toast.error("No valid pages found for that range.");
+        return;
+      }
+
+      const selectedPageIDs = validPageRecords.map((record) => record.pageId);
+      await summarizePagesMutation.mutateAsync(selectedPageIDs);
+      const queuedCount = selectedPageIDs.length;
+
+      if (currentPageId && selectedPageIDs.includes(currentPageId) && queuedCount > 0) {
+        setQueuedSummaryPageId(currentPageId);
+      }
+
+      toast.info("Summary queued", {
+        description: `Generating one summary for ${queuedCount} selected page${queuedCount === 1 ? "" : "s"}.`,
+      });
+
+      setIsSummarizePopoverOpen(false);
+    } finally {
+      setIsRangeSummaryPending(false);
+    }
+  }, [isBookUpload, uploadId, totalPages, rangeStartPage, rangeEndPage, summarizePagesMutation, currentPageId]);
 
   const onTitleLoadRef = useRef(onTitleLoad);
   onTitleLoadRef.current = onTitleLoad;
@@ -420,35 +502,124 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                 }}
                 isReadingMode={isReadingMode}
               />
-              {!isSummaryUpload && !hasExistingSummary && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8"
-                      disabled={!currentPageId || summarizePageMutation.isPending || shouldPollForSummary}
-                      onClick={() => {
-                        if (!currentPageId) return;
-                        summarizePageMutation.mutate(currentPageId, {
-                          onSuccess: () => {
-                            setQueuedSummaryPageId(isBookUpload ? currentPageId : uploadId);
-                            toast.info("Summary queued", {
-                              description: isBookUpload
-                                ? `Generating summary for page ${pageSettings.currentPage}...`
-                                : "Generating summary for this document...",
-                            });
-                          },
-                        });
-                      }}
-                    >
-                      <Sparkles className="h-4 w-4 mr-1" />
-                      {summarizePageMutation.isPending || shouldPollForSummary ? "Summarizing..." : "Summarize"}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>{isBookUpload ? "Generate summary for current page" : "Generate summary for this document"}</TooltipContent>
-                </Tooltip>
-              )}
+              {!isSummaryUpload &&
+                (isBookUpload || !hasExistingSummary) &&
+                (isBookUpload ? (
+                  <Popover
+                    open={isSummarizePopoverOpen}
+                    onOpenChange={(open) => {
+                      setIsSummarizePopoverOpen(open);
+                      if (open) {
+                        setSummarizeMode("page");
+                        setRangeStartPage(String(pageSettings.currentPage));
+                        setRangeEndPage(String(pageSettings.currentPage));
+                      }
+                    }}
+                  >
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8"
+                        disabled={totalPages < 1 || isRangeSummaryPending || summarizePageMutation.isPending || summarizePagesMutation.isPending}
+                      >
+                        <Sparkles className="h-4 w-4 mr-1" />
+                        {summarizePageMutation.isPending || summarizePagesMutation.isPending || shouldPollForSummary || isRangeSummaryPending
+                          ? "Summarizing..."
+                          : "Summarize"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-80 space-y-3">
+                      <div className="space-y-1">
+                        <div className="text-sm font-medium">Summarize</div>
+                        <div className="text-xs text-muted-foreground">Choose current page or a page range.</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant={summarizeMode === "page" ? "default" : "outline"}
+                          className="flex-1"
+                          onClick={() => setSummarizeMode("page")}
+                          disabled={isRangeSummaryPending || summarizePageMutation.isPending || summarizePagesMutation.isPending}
+                        >
+                          Current page
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={summarizeMode === "range" ? "default" : "outline"}
+                          className="flex-1"
+                          onClick={() => setSummarizeMode("range")}
+                          disabled={isRangeSummaryPending || summarizePageMutation.isPending || summarizePagesMutation.isPending}
+                        >
+                          Page range
+                        </Button>
+                      </div>
+                      {summarizeMode === "range" && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <Label htmlFor="summary-range-start">Start</Label>
+                            <Input
+                              id="summary-range-start"
+                              type="number"
+                              min={1}
+                              max={totalPages}
+                              value={rangeStartPage}
+                              onChange={(event) => setRangeStartPage(event.target.value)}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <Label htmlFor="summary-range-end">End</Label>
+                            <Input
+                              id="summary-range-end"
+                              type="number"
+                              min={1}
+                              max={totalPages}
+                              value={rangeEndPage}
+                              onChange={(event) => setRangeEndPage(event.target.value)}
+                            />
+                          </div>
+                        </div>
+                      )}
+                      <Button
+                        className="w-full"
+                        onClick={summarizeMode === "page" ? queueCurrentPageSummary : queueRangeSummary}
+                        disabled={isRangeSummaryPending || summarizePageMutation.isPending || summarizePagesMutation.isPending || !currentPageId}
+                      >
+                        {isRangeSummaryPending || summarizePageMutation.isPending || summarizePagesMutation.isPending
+                          ? "Queueing..."
+                          : summarizeMode === "page"
+                            ? "Summarize Current Page"
+                            : "Queue Page Range"}
+                      </Button>
+                    </PopoverContent>
+                  </Popover>
+                ) : (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8"
+                        disabled={!currentPageId || summarizePageMutation.isPending || shouldPollForSummary}
+                        onClick={() => {
+                          if (!currentPageId) return;
+                          summarizePageMutation.mutate(currentPageId, {
+                            onSuccess: () => {
+                              setQueuedSummaryPageId(uploadId);
+                              toast.info("Summary queued", {
+                                description: "Generating summary for this document...",
+                              });
+                            },
+                          });
+                        }}
+                      >
+                        <Sparkles className="h-4 w-4 mr-1" />
+                        {summarizePageMutation.isPending || shouldPollForSummary ? "Summarizing..." : "Summarize"}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Generate summary for this document</TooltipContent>
+                  </Tooltip>
+                ))}
               {!isSummaryUpload && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -624,8 +795,8 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
           )}
           style={isReadingMode ? { color: settings.textColor } : undefined}
         >
-          <div className="max-w-4xl mx-auto grid grid-cols-[auto_1fr_auto] items-center gap-2 text-xs opacity-50">
-            <span>1</span>
+          <div className="max-w-4xl mx-auto grid grid-cols-[auto_1fr_auto] items-center gap-2 text-xs">
+            <span className="opacity-60">1</span>
             <PageSlider
               currentPage={pageSettings.currentPage}
               totalPages={totalPages}
@@ -644,7 +815,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
               textColor={settings.textColor}
               uploadId={uploadId}
             />
-            <span>{totalPages}</span>
+            <span className="opacity-60">{totalPages}</span>
           </div>
         </footer>
       )}

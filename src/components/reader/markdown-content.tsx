@@ -219,6 +219,20 @@ export function MarkdownContent({
     setActiveHighlight(null);
   }, [activeHighlight, pageId, setEditorState, sidebarOpen, toggleSidebar]);
 
+  const handleChatWithText = useCallback(() => {
+    if (!selection) return;
+    const setPendingChatText = useReaderStore.getState().setPendingChatText;
+    setPendingChatText(selection.text);
+
+    if (!sidebarOpen) {
+      toggleSidebar();
+    }
+
+    setSelection(null);
+    setTempHighlight(null);
+    window.getSelection()?.removeAllRanges();
+  }, [selection, sidebarOpen, toggleSidebar]);
+
   const getBlockId = useCallback(
     (node: any) => {
       if (!pageId || !node?.position?.start?.line) return undefined;
@@ -448,6 +462,7 @@ export function MarkdownContent({
             selectionRange={selection.range}
             onHighlight={handleHighlight}
             onOpenEditor={handleOpenNewHighlightEditor}
+            onChatWithText={handleChatWithText}
             onDismiss={() => setSelection(null)}
           />
         )}

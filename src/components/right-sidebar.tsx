@@ -3,7 +3,8 @@ import { AnnotationsPanel } from "@/components/reader/annotations-panel";
 import { HighlightEditorPanel } from "@/components/reader/highlight-editor-panel";
 import { BookmarkEditorPanel } from "@/components/reader/bookmark-note-editor-panel";
 import { NoteEditorPanel } from "@/components/reader/note-editor-panel";
-import { Highlighter, Layers, PenLine, Bookmark, BookMarked, StickyNote, Pencil } from "lucide-react";
+import { Highlighter, Layers, PenLine, Bookmark, BookMarked, StickyNote, Pencil, Bot } from "lucide-react";
+import { ReaderAiChatPanel } from "@/components/reader/reader-ai-chat-panel";
 import { useWorkspaceTabsStore, type WriterTab, type ReaderTab } from "@/lib/stores/workspace-tabs-store";
 import { useWritingProject, useHighlights, useBookmarks, useNotes } from "@/lib/api/queries";
 import { useUpdateWritingProject } from "@/lib/api/mutations";
@@ -13,6 +14,7 @@ import { useEffect, useState } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { WorkspacePanel } from "./workspace";
+import { cn } from "@/lib/utils";
 
 interface RightSidebarProps extends React.ComponentProps<typeof Sidebar> {
   currentPageId?: string;
@@ -46,7 +48,7 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
   const { data: allBookmarks = [] } = useBookmarks(readerUploadId || undefined);
   const { data: allNotes = [] } = useNotes(readerUploadId || undefined);
 
-  const [annotationTab, setAnnotationTab] = useState<"highlights" | "bookmarks" | "notes">("highlights");
+  const [annotationTab, setAnnotationTab] = useState<"highlights" | "bookmarks" | "notes" | "ai">("highlights");
 
   useEffect(() => {
     if (!isWorkspaceRoute) {
@@ -146,7 +148,7 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
     }
 
     return (
-      <Tabs value={annotationTab} onValueChange={(v) => setAnnotationTab(v as "highlights" | "bookmarks" | "notes")} className="w-full">
+      <Tabs value={annotationTab} onValueChange={(v) => setAnnotationTab(v as "highlights" | "bookmarks" | "notes" | "ai")} className="w-full">
         <TabsList className="w-full h-8">
           <TabsTrigger value="highlights" className="flex-1 gap-1 text-xs h-7">
             <Highlighter className="h-3.5 w-3.5" />
@@ -175,6 +177,10 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
               </Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="ai" className="flex-1 gap-1 text-xs h-7">
+            <Bot className="h-3.5 w-3.5" />
+            AI
+          </TabsTrigger>
         </TabsList>
       </Tabs>
     );
@@ -184,6 +190,7 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
     if (isHighlightEditorOpen) return <HighlightEditorPanel />;
     if (isBookmarkEditorOpen) return <BookmarkEditorPanel />;
     if (isNoteEditorOpen) return <NoteEditorPanel />;
+    if (annotationTab === "ai") return <ReaderAiChatPanel />;
 
     return <AnnotationsPanel activeTab={annotationTab} onNavigateToPage={onNavigateToPage} />;
   };
@@ -195,7 +202,7 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
           <SidebarMenuItem className="flex items-center gap-2 px-2">{getHeaderContent()}</SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent className="p-0">{getContent()}</SidebarContent>
+      <SidebarContent className={cn("p-0", annotationTab === "ai" && "overflow-hidden")}>{getContent()}</SidebarContent>
     </Sidebar>
   );
 }

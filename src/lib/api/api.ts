@@ -9,9 +9,21 @@ export interface PageSummaryQueuedResponseData {
     dedupe_key: string;
 }
 
+export interface PageSummaryBatchQueuedResponseData {
+    status: string;
+    page_ids: string[];
+    dedupe_key: string;
+}
+
 export interface PageSummaryQueuedData {
     status: string;
     pageId: string;
+    dedupeKey: string;
+}
+
+export interface PageSummaryBatchQueuedData {
+    status: string;
+    pageIds: string[];
     dedupeKey: string;
 }
 
@@ -175,6 +187,23 @@ export const summarizePage = async (pageId: string) => {
         pageId: response.page_id,
         dedupeKey: response.dedupe_key,
     } satisfies PageSummaryQueuedData;
+}
+
+export const summarizePages = async (pageIds: string[]) => {
+    const response = await pb.send<PageSummaryBatchQueuedResponseData>(`/api/pages/summarize`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': pb.authStore.token,
+        },
+        body: JSON.stringify({ page_ids: pageIds }),
+    });
+
+    return {
+        status: response.status,
+        pageIds: response.page_ids,
+        dedupeKey: response.dedupe_key,
+    } satisfies PageSummaryBatchQueuedData;
 }
 
 export const getSummaryBySourcePage = async (pageId?: string): Promise<SummariesResponse | null> => {
@@ -547,4 +576,49 @@ export const upsertReadingProgress = async (
         );
         return await pb.collection(Collections.ReadingProgress).update(fallbackExisting.id, data);
     }
+}
+
+// ── Reader sidebar chat ──────────────────────────────────────────────
+
+export const getSidebarChats = async () => {
+    return await pb.collection(Collections.Chats).getFullList({
+        sort: '-updated',
+        filter: 'type = "reader_sidebar"',
+    });
+}
+
+export const getChatContexts = async (chatId: string) => {
+    return await pb.collection(Collections.ChatContexts).getFullList({
+        filter: `chat = "${chatId}"`,
+        sort: '-created',
+        expand: 'upload,page',
+    });
+}
+
+export const addChatContext = async (data: Create<Collections.ChatContexts>) => {
+    return await pb.collection(Collections.ChatContexts).create(data, {
+        expand: 'upload,page',
+    });
+}
+
+export const removeChatContext = async (id: string) => {
+    return await pb.collection(Collections.ChatContexts).delete(id);
+}
+
+export const sendSidebarChatMessage = async (
+    message: string,
+    chatId?: string,
+) => {
+    return await pb.send<ChatResponseData>(`/api/chat`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': pb.authStore.token,
+        },
+        body: JSON.stringify({
+            message,
+            mode: 'reader_sidebar',
+            chat_id: chatId,
+        }),
+    });
 }

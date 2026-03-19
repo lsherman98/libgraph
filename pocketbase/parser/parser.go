@@ -107,11 +107,9 @@ func (p *Parser) parsePDF(fileBytes []byte, filename string, onPage func(Page) e
 
 	outputPattern := filepath.Join(tmpDir, "page_%d.pdf")
 
-	cmd := exec.Command("pdftk", inputPath, "burst", "output", outputPattern)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("pdftk failed: %w, stderr: %s", err, stderr.String())
+	splitter, err := splitPDFIntoPages(inputPath, outputPattern)
+	if err != nil {
+		return nil, err
 	}
 
 	globPattern := filepath.Join(tmpDir, "page_*.pdf")
@@ -126,7 +124,7 @@ func (p *Parser) parsePDF(fileBytes []byte, filename string, onPage func(Page) e
 		for _, e := range entries {
 			names = append(names, e.Name())
 		}
-		return nil, fmt.Errorf("pdfseparate produced no pages")
+		return nil, fmt.Errorf("%s produced no pages", splitter)
 	}
 
 	sort.Slice(pageFiles, func(i, j int) bool {
@@ -315,6 +313,30 @@ func runMarkitdown(filePath string) (string, error) {
 	}
 
 	return stdout.String(), nil
+}
+
+func splitPDFIntoPages(inputPath string, outputPattern string) (string, error) {
+	if _, err := exec.LookPath("pdftk"); err == nil {
+		cmd := exec.Command("pdftk", inputPath, "burst", "output", outputPattern)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if runErr := cmd.Run(); runErr != nil {
+			return "pdftk", fmt.Errorf("pdftk failed: %w, stderr: %s", runErr, stderr.String())
+		}
+		return "pdftk", nil
+	}
+
+	if _, err := exec.LookPath("pdfseparate"); err == nil {
+		cmd := exec.Command("pdfseparate", inputPath, outputPattern)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if runErr := cmd.Run(); runErr != nil {
+			return "pdfseparate", fmt.Errorf("pdfseparate failed: %w, stderr: %s", runErr, stderr.String())
+		}
+		return "pdfseparate", nil
+	}
+
+	return "", fmt.Errorf("pdf parsing requires a page-splitting tool: install pdftk or pdfseparate")
 }
 
 func sanitizeFilename(name string) string {

@@ -12,6 +12,7 @@ export enum Collections {
 	Otps = "_otps",
 	Superusers = "_superusers",
 	Bookmarks = "bookmarks",
+	ChatContexts = "chat_contexts",
 	Chats = "chats",
 	Collections = "collections",
 	DocumentChunks = "document_chunks",
@@ -126,9 +127,23 @@ export type BookmarksRecord = {
 	user: RecordIdString
 }
 
+export type ChatContextsRecord = {
+	chat?: RecordIdString
+	created: IsoAutoDateString
+	id: string
+	page?: RecordIdString
+	page_from?: number
+	page_to?: number
+	text?: string
+	updated: IsoAutoDateString
+	upload?: RecordIdString
+	user?: RecordIdString
+}
+
 export enum ChatsTypeOptions {
 	"search" = "search",
 	"chat" = "chat",
+	"reader_sidebar" = "reader_sidebar",
 }
 export type ChatsRecord = {
 	created: IsoAutoDateString
@@ -485,6 +500,7 @@ export type MfasResponse<Texpand = unknown> = Required<MfasRecord> & BaseSystemF
 export type OtpsResponse<Texpand = unknown> = Required<OtpsRecord> & BaseSystemFields<Texpand>
 export type SuperusersResponse<Texpand = unknown> = Required<SuperusersRecord> & AuthSystemFields<Texpand>
 export type BookmarksResponse<Texpand = unknown> = Required<BookmarksRecord> & BaseSystemFields<Texpand>
+export type ChatContextsResponse<Texpand = unknown> = Required<ChatContextsRecord> & BaseSystemFields<Texpand>
 export type ChatsResponse<Texpand = unknown> = Required<ChatsRecord> & BaseSystemFields<Texpand>
 export type CollectionsResponse<Texpand = unknown> = Required<CollectionsRecord> & BaseSystemFields<Texpand>
 export type DocumentChunksResponse<Texpand = unknown> = Required<DocumentChunksRecord> & BaseSystemFields<Texpand>
@@ -516,6 +532,7 @@ export type CollectionRecords = {
 	_otps: OtpsRecord
 	_superusers: SuperusersRecord
 	bookmarks: BookmarksRecord
+	chat_contexts: ChatContextsRecord
 	chats: ChatsRecord
 	collections: CollectionsRecord
 	document_chunks: DocumentChunksRecord
@@ -546,6 +563,7 @@ export type CollectionResponses = {
 	_otps: OtpsResponse
 	_superusers: SuperusersResponse
 	bookmarks: BookmarksResponse
+	chat_contexts: ChatContextsResponse
 	chats: ChatsResponse
 	collections: CollectionsResponse
 	document_chunks: DocumentChunksResponse

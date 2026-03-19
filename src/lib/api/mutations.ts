@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createWritingProject, updateWritingProject, deleteWritingProject, createChat, updateChat, deleteChat, createMessage, updateUpload, deleteUpload, createCollection, updateCollection, deleteCollection, sendChatMessage, summarizePage, upsertPreferences, upsertReadingProgress } from "./api";
+import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createWritingProject, updateWritingProject, deleteWritingProject, createChat, updateChat, deleteChat, createMessage, updateUpload, deleteUpload, createCollection, updateCollection, deleteCollection, sendChatMessage, summarizePage, summarizePages, upsertPreferences, upsertReadingProgress, getSidebarChats, addChatContext, removeChatContext, sendSidebarChatMessage } from "./api";
 import { handleError } from "../utils";
 import { Collections, type Create, type Update } from "../pocketbase-types";
 import type { ChatFilters } from "../types";
@@ -473,6 +473,137 @@ export function useSummarizePage() {
             queryClient.invalidateQueries({ queryKey: queryKeys.pages.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.summaries.bySourcePage(pageId) });
             queryClient.invalidateQueries({ queryKey: queryKeys.summaries.all });
+        },
+    });
+}
+
+export function useSummarizePages() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: summarizePages,
+        onError: handleError,
+        onSuccess: (_data, pageIds) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.pages.all });
+            for (const pageId of pageIds) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.summaries.bySourcePage(pageId) });
+            }
+            queryClient.invalidateQueries({ queryKey: queryKeys.summaries.all });
+        },
+    });
+}
+
+// ── Reader sidebar chat mutations ────────────────────────────────────────────
+
+export function useAddChatContext() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: addChatContext,
+        onError: handleError,
+        onSuccess: (data) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.chatContexts.byChat(data.chat) });
+        },
+    });
+}
+
+export function useRemoveChatContext() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: removeChatContext,
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.chatContexts.all });
+        },
+    });
+}
+
+export function useCreateSidebarChat() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: createChat,
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.sidebarChats.all });
+        },
+    });
+}
+
+export function useDeleteSidebarChat() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: deleteChat,
+        onError: handleError,
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.sidebarChats.all });
+        },
+    });
+}
+
+interface SendSidebarMessageOptions {
+    activeChatId: string | undefined;
+    setActiveChatId: (id: string) => void;
+    setInput: (value: string) => void;
+}
+
+export function useSendSidebarMessage({
+    activeChatId,
+    setActiveChatId,
+    setInput,
+}: SendSidebarMessageOptions) {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (message: string) => {
+            return sendSidebarChatMessage(message, activeChatId);
+        },
+        onMutate: async (message) => {
+            setInput("");
+
+            if (activeChatId) {
+                const messagesKey = queryKeys.messages.byChat(activeChatId);
+                await queryClient.cancelQueries({ queryKey: messagesKey });
+                const previousMessages = queryClient.getQueryData(messagesKey);
+                queryClient.setQueryData(messagesKey, (old: any[] | null) => [
+                    ...(old || []),
+                    {
+                        id: "optimistic-user-" + Date.now(),
+                        role: "user",
+                        content: message,
+                        created: new Date().toISOString(),
+                    },
+                    {
+                        id: "optimistic-loading-" + Date.now(),
+                        role: "assistant",
+                        content: "",
+                        isLoading: true,
+                        created: new Date().toISOString(),
+                    },
+                ]);
+
+                return { previousMessages, chatId: activeChatId };
+            }
+
+            return { previousMessages: null, chatId: null };
+        },
+        onSuccess: (data) => {
+            if (!activeChatId) {
+                setActiveChatId(data.chat_id);
+            }
+
+            queryClient.invalidateQueries({ queryKey: queryKeys.messages.byChat(data.chat_id) });
+            queryClient.invalidateQueries({ queryKey: queryKeys.sidebarChats.all });
+        },
+        onError: (_error, _message, context) => {
+            if (context?.chatId && context?.previousMessages) {
+                queryClient.setQueryData(
+                    queryKeys.messages.byChat(context.chatId),
+                    context.previousMessages,
+                );
+            }
         },
     });
 }

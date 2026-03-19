@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useInfiniteQuery } from "@tanstack/react-query";
-import { getPeople, getPublications, getFirstPage, getPageByNumber, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection, fullTextSearch, getPreferences, getReadingProgress, getSummaryBySourcePage, getSummaryBySourceUpload } from "./api";
+import { getPeople, getPublications, getFirstPage, getPageByNumber, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection, fullTextSearch, getPreferences, getReadingProgress, getSummaryBySourcePage, getSummaryBySourceUpload, getSidebarChats, getChatContexts } from "./api";
 import type { UploadFilters } from "./api";
 import type { NodesTypeOptions } from "../pocketbase-types";
 import { queryKeys } from "./queryKeys";
@@ -286,6 +286,23 @@ export function useMessages(chatId?: string) {
     return useQuery({
         queryKey: queryKeys.messages.byChat(chatId),
         queryFn: () => getMessages(chatId),
+        enabled: !!chatId,
+        placeholderData: keepPreviousData,
+    });
+}
+
+export function useSidebarChats() {
+    return useQuery({
+        queryKey: queryKeys.sidebarChats.list(),
+        queryFn: getSidebarChats,
+        placeholderData: keepPreviousData,
+    });
+}
+
+export function useChatContexts(chatId?: string) {
+    return useQuery({
+        queryKey: queryKeys.chatContexts.byChat(chatId),
+        queryFn: () => getChatContexts(chatId!),
         enabled: !!chatId,
         placeholderData: keepPreviousData,
     });

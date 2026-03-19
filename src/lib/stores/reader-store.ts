@@ -72,6 +72,8 @@ interface ReaderStore {
     setNavigateToPage: (fn: ((pageNumber: number, blockId?: string) => void) | null) => void;
     editorState: EditorState | null;
     setEditorState: (state: EditorState | null) => void;
+    pendingChatText: string | null;
+    setPendingChatText: (text: string | null) => void;
 }
 
 export const useReaderStore = create<ReaderStore>((set) => ({
@@ -86,4 +88,6 @@ export const useReaderStore = create<ReaderStore>((set) => ({
     setNavigateToPage: (fn) => set({ navigateToPage: fn }),
     editorState: null,
     setEditorState: (state) => set({ editorState: state }),
+    pendingChatText: null,
+    setPendingChatText: (text) => set({ pendingChatText: text }),
 }));

@@ -95,6 +95,15 @@ export const queryKeys = {
         detail: (id: string) =>
             [...queryKeys.chats.all, "detail", id] as const,
     },
+    sidebarChats: {
+        all: ["sidebarChats"] as const,
+        list: () => ["sidebarChats", "list"] as const,
+    },
+    chatContexts: {
+        all: ["chatContexts"] as const,
+        byChat: (chatId?: string) =>
+            ["chatContexts", chatId] as const,
+    },
     messages: {
         all: ["messages"] as const,
         byChat: (chatId?: string) =>

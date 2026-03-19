@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/google/generative-ai-go/genai"
@@ -24,10 +25,11 @@ import (
 var geminiClient *genai.Client
 
 type pageSummarizePayload struct {
-	PageID       string `json:"page_id"`
-	UserID       string `json:"user_id"`
-	UploadID     string `json:"upload_id,omitempty"`
-	FullDocument bool   `json:"full_document,omitempty"`
+	PageID       string   `json:"page_id"`
+	PageIDs      []string `json:"page_ids,omitempty"`
+	UserID       string   `json:"user_id"`
+	UploadID     string   `json:"upload_id,omitempty"`
+	FullDocument bool     `json:"full_document,omitempty"`
 }
 
 func Init(app *pocketbase.PocketBase) error {
@@ -68,6 +70,21 @@ func Init(app *pocketbase.PocketBase) error {
 			}
 
 			chatID := body.ChatID
+
+			// For reader_sidebar mode, load context from chat_contexts collection
+			var sidebarContexts []chatPromptContext
+			if body.Mode == "reader_sidebar" && chatID != "" {
+				resolvedContexts, err := loadSidebarPromptContexts(app, chatID, userID)
+				if err != nil {
+					app.Logger().Error("[chat/reader_sidebar] failed to load chat contexts", "error", err)
+					return e.InternalServerError("failed to load chat contexts", err)
+				}
+				if len(resolvedContexts) == 0 {
+					return e.BadRequestError("at least one context item is required", nil)
+				}
+				sidebarContexts = resolvedContexts
+			}
+
 			if chatID == "" {
 				title := body.Message
 				if len(title) > 80 {
@@ -114,6 +131,51 @@ func Init(app *pocketbase.PocketBase) error {
 				return e.JSON(http.StatusOK, ChatResponse{
 					ChatID:             chatID,
 					Sources:            sources,
+					UserMessageID:      userMsgID,
+					AssistantMessageID: assistantMsgID,
+				})
+			}
+
+			if body.Mode == "reader_sidebar" {
+				systemPrompt := buildPromptWithSidebarContext(sidebarContexts)
+
+				history, err := loadChatHistory(app, chatID)
+				if err != nil {
+					app.Logger().Error("[chat] failed to load chat history", "error", err)
+					return e.InternalServerError("failed to load chat history", err)
+				}
+
+				modelName := os.Getenv("GEMINI_MODEL")
+				if modelName == "" {
+					modelName = "gemini-2.5-flash"
+				}
+
+				model := geminiClient.GenerativeModel(modelName)
+				model.Temperature = floatPtr(0.2)
+				model.SystemInstruction = genai.NewUserContent(genai.Text(systemPrompt))
+
+				cs := model.StartChat()
+				cs.History = buildGeminiHistory(history)
+
+				resp, err := cs.SendMessage(context.Background(), genai.Text(body.Message))
+				if err != nil {
+					app.Logger().Error("[chat] Gemini request failed", "error", err)
+					return e.InternalServerError("chat request failed", err)
+				}
+
+				answer := strings.TrimSpace(extractResponseText(resp))
+				if answer == "" {
+					answer = "I couldn't generate a response from the provided context."
+				}
+
+				assistantMsgID, err := saveMessage(app, chatID, userID, "assistant", answer, nil)
+				if err != nil {
+					return e.InternalServerError("failed to save assistant message", err)
+				}
+
+				return e.JSON(http.StatusOK, ChatResponse{
+					ChatID:             chatID,
+					Message:            answer,
 					UserMessageID:      userMsgID,
 					AssistantMessageID: assistantMsgID,
 				})
@@ -236,6 +298,111 @@ func Init(app *pocketbase.PocketBase) error {
 			})
 		}).Bind(apis.RequireAuth())
 
+		se.Router.POST("/api/pages/summarize", func(e *core.RequestEvent) error {
+			body := PageSummaryBatchRequest{}
+			if err := e.BindBody(&body); err != nil {
+				return e.BadRequestError("invalid request body", err)
+			}
+
+			if len(body.PageIDs) == 0 {
+				return e.BadRequestError("page_ids is required", nil)
+			}
+
+			userID := e.Auth.Id
+			requestedIDs := make([]string, 0, len(body.PageIDs))
+			seenIDs := map[string]struct{}{}
+			for _, rawID := range body.PageIDs {
+				pageID := strings.TrimSpace(rawID)
+				if pageID == "" {
+					continue
+				}
+				if _, exists := seenIDs[pageID]; exists {
+					continue
+				}
+				seenIDs[pageID] = struct{}{}
+				requestedIDs = append(requestedIDs, pageID)
+			}
+
+			if len(requestedIDs) == 0 {
+				return e.BadRequestError("at least one valid page id is required", nil)
+			}
+
+			pages := make([]*core.Record, 0, len(requestedIDs))
+			uploadID := ""
+			for _, pageID := range requestedIDs {
+				pageRecord, err := app.FindRecordById(collections.Pages, pageID)
+				if err != nil {
+					return e.NotFoundError("page not found", err)
+				}
+
+				if pageRecord.GetString("user") != userID {
+					return e.NotFoundError("page not found", nil)
+				}
+
+				pageUploadID := strings.TrimSpace(pageRecord.GetString("upload"))
+				if pageUploadID == "" {
+					return e.BadRequestError("page upload is required", nil)
+				}
+
+				if uploadID == "" {
+					uploadID = pageUploadID
+				} else if uploadID != pageUploadID {
+					return e.BadRequestError("all selected pages must belong to the same upload", nil)
+				}
+
+				pages = append(pages, pageRecord)
+			}
+
+			uploadRecord, err := app.FindRecordById(collections.Uploads, uploadID)
+			if err != nil {
+				return e.NotFoundError("upload not found", err)
+			}
+			uploadType := strings.TrimSpace(uploadRecord.GetString("type"))
+			if uploadType == "summary" {
+				return e.BadRequestError("cannot summarize summary uploads", nil)
+			}
+			if uploadType != "book" && len(pages) > 1 {
+				return e.BadRequestError("multiple page summary is only supported for books", nil)
+			}
+
+			sort.Slice(pages, func(i, j int) bool {
+				return pages[i].GetInt("page") < pages[j].GetInt("page")
+			})
+
+			sortedIDs := make([]string, 0, len(pages))
+			for _, pageRecord := range pages {
+				sortedIDs = append(sortedIDs, pageRecord.Id)
+			}
+
+			firstPage := pages[0].GetInt("page")
+			lastPage := pages[len(pages)-1].GetInt("page")
+			dedupeKey := fmt.Sprintf("page.summarize.range:%s:%s:%d-%d", userID, uploadID, firstPage, lastPage)
+
+			if err := processing.Enqueue(app, processing.EnqueueRequest{
+				JobType:   processing.JobTypePageSummarize,
+				DedupeKey: dedupeKey,
+				Payload: map[string]any{
+					"page_ids":  sortedIDs,
+					"user_id":   userID,
+					"upload_id": uploadID,
+				},
+				Priority:    80,
+				MaxAttempts: 5,
+				UserID:      userID,
+				UploadID:    uploadID,
+				PageID:      sortedIDs[0],
+			}); err != nil {
+				app.Logger().Error("[summarize] failed to enqueue page range summary", "pageIds", sortedIDs, "error", err)
+				return e.InternalServerError("failed to enqueue summary", err)
+			}
+
+			return e.JSON(http.StatusAccepted, PageSummaryBatchQueuedResponse{
+				Status:    "queued",
+				PageIDs:   sortedIDs,
+				DedupeKey: dedupeKey,
+			})
+		}).Bind(apis.RequireAuth())
+
 		return se.Next()
 	})
 
@@ -252,8 +419,16 @@ func handlePageSummarizeJob(app *pocketbase.PocketBase, job *core.Record) error 
 		return fmt.Errorf("invalid payload_json: %w", err)
 	}
 
-	if strings.TrimSpace(payload.PageID) == "" || strings.TrimSpace(payload.UserID) == "" {
-		return fmt.Errorf("payload page_id and user_id are required")
+	if strings.TrimSpace(payload.UserID) == "" {
+		return fmt.Errorf("payload user_id is required")
+	}
+
+	if len(payload.PageIDs) > 0 {
+		return handlePageRangeSummarizeJob(app, payload)
+	}
+
+	if strings.TrimSpace(payload.PageID) == "" {
+		return fmt.Errorf("payload page_id is required")
 	}
 
 	pageRecord, err := app.FindRecordById(collections.Pages, payload.PageID)
@@ -346,6 +521,157 @@ func handlePageSummarizeJob(app *pocketbase.PocketBase, job *core.Record) error 
 	return err
 }
 
+func handlePageRangeSummarizeJob(app *pocketbase.PocketBase, payload pageSummarizePayload) error {
+	cleanIDs := make([]string, 0, len(payload.PageIDs))
+	seenIDs := map[string]struct{}{}
+	for _, rawID := range payload.PageIDs {
+		pageID := strings.TrimSpace(rawID)
+		if pageID == "" {
+			continue
+		}
+		if _, exists := seenIDs[pageID]; exists {
+			continue
+		}
+		seenIDs[pageID] = struct{}{}
+		cleanIDs = append(cleanIDs, pageID)
+	}
+
+	if len(cleanIDs) == 0 {
+		return fmt.Errorf("payload page_ids is required")
+	}
+
+	pages := make([]*core.Record, 0, len(cleanIDs))
+	uploadID := strings.TrimSpace(payload.UploadID)
+	for _, pageID := range cleanIDs {
+		pageRecord, err := app.FindRecordById(collections.Pages, pageID)
+		if err != nil {
+			return err
+		}
+		if pageRecord.GetString("user") != payload.UserID {
+			return fmt.Errorf("page %s does not belong to user %s", pageID, payload.UserID)
+		}
+
+		pageUploadID := strings.TrimSpace(pageRecord.GetString("upload"))
+		if pageUploadID == "" {
+			return fmt.Errorf("page %s missing upload relation", pageID)
+		}
+
+		if uploadID == "" {
+			uploadID = pageUploadID
+		} else if uploadID != pageUploadID {
+			return fmt.Errorf("all pages in page_ids must belong to the same upload")
+		}
+
+		pages = append(pages, pageRecord)
+	}
+
+	uploadRecord, err := app.FindRecordById(collections.Uploads, uploadID)
+	if err != nil {
+		return err
+	}
+	uploadType := strings.TrimSpace(uploadRecord.GetString("type"))
+	if uploadType == "summary" {
+		return fmt.Errorf("cannot summarize summary upload %s", uploadID)
+	}
+	if uploadType != "book" && len(pages) > 1 {
+		return fmt.Errorf("multiple page summary is only supported for books")
+	}
+
+	sort.Slice(pages, func(i, j int) bool {
+		return pages[i].GetInt("page") < pages[j].GetInt("page")
+	})
+
+	allMarkdown := strings.Builder{}
+	for _, pageRecord := range pages {
+		pageMarkdown, readErr := ReadPageMarkdown(app, pageRecord)
+		if readErr != nil {
+			return readErr
+		}
+		trimmed := strings.TrimSpace(pageMarkdown)
+		if trimmed == "" {
+			continue
+		}
+		if allMarkdown.Len() > 0 {
+			allMarkdown.WriteString("\n\n")
+		}
+		allMarkdown.WriteString(fmt.Sprintf("## Page %d\n\n%s", pageRecord.GetInt("page"), trimmed))
+	}
+
+	summary, err := GenerateDocumentSummary(allMarkdown.String())
+	if err != nil {
+		return err
+	}
+
+	primaryPage := pages[0]
+	primarySummaryRecord, summaryUploadRecord, summaryPageRecord, err := UpsertPageSummaryArtifact(app, primaryPage, payload.UserID, summary, true)
+	if err != nil {
+		return err
+	}
+
+	minPage := pages[0].GetInt("page")
+	maxPage := pages[len(pages)-1].GetInt("page")
+	baseTitle := strings.TrimSpace(uploadRecord.GetString("title"))
+	if baseTitle == "" {
+		baseTitle = "Untitled"
+	}
+
+	if minPage == maxPage {
+		summaryUploadRecord.Set("title", fmt.Sprintf("%s — Summary (Page %d)", baseTitle, minPage))
+	} else {
+		summaryUploadRecord.Set("title", fmt.Sprintf("%s — Summary (Pages %d–%d)", baseTitle, minPage, maxPage))
+	}
+	if saveErr := app.Save(summaryUploadRecord); saveErr != nil {
+		return saveErr
+	}
+
+	for _, sourcePageRecord := range pages[1:] {
+		if err := upsertSummaryLinkRecord(app, sourcePageRecord, payload.UserID, summaryUploadRecord.Id, summaryPageRecord.Id); err != nil {
+			return err
+		}
+	}
+
+	if primarySummaryRecord.GetString("source_page") != primaryPage.Id || primarySummaryRecord.GetString("source_upload") != uploadID {
+		if err := upsertSummaryLinkRecord(app, primaryPage, payload.UserID, summaryUploadRecord.Id, summaryPageRecord.Id); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func upsertSummaryLinkRecord(app *pocketbase.PocketBase, sourcePageRecord *core.Record, userID, summaryUploadID, summaryPageID string) error {
+	summariesCollection, err := app.FindCollectionByNameOrId(collections.Summaries)
+	if err != nil {
+		return err
+	}
+
+	summaryRecord, err := app.FindFirstRecordByFilter(
+		collections.Summaries,
+		"user = {:userId} && source_page = {:sourcePage}",
+		dbx.Params{"userId": userID, "sourcePage": sourcePageRecord.Id},
+	)
+
+	sourceUploadID := strings.TrimSpace(sourcePageRecord.GetString("upload"))
+	if sourceUploadID == "" {
+		return fmt.Errorf("source page missing upload relation")
+	}
+
+	if err != nil {
+		summaryRecord = core.NewRecord(summariesCollection)
+		summaryRecord.Set("user", userID)
+		summaryRecord.Set("source_page", sourcePageRecord.Id)
+	}
+
+	summaryRecord.Set("source_upload", sourceUploadID)
+	summaryRecord.Set("summary_upload", summaryUploadID)
+	summaryRecord.Set("summary_page", summaryPageID)
+	summaryRecord.Set("scope", "page")
+	summaryRecord.Set("status", "success")
+	summaryRecord.Set("error", "")
+
+	return app.Save(summaryRecord)
+}
+
 func loadChatHistory(app *pocketbase.PocketBase, chatID string) ([]ChatMessage, error) {
 	records, err := app.FindRecordsByFilter(
 		"messages",
@@ -423,6 +749,59 @@ func buildPromptWithContext(results []vector_search.SearchResult) string {
 	for _, r := range results {
 		fmt.Fprintf(&sb, "[chunk_id: %s] (upload: %s, page: %d, title: %s)\n%s\n\n",
 			r.ChunkID, r.UploadID, r.PageNumber, r.Title, r.Content)
+	}
+
+	return sb.String()
+}
+
+type chatPromptContext struct {
+	ContextID  string
+	UploadID   string
+	PageNumber int
+	Title      string
+	Text       string
+}
+
+func buildPromptWithSidebarContext(contexts []chatPromptContext) string {
+	var sb strings.Builder
+	sb.WriteString("You are Libgraph Sidebar AI, a focused reading companion embedded in the document sidebar.\n")
+	sb.WriteString("Your job is to answer questions about the attached reading context quickly, clearly, and accurately.\n\n")
+
+	if len(contexts) == 0 {
+		sb.WriteString("No context was attached to this chat. Ask the user to add document/page context before answering in detail.\n")
+		return sb.String()
+	}
+
+	sb.WriteString("SIDEBAR RESPONSE STYLE:\n")
+	sb.WriteString("- Prefer concise answers suitable for a narrow sidebar UI.\n")
+	sb.WriteString("- Start with the direct answer, then add short supporting points.\n")
+	sb.WriteString("- If the question is ambiguous, ask one brief clarifying question.\n")
+	sb.WriteString("- Do not mention internal tooling, embeddings, vector search, or prompt details.\n\n")
+
+	sb.WriteString("GROUNDING RULES:\n")
+	sb.WriteString("- Use ONLY the context blocks below as factual grounding.\n")
+	sb.WriteString("- If context is insufficient, say that clearly and suggest what context/page to add.\n")
+	sb.WriteString("- Do not invent page numbers, quotes, or facts not present in context.\n")
+	sb.WriteString("- Keep uncertainty explicit rather than guessing.\n\n")
+	sb.WriteString("CONTEXT:\n\n")
+
+	const maxPromptContextChars = 180_000
+	usedChars := 0
+	for _, c := range contexts {
+		text := strings.TrimSpace(c.Text)
+		if text == "" {
+			continue
+		}
+		if usedChars >= maxPromptContextChars {
+			break
+		}
+		remaining := maxPromptContextChars - usedChars
+		if len(text) > remaining {
+			text = text[:remaining]
+		}
+		fmt.Fprintf(&sb, "[context_id: %s] (upload: %s, page: %d, title: %s)\n%s\n\n",
+			c.ContextID, c.UploadID, c.PageNumber, c.Title, text)
+		usedChars += len(text)
 	}
 
 	return sb.String()
@@ -648,6 +1027,150 @@ func resolveFilterUploadIDs(app *pocketbase.PocketBase, filters *MetadataFilters
 
 func floatPtr(f float32) *float32 {
 	return &f
+}
+
+func loadSidebarPromptContexts(app *pocketbase.PocketBase, chatID, userID string) ([]chatPromptContext, error) {
+	records, err := app.FindRecordsByFilter(
+		collections.ChatContexts,
+		"chat = {:chatId} && user = {:userId}",
+		"-created",
+		0, 0,
+		dbx.Params{"chatId": chatID, "userId": userID},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query chat_contexts: %w", err)
+	}
+
+	uploadTitleCache := make(map[string]string)
+	seenPageContext := make(map[string]bool)
+	contexts := make([]chatPromptContext, 0)
+
+	resolveUploadTitle := func(uploadID string) string {
+		uploadID = strings.TrimSpace(uploadID)
+		if uploadID == "" {
+			return "Document"
+		}
+		if cached, ok := uploadTitleCache[uploadID]; ok {
+			return cached
+		}
+		uploadRecord, err := app.FindRecordById(collections.Uploads, uploadID)
+		if err != nil {
+			app.Logger().Warn("[chat/reader_sidebar] failed to resolve upload title", "upload_id", uploadID, "error", err)
+			uploadTitleCache[uploadID] = "Document"
+			return "Document"
+		}
+		title := strings.TrimSpace(uploadRecord.GetString("title"))
+		if title == "" {
+			title = "Document"
+		}
+		uploadTitleCache[uploadID] = title
+		return title
+	}
+
+	appendPageContext := func(pageRecord *core.Record, contextID string) {
+		if pageRecord == nil {
+			return
+		}
+		pageID := strings.TrimSpace(pageRecord.Id)
+		if pageID == "" || seenPageContext[pageID] {
+			return
+		}
+		markdown, readErr := ReadPageMarkdown(app, pageRecord)
+		if readErr != nil {
+			app.Logger().Warn("[chat/reader_sidebar] failed to read page markdown", "page_id", pageID, "error", readErr)
+			return
+		}
+		trimmed := strings.TrimSpace(markdown)
+		if trimmed == "" {
+			return
+		}
+
+		uploadID := strings.TrimSpace(pageRecord.GetString("upload"))
+		contexts = append(contexts, chatPromptContext{
+			ContextID:  contextID,
+			UploadID:   uploadID,
+			PageNumber: pageRecord.GetInt("page"),
+			Title:      resolveUploadTitle(uploadID),
+			Text:       trimmed,
+		})
+		seenPageContext[pageID] = true
+	}
+
+	for _, r := range records {
+		uploadID := strings.TrimSpace(r.GetString("upload"))
+		pageID := strings.TrimSpace(r.GetString("page"))
+
+		if txt := strings.TrimSpace(r.GetString("text")); txt != "" {
+			pageNumber := 0
+			resolvedUploadID := uploadID
+			if pageID != "" {
+				pageRecord, pageErr := app.FindRecordById(collections.Pages, pageID)
+				if pageErr == nil {
+					resolvedUploadID = strings.TrimSpace(pageRecord.GetString("upload"))
+					pageNumber = pageRecord.GetInt("page")
+				}
+			}
+			contexts = append(contexts, chatPromptContext{
+				ContextID:  "ctx-text-" + r.Id,
+				UploadID:   resolvedUploadID,
+				PageNumber: pageNumber,
+				Title:      resolveUploadTitle(resolvedUploadID),
+				Text:       txt,
+			})
+		}
+
+		pFrom := r.GetInt("page_from")
+		pTo := r.GetInt("page_to")
+		if pFrom > 0 && pTo >= pFrom && uploadID != "" {
+			pageRecords, pageErr := app.FindRecordsByFilter(
+				collections.Pages,
+				"upload = {:uploadId} && page >= {:fromPage} && page <= {:toPage}",
+				"page",
+				0,
+				0,
+				dbx.Params{"uploadId": uploadID, "fromPage": pFrom, "toPage": pTo},
+			)
+			if pageErr != nil {
+				app.Logger().Warn("[chat/reader_sidebar] failed to resolve page range context", "upload_id", uploadID, "from", pFrom, "to", pTo, "error", pageErr)
+			} else {
+				for _, pageRecord := range pageRecords {
+					appendPageContext(pageRecord, "ctx-page-"+pageRecord.Id)
+				}
+			}
+			continue
+		}
+
+		if pageID != "" {
+			pageRecord, err := app.FindRecordById(collections.Pages, pageID)
+			if err != nil {
+				app.Logger().Error("[chat/reader_sidebar] failed to resolve page to upload",
+					"page_id", pageID, "error", err)
+				continue
+			}
+			appendPageContext(pageRecord, "ctx-page-"+pageID)
+			continue
+		}
+
+		if uploadID != "" {
+			pageRecords, pageErr := app.FindRecordsByFilter(
+				collections.Pages,
+				"upload = {:uploadId}",
+				"page",
+				0,
+				0,
+				dbx.Params{"uploadId": uploadID},
+			)
+			if pageErr != nil {
+				app.Logger().Warn("[chat/reader_sidebar] failed to resolve upload context pages", "upload_id", uploadID, "error", pageErr)
+				continue
+			}
+			for _, pageRecord := range pageRecords {
+				appendPageContext(pageRecord, "ctx-page-"+pageRecord.Id)
+			}
+		}
+	}
+
+	return contexts, nil
 }
 
 func ReadPageMarkdown(app *pocketbase.PocketBase, pageRecord *core.Record) (string, error) {

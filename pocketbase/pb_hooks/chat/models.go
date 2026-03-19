@@ -2,7 +2,7 @@ package chat
 
 type ChatRequest struct {
 	Message string           `json:"message"`
-	Mode    string           `json:"mode,omitempty"` // "chat" or "search"
+	Mode    string           `json:"mode,omitempty"` // "chat", "search", or "reader_sidebar"
 	ChatID  string           `json:"chat_id,omitempty"`
 	Filters *MetadataFilters `json:"filters,omitempty"`
 }
@@ -65,4 +65,14 @@ type PageSummaryQueuedResponse struct {
 	Status    string `json:"status"`
 	PageID    string `json:"page_id"`
 	DedupeKey string `json:"dedupe_key"`
+}
+
+type PageSummaryBatchRequest struct {
+	PageIDs []string `json:"page_ids"`
+}
+
+type PageSummaryBatchQueuedResponse struct {
+	Status    string   `json:"status"`
+	PageIDs   []string `json:"page_ids"`
+	DedupeKey string   `json:"dedupe_key"`
 }

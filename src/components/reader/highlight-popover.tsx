@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { MessageSquarePlus } from "lucide-react";
+import { MessageSquarePlus, Bot } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HighlightsColorOptions } from "@/lib/pocketbase-types";
 import { HIGHLIGHT_COLORS } from "@/lib/constants/highlight-colors";
@@ -20,6 +20,7 @@ interface HighlightPopoverProps {
   selectionRange: Range | null;
   onHighlight: (color: HighlightsColorOptions, note?: string, tags?: string[]) => void;
   onOpenEditor: () => void;
+  onChatWithText?: () => void;
   onDismiss: () => void;
 }
 
@@ -29,6 +30,7 @@ export function HighlightPopover({
   selectionRange: _selectionRange,
   onHighlight,
   onOpenEditor,
+  onChatWithText,
   onDismiss,
 }: HighlightPopoverProps) {
   const popoverRef = useDismissPopover<HTMLDivElement>(onDismiss);
@@ -81,6 +83,21 @@ export function HighlightPopover({
           >
             <MessageSquarePlus className="h-3.5 w-3.5" />
           </Button>
+          {onChatWithText && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={onChatWithText}
+              title="Chat with selected text"
+            >
+              <Bot className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       </div>
     </div>
