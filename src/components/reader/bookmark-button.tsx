@@ -36,6 +36,7 @@ export function BlockActions({
   className,
 }: BlockActionsProps) {
   const setEditorState = useReaderStore((state) => state.setEditorState);
+  const setAnnotationTab = useReaderStore((state) => state.setAnnotationTab);
   const { setOpenRight } = useSidebar();
 
   const openSidebar = () => {
@@ -67,6 +68,7 @@ export function BlockActions({
         },
       });
     }
+    setAnnotationTab("bookmarks");
     openSidebar();
   };
 
@@ -95,6 +97,7 @@ export function BlockActions({
         },
       });
     }
+    setAnnotationTab("notes");
     openSidebar();
   };
 
@@ -108,7 +111,15 @@ export function BlockActions({
           isBookmarked ? "text-amber-500 opacity-100" : "opacity-0 group-hover:opacity-60 hover:opacity-100",
         )}
         title={isBookmarked ? "Edit bookmark" : "Add bookmark"}
-        onClick={handleBookmarkClick}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handleBookmarkClick();
+        }}
       >
         {isBookmarked ? <BookmarkCheck className="h-4 w-4" /> : <Bookmark className="h-4 w-4" />}
       </Button>
@@ -117,7 +128,15 @@ export function BlockActions({
         size="icon"
         className={cn("h-6 w-6 transition-opacity", hasNote ? "text-blue-500 opacity-100" : "opacity-0 group-hover:opacity-60 hover:opacity-100")}
         title={hasNote ? "Edit note" : "Add note"}
-        onClick={handleNoteClick}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handleNoteClick();
+        }}
       >
         <StickyNote className="h-4 w-4" />
       </Button>

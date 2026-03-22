@@ -15,7 +15,7 @@ interface ChatHistorySidebarProps {
   onSelectChat: (chatId: string) => void;
   onNewChat: () => void;
   onDeleteChat: (chatId: string) => void;
-  mode?: "chat" | "search";
+  mode: "chat" | "search";
 }
 
 export function ChatHistorySidebar({ activeChatId, onSelectChat, onNewChat, onDeleteChat, mode }: ChatHistorySidebarProps) {

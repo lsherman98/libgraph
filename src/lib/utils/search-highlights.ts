@@ -130,10 +130,10 @@ export function updateActiveSearchHighlight(pageNumber: number, highlightIndexOn
 }
 
 export function reconnectSearchObserver(
-    observerRef: React.MutableRefObject<MutationObserver | null>,
-    timerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
+    observerRef: React.RefObject<MutationObserver | null>,
+    timerRef: React.RefObject<ReturnType<typeof setTimeout> | null>,
     query: string,
-    activeMatchRef: React.MutableRefObject<{ pageNumber: number; highlightIndex: number }>,
+    activeMatchRef: React.RefObject<{ pageNumber: number; highlightIndex: number }>,
 ) {
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = null;

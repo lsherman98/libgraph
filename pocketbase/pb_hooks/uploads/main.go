@@ -42,7 +42,6 @@ var (
 )
 
 const (
-	optimizedAudioSuffix                 = "_optimized"
 	maxTranscriptionAudioDurationSeconds = 60 * 60
 )
 
@@ -66,38 +65,30 @@ func Init(app *pocketbase.PocketBase) error {
 		}
 
 		routine.FireAndForget(func() {
-			uploadRecord, findErr := app.FindRecordById(collections.Uploads, uploadID)
-			if findErr != nil {
-				app.Logger().Error("[uploads] failed to reload upload for async enqueue", "uploadId", uploadID, "error", findErr)
+			uploadRecord, err := app.FindRecordById(collections.Uploads, uploadID)
+			if err != nil {
 				return
 			}
 
-			if strings.EqualFold(uploadRecord.GetString("type"), vars.UploadTypeSummary) {
+			if uploadRecord.GetString("type") == vars.UploadTypeSummary {
 				return
 			}
 
 			uploadRecord.Set("status", vars.UploadStatusProcessing)
-			if saveErr := app.Save(uploadRecord); saveErr != nil {
-				app.Logger().Error("[uploads] failed to set upload status=PROCESSING", "uploadId", uploadID, "error", saveErr)
-			}
+			app.Save(uploadRecord)
 
-			enqueueErr := processing.Enqueue(app, processing.EnqueueRequest{
+			err = processing.Enqueue(app, processing.EnqueueRequest{
 				JobType:   processing.JobTypeUploadParseOrTranscribe,
 				DedupeKey: "upload.parse_or_transcribe:" + uploadID,
 				Payload: map[string]any{
 					"upload_id": uploadID,
 				},
-				Priority:    50,
-				MaxAttempts: 5,
-				UserID:      uploadRecord.GetString("user"),
-				UploadID:    uploadID,
+				UserID:   uploadRecord.GetString("user"),
+				UploadID: uploadID,
 			})
-			if enqueueErr != nil {
+			if err != nil {
 				uploadRecord.Set("status", vars.UploadStatusFailed)
-				if saveErr := app.Save(uploadRecord); saveErr != nil {
-					app.Logger().Error("[uploads] failed to set upload status=FAILED after enqueue failure", "uploadId", uploadID, "error", saveErr)
-				}
-				app.Logger().Error("[uploads] failed to enqueue upload processing", "uploadId", uploadID, "error", enqueueErr)
+				app.Save(uploadRecord)
 			}
 		})
 
@@ -133,14 +124,13 @@ func Init(app *pocketbase.PocketBase) error {
 				continue
 			}
 
-			summaryUploadRecord, findErr := app.FindRecordById(collections.Uploads, summaryUploadID)
-			if findErr != nil {
-				app.Logger().Warn("[uploads] failed to find linked summary upload during source upload delete", "sourceUploadId", uploadID, "summaryUploadId", summaryUploadID, "error", findErr)
+			summaryUploadRecord, err := app.FindRecordById(collections.Uploads, summaryUploadID)
+			if err != nil {
 				continue
 			}
 
-			if deleteErr := app.Delete(summaryUploadRecord); deleteErr != nil {
-				return deleteErr
+			if err := app.Delete(summaryUploadRecord); err != nil {
+				return err
 			}
 
 			deletedSummaryUploads[summaryUploadID] = struct{}{}
@@ -151,14 +141,14 @@ func Init(app *pocketbase.PocketBase) error {
 
 	app.OnRecordAfterUpdateSuccess(collections.Uploads).BindFunc(func(e *core.RecordEvent) error {
 		record := e.Record
-		newFile := strings.TrimSpace(record.GetString("file"))
+		newFile := record.GetString("file")
 		if newFile == "" {
 			return e.Next()
 		}
 
 		oldFile := ""
 		if original := record.Original(); original != nil {
-			oldFile = strings.TrimSpace(original.GetString("file"))
+			oldFile = original.GetString("file")
 		}
 
 		if newFile == oldFile {
@@ -175,20 +165,14 @@ func Init(app *pocketbase.PocketBase) error {
 		}
 
 		routine.FireAndForget(func() {
-			uploadRecord, findErr := app.FindRecordById(collections.Uploads, uploadID)
-			if findErr != nil {
-				app.Logger().Error("[uploads] failed to reload upload for audio optimization", "uploadId", uploadID, "error", findErr)
+			uploadRecord, err := app.FindRecordById(collections.Uploads, uploadID)
+			if err != nil {
 				return
 			}
 
-			optimized, optimizeErr := optimizeAudioUploadFile(app, uploadRecord)
-			if optimizeErr != nil {
-				app.Logger().Warn("[uploads] audio optimization failed; continuing with original file", "uploadId", uploadID, "error", optimizeErr)
+			_, err = optimizeAudioUploadFile(app, uploadRecord)
+			if err != nil {
 				return
-			}
-
-			if optimized {
-				app.Logger().Info("[uploads] optimized updated audio file", "uploadId", uploadID, "file", uploadRecord.GetString("file"))
 			}
 		})
 
@@ -200,16 +184,12 @@ func Init(app *pocketbase.PocketBase) error {
 
 func isOptimizedAudioFilename(filename string) bool {
 	name := strings.TrimSpace(filename)
-	if name == "" {
-		return false
-	}
-
 	base := strings.ToLower(filepath.Base(name))
-	return strings.HasSuffix(base, optimizedAudioSuffix+".ogg")
+	return strings.HasSuffix(base, ".ogg")
 }
 
 func optimizeAudioUploadFile(app *pocketbase.PocketBase, upload *core.Record) (bool, error) {
-	sourceFile := strings.TrimSpace(upload.GetString("file"))
+	sourceFile := upload.GetString("file")
 	if sourceFile == "" {
 		return false, fmt.Errorf("upload file is empty")
 	}
@@ -222,26 +202,26 @@ func optimizeAudioUploadFile(app *pocketbase.PocketBase, upload *core.Record) (b
 		return false, nil
 	}
 
-	if _, lookErr := exec.LookPath("ffmpeg"); lookErr != nil {
-		return false, fmt.Errorf("ffmpeg is required for audio optimization: %w", lookErr)
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		return false, err
 	}
 
 	fsys, err := app.NewFilesystem()
 	if err != nil {
-		return false, fmt.Errorf("failed to create filesystem: %w", err)
+		return false, err
 	}
 	defer fsys.Close()
 
 	sourcePath := upload.BaseFilesPath() + "/" + sourceFile
 	reader, err := fsys.GetReader(sourcePath)
 	if err != nil {
-		return false, fmt.Errorf("failed to read source audio from storage: %w", err)
+		return false, err
 	}
 	defer reader.Close()
 
 	inputBytes, err := io.ReadAll(reader)
 	if err != nil {
-		return false, fmt.Errorf("failed to read source audio bytes: %w", err)
+		return false, err
 	}
 
 	if len(inputBytes) == 0 {
@@ -250,7 +230,7 @@ func optimizeAudioUploadFile(app *pocketbase.PocketBase, upload *core.Record) (b
 
 	tempDir, err := os.MkdirTemp("", "libgraph-audio-opt-*")
 	if err != nil {
-		return false, fmt.Errorf("failed to create temp dir: %w", err)
+		return false, err
 	}
 	defer os.RemoveAll(tempDir)
 
@@ -262,7 +242,7 @@ func optimizeAudioUploadFile(app *pocketbase.PocketBase, upload *core.Record) (b
 	outputPath := filepath.Join(tempDir, "output.ogg")
 
 	if err := os.WriteFile(inputPath, inputBytes, 0o600); err != nil {
-		return false, fmt.Errorf("failed to write temp input file: %w", err)
+		return false, err
 	}
 
 	cmd := exec.Command(
@@ -276,13 +256,13 @@ func optimizeAudioUploadFile(app *pocketbase.PocketBase, upload *core.Record) (b
 		"-b:a", "48k",
 		outputPath,
 	)
-	if output, cmdErr := cmd.CombinedOutput(); cmdErr != nil {
-		return false, fmt.Errorf("ffmpeg optimization failed: %w (%s)", cmdErr, strings.TrimSpace(string(output)))
+	if _, err := cmd.CombinedOutput(); err != nil {
+		return false, err
 	}
 
 	optimizedBytes, err := os.ReadFile(outputPath)
 	if err != nil {
-		return false, fmt.Errorf("failed to read optimized output file: %w", err)
+		return false, err
 	}
 
 	if len(optimizedBytes) == 0 {
@@ -294,19 +274,19 @@ func optimizeAudioUploadFile(app *pocketbase.PocketBase, upload *core.Record) (b
 	}
 
 	baseName := strings.TrimSuffix(filepath.Base(sourceFile), filepath.Ext(sourceFile))
-	optimizedName := baseName + optimizedAudioSuffix + ".ogg"
+	optimizedName := baseName + ".ogg"
 	optimizedFile, err := filesystem.NewFileFromBytes(optimizedBytes, optimizedName)
 	if err != nil {
-		return false, fmt.Errorf("failed to create optimized file object: %w", err)
+		return false, err
 	}
 
 	upload.Set("file", optimizedFile)
 	if err := app.Save(upload); err != nil {
-		return false, fmt.Errorf("failed to save optimized upload file: %w", err)
+		return false, err
 	}
 
 	if err := scheduleUploadReprocessing(app, upload); err != nil {
-		app.Logger().Warn("[uploads] failed to enqueue reprocessing after audio optimization", "uploadId", upload.Id, "error", err)
+		app.Logger().Warn("failed to enqueue reprocessing after audio optimization", "uploadId", upload.Id, "error", err)
 	}
 
 	return true, nil
@@ -314,7 +294,7 @@ func optimizeAudioUploadFile(app *pocketbase.PocketBase, upload *core.Record) (b
 
 func scheduleUploadReprocessing(app *pocketbase.PocketBase, uploadRecord *core.Record) error {
 	uploadID := strings.TrimSpace(uploadRecord.Id)
-	if uploadID == "" || strings.EqualFold(uploadRecord.GetString("type"), vars.UploadTypeSummary) {
+	if uploadID == "" || uploadRecord.GetString("type") == vars.UploadTypeSummary {
 		return nil
 	}
 
@@ -329,10 +309,8 @@ func scheduleUploadReprocessing(app *pocketbase.PocketBase, uploadRecord *core.R
 		Payload: map[string]any{
 			"upload_id": uploadID,
 		},
-		Priority:    50,
-		MaxAttempts: 5,
-		UserID:      uploadRecord.GetString("user"),
-		UploadID:    uploadID,
+		UserID:   uploadRecord.GetString("user"),
+		UploadID: uploadID,
 	})
 }
 
@@ -364,7 +342,7 @@ func validateAudioDurationLimit(upload *core.Record) error {
 	filePath := upload.BaseFilesPath() + "/" + uploadFile
 	durationSeconds, err := probeAudioDurationSeconds(filePath)
 	if err != nil {
-		return fmt.Errorf("failed to validate audio duration: %w", err)
+		return err
 	}
 
 	if durationSeconds > maxTranscriptionAudioDurationSeconds {
@@ -376,7 +354,7 @@ func validateAudioDurationLimit(upload *core.Record) error {
 
 func probeAudioDurationSeconds(filePath string) (float64, error) {
 	if _, err := exec.LookPath("ffprobe"); err != nil {
-		return 0, fmt.Errorf("ffprobe is required for audio duration validation: %w", err)
+		return 0, err
 	}
 
 	cmd := exec.Command(
@@ -389,7 +367,7 @@ func probeAudioDurationSeconds(filePath string) (float64, error) {
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return 0, fmt.Errorf("ffprobe failed: %w (%s)", err, strings.TrimSpace(string(output)))
+		return 0, err
 	}
 
 	durationValue := strings.TrimSpace(string(output))
@@ -399,7 +377,7 @@ func probeAudioDurationSeconds(filePath string) (float64, error) {
 
 	durationSeconds, err := strconv.ParseFloat(durationValue, 64)
 	if err != nil {
-		return 0, fmt.Errorf("invalid duration value %q: %w", durationValue, err)
+		return 0, err
 	}
 
 	if durationSeconds <= 0 {

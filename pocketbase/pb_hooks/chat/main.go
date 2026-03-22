@@ -48,20 +48,15 @@ func Init(app *pocketbase.PocketBase) error {
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.POST("/api/chat", func(e *core.RequestEvent) error {
+			userID := e.Auth.Id
+
 			body := ChatRequest{}
 			if err := e.BindBody(&body); err != nil {
-				app.Logger().Error("[chat] failed to bind request body", "error", err)
 				return e.BadRequestError("invalid request body", err)
 			}
 
 			if body.Message == "" {
 				return e.BadRequestError("message is required", nil)
-			}
-
-			userID := e.Auth.Id
-
-			if body.Mode == "" {
-				body.Mode = "chat"
 			}
 
 			var uploadIDs []string
@@ -71,18 +66,15 @@ func Init(app *pocketbase.PocketBase) error {
 
 			chatID := body.ChatID
 
-			// For reader_sidebar mode, load context from chat_contexts collection
 			var sidebarContexts []chatPromptContext
 			if body.Mode == "reader_sidebar" && chatID != "" {
-				resolvedContexts, err := loadSidebarPromptContexts(app, chatID, userID)
+				sidebarContexts, err := loadSidebarPromptContexts(app, chatID, userID)
 				if err != nil {
-					app.Logger().Error("[chat/reader_sidebar] failed to load chat contexts", "error", err)
 					return e.InternalServerError("failed to load chat contexts", err)
 				}
-				if len(resolvedContexts) == 0 {
+				if len(sidebarContexts) == 0 {
 					return e.BadRequestError("at least one context item is required", nil)
 				}
-				sidebarContexts = resolvedContexts
 			}
 
 			if chatID == "" {
@@ -90,6 +82,7 @@ func Init(app *pocketbase.PocketBase) error {
 				if len(title) > 80 {
 					title = title[:80] + "…"
 				}
+
 				if body.Mode == "search" {
 					title = "Search: " + title
 				}
@@ -117,7 +110,6 @@ func Init(app *pocketbase.PocketBase) error {
 			if body.Mode == "search" {
 				results, err := vector_search.Search(app, body.Message, uploadIDs, 10)
 				if err != nil {
-					app.Logger().Error("[chat/search] vector search failed", "error", err)
 					return e.InternalServerError("search request failed", err)
 				}
 
@@ -141,13 +133,12 @@ func Init(app *pocketbase.PocketBase) error {
 
 				history, err := loadChatHistory(app, chatID)
 				if err != nil {
-					app.Logger().Error("[chat] failed to load chat history", "error", err)
 					return e.InternalServerError("failed to load chat history", err)
 				}
 
 				modelName := os.Getenv("GEMINI_MODEL")
 				if modelName == "" {
-					modelName = "gemini-2.5-flash"
+					modelName = "gemini-3.1-flash-lite-preview"
 				}
 
 				model := geminiClient.GenerativeModel(modelName)
@@ -159,7 +150,6 @@ func Init(app *pocketbase.PocketBase) error {
 
 				resp, err := cs.SendMessage(context.Background(), genai.Text(body.Message))
 				if err != nil {
-					app.Logger().Error("[chat] Gemini request failed", "error", err)
 					return e.InternalServerError("chat request failed", err)
 				}
 
@@ -183,7 +173,6 @@ func Init(app *pocketbase.PocketBase) error {
 
 			searchResults, err := vector_search.Search(app, body.Message, uploadIDs, 10)
 			if err != nil {
-				app.Logger().Error("[chat] vector search failed", "error", err)
 				searchResults = nil
 			}
 
@@ -191,13 +180,12 @@ func Init(app *pocketbase.PocketBase) error {
 
 			history, err := loadChatHistory(app, chatID)
 			if err != nil {
-				app.Logger().Error("[chat] failed to load chat history", "error", err)
 				return e.InternalServerError("failed to load chat history", err)
 			}
 
 			modelName := os.Getenv("GEMINI_MODEL")
 			if modelName == "" {
-				modelName = "gemini-2.5-flash"
+				modelName = "gemini-3.1-flash-lite-preview"
 			}
 
 			model := geminiClient.GenerativeModel(modelName)
@@ -211,14 +199,12 @@ func Init(app *pocketbase.PocketBase) error {
 
 			resp, err := cs.SendMessage(context.Background(), genai.Text(body.Message))
 			if err != nil {
-				app.Logger().Error("[chat] Gemini request failed", "error", err)
 				return e.InternalServerError("chat request failed", err)
 			}
 
 			responseText := extractResponseText(resp)
 			var structured StructuredChatResponse
 			if err := json.Unmarshal([]byte(responseText), &structured); err != nil {
-				app.Logger().Error("[chat] failed to parse Gemini JSON response", "error", err, "raw", responseText)
 				structured = StructuredChatResponse{Answer: responseText}
 			}
 
@@ -281,13 +267,10 @@ func Init(app *pocketbase.PocketBase) error {
 					"upload_id":     pageUploadID,
 					"full_document": fullDocument,
 				},
-				Priority:    80,
-				MaxAttempts: 5,
-				UserID:      userID,
-				UploadID:    pageUploadID,
-				PageID:      pageID,
+				UserID:   userID,
+				UploadID: pageUploadID,
+				PageID:   pageID,
 			}); err != nil {
-				app.Logger().Error("[summarize] failed to enqueue page summary", "pageId", pageID, "error", err)
 				return e.InternalServerError("failed to enqueue summary", err)
 			}
 
@@ -386,13 +369,10 @@ func Init(app *pocketbase.PocketBase) error {
 					"user_id":   userID,
 					"upload_id": uploadID,
 				},
-				Priority:    80,
-				MaxAttempts: 5,
-				UserID:      userID,
-				UploadID:    uploadID,
-				PageID:      sortedIDs[0],
+				UserID:   userID,
+				UploadID: uploadID,
+				PageID:   sortedIDs[0],
 			}); err != nil {
-				app.Logger().Error("[summarize] failed to enqueue page range summary", "pageIds", sortedIDs, "error", err)
 				return e.InternalServerError("failed to enqueue summary", err)
 			}
 
@@ -667,7 +647,6 @@ func upsertSummaryLinkRecord(app *pocketbase.PocketBase, sourcePageRecord *core.
 	summaryRecord.Set("summary_page", summaryPageID)
 	summaryRecord.Set("scope", "page")
 	summaryRecord.Set("status", "success")
-	summaryRecord.Set("error", "")
 
 	return app.Save(summaryRecord)
 }
@@ -1242,7 +1221,7 @@ func GenerateDocumentSummary(allMarkdown string) (string, error) {
 
 	modelName := os.Getenv("GEMINI_MODEL")
 	if modelName == "" {
-		modelName = "gemini-2.5-flash"
+		modelName = "gemini-3.1-flash-lite-preview"
 	}
 
 	model := geminiClient.GenerativeModel(modelName)
@@ -1348,7 +1327,6 @@ func UpsertPageSummaryArtifact(app *pocketbase.PocketBase, sourcePageRecord *cor
 		}
 
 		summaryRecord.Set("status", "success")
-		summaryRecord.Set("error", "")
 		if saveErr := app.Save(summaryRecord); saveErr != nil {
 			return nil, nil, nil, saveErr
 		}
@@ -1394,7 +1372,6 @@ func UpsertPageSummaryArtifact(app *pocketbase.PocketBase, sourcePageRecord *cor
 	newSummaryRecord.Set("summary_page", summaryPageRecord.Id)
 	newSummaryRecord.Set("scope", "page")
 	newSummaryRecord.Set("status", "success")
-	newSummaryRecord.Set("error", "")
 	if saveErr := app.Save(newSummaryRecord); saveErr != nil {
 		return nil, nil, nil, saveErr
 	}

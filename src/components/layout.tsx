@@ -9,7 +9,6 @@ import { useWorkspaceTabsStore } from "@/lib/stores/workspace-tabs-store";
 import { useLocation } from "@tanstack/react-router";
 
 export default function Layout({ children }: PropsWithChildren) {
-  const isReadingMode = useReaderStore((state) => state.isReadingMode);
   const currentPageId = useReaderStore((state) => state.currentPageId);
   const currentPageNumber = useReaderStore((state) => state.currentPageNumber);
   const navigateToPage = useReaderStore((state) => state.navigateToPage);
@@ -17,7 +16,7 @@ export default function Layout({ children }: PropsWithChildren) {
   const location = useLocation();
 
   const isWorkspaceRoute = location.pathname.startsWith("/workspace");
-  const showAppHeader = !isReadingMode && !(isWorkspaceRoute && workspaceTabs.length > 0);
+  const showAppHeader = !(isWorkspaceRoute && workspaceTabs.length > 0);
 
   return (
     <SidebarProvider

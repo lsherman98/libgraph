@@ -89,7 +89,6 @@ export function GraphCanvas() {
     return counts;
   }, [graphData?.edges]);
 
-  // Client-side filtering of graph nodes based on UploadFilters
   const { filteredNodes, filteredEdges } = useMemo(() => {
     const allNodes = (graphData?.nodes as EnrichedNodesResponse[]) || [];
     const allEdges = (graphData?.edges as EdgesResponse[]) || [];
@@ -106,7 +105,6 @@ export function GraphCanvas() {
       return { filteredNodes: allNodes, filteredEdges: allEdges };
     }
 
-    // Build a lookup: record_id -> node id (for tags/topics/people/publications)
     const recordIdToNodeId = new Map<string, string>();
     for (const node of allNodes) {
       if (node.record_id) {
@@ -114,7 +112,6 @@ export function GraphCanvas() {
       }
     }
 
-    // Build adjacency from edges: node id -> Set of connected node ids
     const nodeEdgeMap = new Map<string, Set<string>>();
     for (const edge of allEdges) {
       if (!nodeEdgeMap.has(edge.source)) nodeEdgeMap.set(edge.source, new Set());
@@ -123,7 +120,6 @@ export function GraphCanvas() {
       nodeEdgeMap.get(edge.target)!.add(edge.source);
     }
 
-    // Find upload node IDs connected to selected filter entities
     const getUploadNodeIdsConnectedTo = (recordIds: string[]): Set<string> => {
       const connectedUploadNodeIds = new Set<string>();
       for (const recordId of recordIds) {
@@ -138,7 +134,6 @@ export function GraphCanvas() {
       return connectedUploadNodeIds;
     };
 
-    // Determine which upload nodes pass all active filters (AND logic across filter categories)
     const passingUploadNodeIds = new Set<string>();
 
     for (const node of allNodes) {
@@ -147,7 +142,6 @@ export function GraphCanvas() {
       const data = node.data as UploadNodeData | null | undefined;
       let passes = true;
 
-      // Search filter
       if (debouncedSearch) {
         const search = debouncedSearch.toLowerCase();
         const title = (data?.title || node.label || "").toLowerCase();
@@ -156,14 +150,12 @@ export function GraphCanvas() {
         }
       }
 
-      // Status filter
       if (passes && uploadFilters.status && uploadFilters.status.length > 0) {
         if (!data?.status || !uploadFilters.status.includes(data.status)) {
           passes = false;
         }
       }
 
-      // Tags filter (OR within category: upload must be connected to at least one selected tag)
       if (passes && uploadFilters.tags && uploadFilters.tags.length > 0) {
         const connectedToTags = getUploadNodeIdsConnectedTo(uploadFilters.tags);
         if (!connectedToTags.has(node.id)) {
@@ -171,7 +163,6 @@ export function GraphCanvas() {
         }
       }
 
-      // Topics filter
       if (passes && uploadFilters.topics && uploadFilters.topics.length > 0) {
         const connectedToTopics = getUploadNodeIdsConnectedTo(uploadFilters.topics);
         if (!connectedToTopics.has(node.id)) {
@@ -179,7 +170,6 @@ export function GraphCanvas() {
         }
       }
 
-      // People filter
       if (passes && uploadFilters.people && uploadFilters.people.length > 0) {
         const connectedToPeople = getUploadNodeIdsConnectedTo(uploadFilters.people);
         if (!connectedToPeople.has(node.id)) {
@@ -187,7 +177,6 @@ export function GraphCanvas() {
         }
       }
 
-      // Publication filter
       if (passes && uploadFilters.publication) {
         const connectedToPub = getUploadNodeIdsConnectedTo([uploadFilters.publication]);
         if (!connectedToPub.has(node.id)) {
@@ -200,9 +189,6 @@ export function GraphCanvas() {
       }
     }
 
-    // Collect all node IDs that should remain visible:
-    // - Upload nodes that pass filters
-    // - Non-upload nodes that are connected to at least one passing upload node
     const visibleNodeIds = new Set<string>();
     for (const id of passingUploadNodeIds) {
       visibleNodeIds.add(id);
@@ -370,7 +356,6 @@ export function GraphCanvas() {
             </Button>
           </div>
 
-          {/* Content Filters toggle */}
           <div className="p-3 border-b">
             <Button
               variant={isFiltersPanelOpen ? "secondary" : "outline"}

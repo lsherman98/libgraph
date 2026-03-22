@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { X, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { cn, getUserId } from "@/lib/utils";
 import { HighlightsColorOptions } from "@/lib/pocketbase-types";
 import { useCreateHighlight, useUpdateHighlight, useDeleteHighlight } from "@/lib/api/mutations";
@@ -87,12 +87,6 @@ export function HighlightEditorPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b">
-        <h3 className="font-semibold text-sm">{isEditing ? "Edit Highlight" : "New Highlight"}</h3>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleClose}>
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-5">
           <div>

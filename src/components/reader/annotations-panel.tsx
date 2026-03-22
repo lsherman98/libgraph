@@ -23,15 +23,17 @@ export function AnnotationsPanel({ activeTab = "highlights", onNavigateToPage: p
   const uploadId = storeUploadId;
   const onNavigateToPage = storeNavigateToPage ?? propNavigateToPage ?? null;
 
+  if (!uploadId) return null;
+
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewType, setPreviewType] = useState<"highlight" | "bookmark" | "note">("highlight");
   const [previewItem, setPreviewItem] = useState<HighlightsRecord | BookmarksRecord | NotesRecord | null>(null);
   const [previewPageNumber, setPreviewPageNumber] = useState<number | undefined>();
 
-  const { data: allHighlights = [] } = useHighlights(uploadId || undefined);
-  const { data: allBookmarks = [] } = useBookmarks(uploadId || undefined);
-  const { data: allNotes = [] } = useNotes(uploadId || undefined);
-  const { data: pagesData } = usePages(uploadId || undefined, 1, 1000);
+  const { data: allHighlights = [] } = useHighlights(uploadId);
+  const { data: allBookmarks = [] } = useBookmarks(uploadId);
+  const { data: allNotes = [] } = useNotes(uploadId);
+  const { data: pagesData } = usePages(uploadId, 1, 1000);
 
   const pageIdToNumber = useMemo(() => {
     const map = new Map<string, number>();

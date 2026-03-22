@@ -300,7 +300,7 @@ func syncEdgesForRelation(app *pocketbase.PocketBase, sourceNodeId string, targe
 				err = createEdge(app, sourceNodeId, nodeId, edgeType, userId)
 			}
 			if err != nil {
-				app.Logger().Error("failed to create edge", "source", sourceNodeId, "target", nodeId, "error", err)
+				return err
 			}
 		}
 	}
@@ -359,62 +359,62 @@ func resolveSummaryFields(app *pocketbase.PocketBase, summaryRecord *core.Record
 	return userId, sourceUploadID, summaryUploadID, nil
 }
 
-func syncSummaryGraphEdge(app *pocketbase.PocketBase, summaryRecord *core.Record) {
+func syncSummaryGraphEdge(app *pocketbase.PocketBase, summaryRecord *core.Record) error {
 	userId, sourceUploadID, summaryUploadID, err := resolveSummaryFields(app, summaryRecord)
 	if err != nil {
-		app.Logger().Error("failed to resolve summary source relation", "summary_id", summaryRecord.Id, "error", err)
-		return
+		return err
 	}
 
 	if summaryUploadID == "" {
-		app.Logger().Error("summary record missing summary_upload relation", "summary_id", summaryRecord.Id)
-		return
+		return fmt.Errorf("summary record missing summary_upload relation: %s", summaryRecord.Id)
 	}
 
 	summaryNode, err := ensureUploadNode(app, summaryUploadID, userId)
 	if err != nil || summaryNode == nil {
-		app.Logger().Error("failed to ensure summary upload node", "summary_id", summaryRecord.Id, "upload_id", summaryUploadID, "error", err)
-		return
+		return err
 	}
 
 	if sourceUploadID == "" {
 		if err := syncSingleEdge(app, summaryNode.Id, "", NodeTypeUpload, EdgeTypeSummaryOf, userId, false); err != nil {
-			app.Logger().Error("failed to clear summary source edges", "summary_id", summaryRecord.Id, "error", err)
+			return err
 		}
-		return
+		return nil
 	}
 
 	if _, err := ensureUploadNode(app, sourceUploadID, userId); err != nil {
-		if clearErr := syncSingleEdge(app, summaryNode.Id, "", NodeTypeUpload, EdgeTypeSummaryOf, userId, false); clearErr != nil {
-			app.Logger().Error("failed to clear summary source edges after source ensure failure", "summary_id", summaryRecord.Id, "error", clearErr)
+		if err := syncSingleEdge(app, summaryNode.Id, "", NodeTypeUpload, EdgeTypeSummaryOf, userId, false); err != nil {
+			return err
 		}
-		app.Logger().Warn("failed to ensure source upload node; cleared summary edge", "summary_id", summaryRecord.Id, "upload_id", sourceUploadID, "error", err)
-		return
+		return err
 	}
 
 	if err := syncSingleEdge(app, summaryNode.Id, sourceUploadID, NodeTypeUpload, EdgeTypeSummaryOf, userId, false); err != nil {
-		app.Logger().Error("failed to sync summary source edge", "summary_id", summaryRecord.Id, "error", err)
+		return err
 	}
+
+	return nil
 }
 
-func clearSummaryGraphEdge(app *pocketbase.PocketBase, summaryRecord *core.Record) {
+func clearSummaryGraphEdge(app *pocketbase.PocketBase, summaryRecord *core.Record) error {
 	userId, _, summaryUploadID, err := resolveSummaryFields(app, summaryRecord)
 	if err != nil {
-		app.Logger().Error("failed to resolve summary fields on delete", "summary_id", summaryRecord.Id, "error", err)
-		return
+		return err
 	}
+
 	if summaryUploadID == "" {
-		return
+		return fmt.Errorf("summary record missing summary_upload relation: %s", summaryRecord.Id)
 	}
 
 	summaryNode, err := findNodeByRecord(app, summaryUploadID, userId, NodeTypeUpload)
 	if err != nil || summaryNode == nil {
-		return
+		return err
 	}
 
 	if err := syncSingleEdge(app, summaryNode.Id, "", NodeTypeUpload, EdgeTypeSummaryOf, userId, false); err != nil {
-		app.Logger().Error("failed to clear summary source edge on delete", "summary_id", summaryRecord.Id, "error", err)
+		return err
 	}
+
+	return nil
 }
 
 func syncSummaryGraphEdgesForUpload(app *pocketbase.PocketBase, uploadRecordID string, userId string) {
@@ -431,7 +431,6 @@ func syncSummaryGraphEdgesForUpload(app *pocketbase.PocketBase, uploadRecordID s
 		dbx.Params{"userId": userId, "uploadId": uploadRecordID},
 	)
 	if err != nil {
-		app.Logger().Error("failed to load summaries for upload sync", "upload_id", uploadRecordID, "error", err)
 		return
 	}
 
@@ -448,7 +447,6 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 		label, data := getUploadLabelAndData(upload)
 		nodeId, err := createNode(app, upload.Id, NodeTypeUpload, userId, label, data)
 		if err != nil {
-			e.App.Logger().Error("failed to create node for upload", "error", err)
 			return e.Next()
 		}
 
@@ -514,38 +512,37 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 		userId := upload.GetString("user")
 		label, data := getUploadLabelAndData(upload)
 		if err := updateNodeData(app, upload.Id, userId, NodeTypeUpload, label, data); err != nil {
-			e.App.Logger().Error("failed to update node data for upload", "error", err)
+			return e.Next()
 		}
 
 		uploadNode, err := findNodeByRecord(app, upload.Id, userId, NodeTypeUpload)
 		if err != nil || uploadNode == nil {
-			e.App.Logger().Error("failed to find upload node for edge sync", "error", err)
 			return e.Next()
 		}
 
 		subjects := upload.GetStringSlice("people")
 		if err := syncEdgesForRelation(app, uploadNode.Id, subjects, NodeTypeAuthor, EdgeTypeAboutPerson, userId, true); err != nil {
-			e.App.Logger().Error("failed to sync subject edges", "error", err)
+			return e.Next()
 		}
 
 		publicationId := upload.GetString("publication")
 		if err := syncSingleEdge(app, uploadNode.Id, publicationId, NodeTypePublication, EdgeTypePublishedBy, userId, true); err != nil {
-			e.App.Logger().Error("failed to sync publication edge", "error", err)
+			return e.Next()
 		}
 
 		tags := upload.GetStringSlice("tags")
 		if err := syncEdgesForRelation(app, uploadNode.Id, tags, NodeTypeTag, EdgeTypeTaggedWith, userId, true); err != nil {
-			e.App.Logger().Error("failed to sync tag edges", "error", err)
+			return e.Next()
 		}
 
 		topics := upload.GetStringSlice("topics")
 		if err := syncEdgesForRelation(app, uploadNode.Id, topics, NodeTypeTopic, EdgeTypeBelongsTo, userId, true); err != nil {
-			e.App.Logger().Error("failed to sync topic edges", "error", err)
+			return e.Next()
 		}
 
 		relatedUploads := upload.GetStringSlice("uploads")
 		if err := syncEdgesForRelation(app, uploadNode.Id, relatedUploads, NodeTypeUpload, EdgeTypeLinksTo, userId, false); err != nil {
-			e.App.Logger().Error("failed to sync related upload edges", "error", err)
+			return e.Next()
 		}
 
 		syncSummaryGraphEdgesForUpload(app, upload.Id, userId)
@@ -660,16 +657,15 @@ func registerSimpleNodeHooks(app *pocketbase.PocketBase) {
 	})
 }
 
-func registerAnnotationCreateHooks(app *pocketbase.PocketBase) {
-	bindAnnotationCreate := func(record *core.Record) {
+func registerAnnotationCreateHooks(app *pocketbase.PocketBase) error {
+	bindAnnotationCreate := func(record *core.Record) error {
 		collName := record.Collection().Name
 		userId := record.GetString("user")
 
 		label, data := collectionLabelData[collName](record)
 		nodeId, err := createNode(app, record.Id, collectionNodeType[collName], userId, label, data)
 		if err != nil {
-			app.Logger().Error("failed to create annotation node", "collection", collName, "error", err)
-			return
+			return err
 		}
 
 		uploadId := record.GetString("upload")
@@ -687,6 +683,8 @@ func registerAnnotationCreateHooks(app *pocketbase.PocketBase) {
 				createEdge(app, tagNode.Id, nodeId, EdgeTypeTaggedWith, userId)
 			}
 		}
+
+		return nil
 	}
 
 	app.OnRecordAfterCreateSuccess(collections.Highlights).BindFunc(func(e *core.RecordEvent) error {
@@ -701,9 +699,11 @@ func registerAnnotationCreateHooks(app *pocketbase.PocketBase) {
 		bindAnnotationCreate(e.Record)
 		return e.Next()
 	})
+
+	return nil
 }
 
-func registerSummaryHooks(app *pocketbase.PocketBase) {
+func registerSummaryHooks(app *pocketbase.PocketBase) error {
 	app.OnRecordAfterCreateSuccess(collections.Summaries).BindFunc(func(e *core.RecordEvent) error {
 		syncSummaryGraphEdge(app, e.Record)
 		return e.Next()
@@ -718,4 +718,5 @@ func registerSummaryHooks(app *pocketbase.PocketBase) {
 		clearSummaryGraphEdge(app, e.Record)
 		return e.Next()
 	})
+	return nil
 }

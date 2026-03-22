@@ -28,6 +28,7 @@ export interface WorkspaceLayoutState {
     activeTabId: string | null;
     splitMode: SplitMode;
     splitTabId: string | null;
+    focusedPane: "primary" | "secondary";
     panelSizes: number[];
 }
 
@@ -38,6 +39,7 @@ interface WorkspaceTabsStore extends WorkspaceLayoutState {
     addWriterTab: (projectId: string, title: string) => string;
     removeTab: (tabId: string) => void;
     setActiveTab: (tabId: string) => void;
+    setFocusedPane: (pane: "primary" | "secondary") => void;
     updateTabTitle: (tabId: string, title: string) => void;
     updateReaderTabPage: (tabId: string, page: number) => void;
     setWriterTabDirty: (tabId: string, isDirty: boolean) => void;
@@ -65,19 +67,23 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
         activeTabId: null,
         splitMode: "none",
         splitTabId: null,
+        focusedPane: "primary",
         panelSizes: [50, 50],
         _hydrated: false,
 
         hydrate: (state: Partial<WorkspaceLayoutState>) => {
-            set({ ...state, _hydrated: true });
+            set((current) => ({
+                ...current,
+                ...state,
+                focusedPane: state.focusedPane ?? "primary",
+                _hydrated: true,
+            }));
         },
         addReaderTab: (uploadId: string, title: string) => {
             const state = get();
             const existingTab = state.tabs.find((t): t is ReaderTab => t.type === "reader" && t.uploadId === uploadId);
             if (existingTab) {
-                if (state.activeTabId !== existingTab.id) {
-                    set({ activeTabId: existingTab.id });
-                }
+                get().setActiveTab(existingTab.id);
                 return existingTab.id;
             }
 
@@ -89,10 +95,20 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
                 currentPage: 1,
             };
 
-            set((state) => ({
-                tabs: [...state.tabs, newTab],
-                activeTabId: newTab.id,
-            }));
+            set((state) => {
+                if (state.splitMode === "horizontal" && state.splitTabId && state.focusedPane === "secondary") {
+                    return {
+                        tabs: [...state.tabs, newTab],
+                        splitTabId: newTab.id,
+                    };
+                }
+
+                return {
+                    tabs: [...state.tabs, newTab],
+                    activeTabId: newTab.id,
+                    focusedPane: "primary",
+                };
+            });
 
             return newTab.id;
         },
@@ -100,9 +116,7 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
             const state = get();
             const existingTab = state.tabs.find((t): t is WriterTab => t.type === "writer" && t.projectId === projectId);
             if (existingTab) {
-                if (state.activeTabId !== existingTab.id) {
-                    set({ activeTabId: existingTab.id });
-                }
+                get().setActiveTab(existingTab.id);
                 return existingTab.id;
             }
 
@@ -114,10 +128,20 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
                 isDirty: false,
             };
 
-            set((state) => ({
-                tabs: [...state.tabs, newTab],
-                activeTabId: newTab.id,
-            }));
+            set((state) => {
+                if (state.splitMode === "horizontal" && state.splitTabId && state.focusedPane === "secondary") {
+                    return {
+                        tabs: [...state.tabs, newTab],
+                        splitTabId: newTab.id,
+                    };
+                }
+
+                return {
+                    tabs: [...state.tabs, newTab],
+                    activeTabId: newTab.id,
+                    focusedPane: "primary",
+                };
+            });
 
             return newTab.id;
         },
@@ -130,6 +154,7 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
             const newTabs = state.tabs.filter((t) => t.id !== tabId);
             let newActiveTabId = state.activeTabId;
             let newSplitTabId = state.splitTabId;
+            let newFocusedPane = state.focusedPane;
 
             if (state.activeTabId === tabId) {
                 if (newTabs.length > 0) {
@@ -142,17 +167,54 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
 
             if (state.splitTabId === tabId) {
                 newSplitTabId = null;
+                newFocusedPane = "primary";
+            }
+
+            if (newActiveTabId && newSplitTabId && newActiveTabId === newSplitTabId) {
+                newSplitTabId = null;
+                newFocusedPane = "primary";
             }
 
             set({
                 tabs: newTabs,
                 activeTabId: newActiveTabId,
                 splitTabId: newSplitTabId,
+                focusedPane: newFocusedPane,
                 splitMode: newSplitTabId ? state.splitMode : "none",
             });
         },
         setActiveTab: (tabId: string) => {
-            set({ activeTabId: tabId });
+            const state = get();
+
+            if (state.splitMode === "horizontal" && state.splitTabId) {
+                if (tabId === state.activeTabId) {
+                    set({ focusedPane: "primary" });
+                    return;
+                }
+
+                if (tabId === state.splitTabId) {
+                    set({ focusedPane: "secondary" });
+                    return;
+                }
+
+                if (state.focusedPane === "secondary") {
+                    set({ splitTabId: tabId, focusedPane: "secondary" });
+                    return;
+                }
+
+                set({ activeTabId: tabId, focusedPane: "primary" });
+                return;
+            }
+
+            set({ activeTabId: tabId, focusedPane: "primary" });
+        },
+        setFocusedPane: (pane: "primary" | "secondary") => {
+            const state = get();
+            if (pane === "secondary" && (state.splitMode !== "horizontal" || !state.splitTabId)) {
+                set({ focusedPane: "primary" });
+                return;
+            }
+            set({ focusedPane: pane });
         },
         updateTabTitle: (tabId: string, title: string) => {
             set((state) => ({
@@ -182,13 +244,13 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
         setSplitMode: (mode: SplitMode) => {
             const state = get();
             if (mode === "none") {
-                set({ splitMode: "none", splitTabId: null });
+                set({ splitMode: "none", splitTabId: null, focusedPane: "primary" });
             } else {
                 if (!state.splitTabId && state.tabs.length > 1) {
                     const otherTab = state.tabs.find((t) => t.id !== state.activeTabId);
-                    set({ splitMode: mode, splitTabId: otherTab?.id ?? null });
+                    set({ splitMode: mode, splitTabId: otherTab?.id ?? null, focusedPane: "primary" });
                 } else {
-                    set({ splitMode: mode });
+                    set({ splitMode: mode, focusedPane: "primary" });
                 }
             }
         },
@@ -196,7 +258,7 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
             set({ panelSizes: sizes });
         },
         closeSplit: () => {
-            set({ splitMode: "none", splitTabId: null });
+            set({ splitMode: "none", splitTabId: null, focusedPane: "primary" });
         },
         openOrUpdateSummarySplitTab: ({ sourceTabId, sourcePageId, summaryUploadId, title }) => {
             const state = get();
@@ -218,6 +280,7 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
                     }),
                     splitMode: "horizontal",
                     splitTabId: existingSummaryTab.id,
+                    focusedPane: "primary",
                 }));
                 return existingSummaryTab.id;
             }
@@ -237,6 +300,7 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
                 tabs: [...prev.tabs, newTab],
                 splitMode: "horizontal",
                 splitTabId: newTab.id,
+                focusedPane: "primary",
             }));
 
             return newTab.id;
@@ -257,6 +321,7 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
             set({
                 tabs: nextTabs,
                 splitTabId: wasSplitTab ? null : state.splitTabId,
+                focusedPane: wasSplitTab ? "primary" : state.focusedPane,
                 splitMode: wasSplitTab ? "none" : state.splitMode,
             });
         },
@@ -272,6 +337,6 @@ export const useWorkspaceTabsStore = create<WorkspaceTabsStore>()(
 );
 
 export function getWorkspaceLayoutSnapshot(): WorkspaceLayoutState {
-    const { tabs, activeTabId, splitMode, splitTabId, panelSizes } = useWorkspaceTabsStore.getState();
-    return { tabs, activeTabId, splitMode, splitTabId, panelSizes };
+    const { tabs, activeTabId, splitMode, splitTabId, focusedPane, panelSizes } = useWorkspaceTabsStore.getState();
+    return { tabs, activeTabId, splitMode, splitTabId, focusedPane, panelSizes };
 }

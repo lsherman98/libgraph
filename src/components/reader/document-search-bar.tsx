@@ -17,11 +17,10 @@ interface SearchMatch {
 interface DocumentSearchBarProps {
   uploadId: string;
   onNavigateToPage: (pageNumber: number) => void;
-  isReadingMode?: boolean;
   className?: string;
 }
 
-export function DocumentSearchBar({ uploadId, onNavigateToPage, isReadingMode = false, className }: DocumentSearchBarProps) {
+export function DocumentSearchBar({ uploadId, onNavigateToPage, className }: DocumentSearchBarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -235,13 +234,7 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, isReadingMode = 
   }
 
   return (
-    <div
-      className={cn(
-        "flex items-center gap-1.5 px-2 py-1 rounded-md border",
-        isReadingMode ? "bg-(--reader-bg-color) border-(--reader-text-color)/20" : "bg-background border-border",
-        className,
-      )}
-    >
+    <div className={cn("flex items-center gap-1.5 px-2 py-1 rounded-md border", "bg-background border-border", className)}>
       <Search className="h-3.5 w-3.5 shrink-0 opacity-50" />
       <Input
         ref={inputRef}

@@ -47,7 +47,8 @@ export function PreviewDialog({
     setCurrentPageNumber(effectivePageNumber);
   }, [open, effectivePageNumber]);
 
-  const { data: pagesData } = usePages(open && effectiveUploadId ? effectiveUploadId : undefined, 1, 1);
+  if (!effectiveUploadId || !open) return null;
+  const { data: pagesData } = usePages(effectiveUploadId, 1, 1);
   const totalPages = totalPagesProp ?? pagesData?.totalItems;
 
   const originalPageId = isSource || isUpload ? undefined : item?.page;
@@ -59,6 +60,7 @@ export function PreviewDialog({
   );
 
   const activePageId = isSource || isUpload ? fetchedPage?.id : isOnOriginalPage ? originalPageId : fetchedPage?.id;
+  if (!activePageId) return null;
   const { data: markdown, isLoading } = usePageMarkdown(activePageId);
 
   const highlightRef = useRef<HTMLElement>(null);

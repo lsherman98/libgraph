@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createWritingProject, updateWritingProject, deleteWritingProject, createChat, updateChat, deleteChat, createMessage, updateUpload, deleteUpload, createCollection, updateCollection, deleteCollection, sendChatMessage, summarizePage, summarizePages, upsertPreferences, upsertReadingProgress, getSidebarChats, addChatContext, removeChatContext, sendSidebarChatMessage } from "./api";
 import { handleError } from "../utils";
-import { Collections, type Create, type Update } from "../pocketbase-types";
+import { Collections, type Create, type HighlightsRecord, type Update } from "../pocketbase-types";
 import type { ChatFilters } from "../types";
 import { queryKeys } from "./queryKeys";
 
@@ -106,29 +106,19 @@ export function useCreateHighlight() {
             await queryClient.cancelQueries({ queryKey: pageKey });
             const previousHighlights = queryClient.getQueryData(pageKey);
 
-            queryClient.setQueryData(pageKey, (old: any[]) => {
-                const optimisticHighlight = {
-                    collectionId: 'highlights',
-                    collectionName: Collections.Highlights,
-                    id: 'temp-' + Date.now(),
-                    created: new Date().toISOString(),
-                    updated: new Date().toISOString(),
-                    ...newHighlight
-                };
-                return old ? [...old, optimisticHighlight] : [optimisticHighlight];
+            queryClient.setQueryData(pageKey, (old: HighlightsRecord[]) => {
+                return [...old, newHighlight];
             });
 
             return { previousHighlights, pageKey };
         },
-        onError: (err, _newHighlight, context) => {
-            handleError(err);
-            if (context?.previousHighlights) {
-                queryClient.setQueryData(context.pageKey, context.previousHighlights);
-            }
-        },
-        onSuccess: () => {
+        onError: handleError,
+        onSuccess: (_data, newHighlight) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.highlights.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
+            if (newHighlight.upload) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.highlights.byUpload(newHighlight.upload as string) });
+            }
         },
     });
 }
@@ -140,9 +130,12 @@ export function useUpdateHighlight() {
         mutationFn: ({ id, data }: { id: string; data: Update<Collections.Highlights> }) =>
             updateHighlight(id, data),
         onError: handleError,
-        onSuccess: () => {
+        onSuccess: (updatedHighlight) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.highlights.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
+            if (updatedHighlight?.upload) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.highlights.byUpload(updatedHighlight.upload) });
+            }
         },
     });
 }
@@ -166,9 +159,12 @@ export function useCreateBookmark() {
     return useMutation({
         mutationFn: createBookmark,
         onError: handleError,
-        onSuccess: () => {
+        onSuccess: (bookmark) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.bookmarks.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
+            if (bookmark.upload) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.bookmarks.byUpload(bookmark.upload) });
+            }
         },
     });
 }
@@ -180,9 +176,12 @@ export function useUpdateBookmark() {
         mutationFn: ({ id, data }: { id: string; data: Update<Collections.Bookmarks> }) =>
             updateBookmark(id, data),
         onError: handleError,
-        onSuccess: () => {
+        onSuccess: (bookmark) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.bookmarks.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
+            if (bookmark.upload) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.bookmarks.byUpload(bookmark.upload) });
+            }
         },
     });
 }
@@ -206,9 +205,12 @@ export function useCreateNote() {
     return useMutation({
         mutationFn: createNote,
         onError: handleError,
-        onSuccess: () => {
+        onSuccess: (newNote) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.notes.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
+            if (newNote.upload) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.notes.byUpload(newNote.upload) });
+            }
         },
     });
 }
@@ -220,9 +222,12 @@ export function useUpdateNote() {
         mutationFn: ({ id, data }: { id: string; data: Update<Collections.Notes> }) =>
             updateNote(id, data),
         onError: handleError,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.notes.all });
+        onSuccess: (note) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
+            queryClient.invalidateQueries({ queryKey: queryKeys.notes.all });
+            if (note.upload) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.notes.byUpload(note.upload) });
+            }
         },
     });
 }
@@ -366,7 +371,7 @@ export function useCreateMessage() {
 interface SendChatMessageOptions {
     mode: "chat" | "search";
     filters: ChatFilters;
-    activeChatId: string | undefined;
+    activeChatId: string;
     setActiveChatId: (id: string) => void;
     setInput: (value: string) => void;
 }
@@ -492,8 +497,6 @@ export function useSummarizePages() {
         },
     });
 }
-
-// ── Reader sidebar chat mutations ────────────────────────────────────────────
 
 export function useAddChatContext() {
     const queryClient = useQueryClient();

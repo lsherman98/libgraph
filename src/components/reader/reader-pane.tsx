@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { BookMarked, ChevronLeft, ChevronRight, ChevronDown, Maximize2, Minimize2, Sparkles, Volume2, Eye, EyeOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Maximize2, Minimize2, Sparkles, Volume2 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { pb } from "@/lib/pocketbase";
 import { HighlightsColorOptions } from "@/lib/pocketbase-types";
@@ -15,7 +15,6 @@ import { useReaderSettings, usePageSettings, FONT_FAMILIES } from "@/lib/hooks/u
 import { ReaderSettingsPanel } from "@/components/reader/reader-settings-panel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn, getUserId } from "@/lib/utils";
-import { useSidebar } from "@/components/ui/sidebar";
 import { useReaderStore } from "@/lib/stores/reader-store";
 import { useWorkspaceTabsStore } from "@/lib/stores/workspace-tabs-store";
 import { DocumentSearchBar } from "@/components/reader/document-search-bar";
@@ -51,17 +50,14 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
   const [playbackRate, setPlaybackRate] = useState(1);
   const [queuedSummaryPageId, setQueuedSummaryPageId] = useState<string | null>(null);
   const [isSummarizePopoverOpen, setIsSummarizePopoverOpen] = useState(false);
-  const [summarizeMode, setSummarizeMode] = useState<"page" | "range">("page");
   const [rangeStartPage, setRangeStartPage] = useState<string>("");
   const [rangeEndPage, setRangeEndPage] = useState<string>("");
   const [isRangeSummaryPending, setIsRangeSummaryPending] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const { isReadingMode, setReadingMode, setCurrentPageState, setCurrentUploadId, setNavigateToPage } = useReaderStore();
+  const { setCurrentPageState, setCurrentUploadId, setNavigateToPage } = useReaderStore();
   const { splitMode, splitTabId, tabs, openOrUpdateSummarySplitTab, closeSummarySplitTab } = useWorkspaceTabsStore();
   const readerContainerRef = useRef<HTMLDivElement>(null);
-  const { setOpen, setOpenRight, open: leftSidebarOpen, openRight: rightSidebarOpen } = useSidebar();
-  const previousSidebarState = useRef({ left: true, right: true });
   const { settings, setSettings, applyTheme, resetSettings, cssVariables } = useReaderSettings();
   const { pageSettings, setCurrentPage, isLoaded: pageSettingsLoaded } = usePageSettings(uploadId, initialPage);
 
@@ -80,14 +76,16 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
   const { data: currentPageData } = usePages(uploadId ?? null, pageSettings.currentPage, 1);
   const currentPageId = currentPageData?.items[0]?.id ?? null;
 
+  if (!currentPageId) return null;
+
   const isSummaryUpload = upload?.type === "summary";
   const isBookUpload = upload?.type === "book";
   const summarySourcePageId = isBookUpload ? currentPageId : firstPageId;
   const shouldPollForSummary = !isSummaryUpload && !!queuedSummaryPageId && queuedSummaryPageId === (isBookUpload ? currentPageId : uploadId);
-  const { data: pageSummaryRecord } = useSummaryBySourcePage(!isSummaryUpload && isBookUpload ? (currentPageId ?? undefined) : undefined, {
+  const { data: pageSummaryRecord } = useSummaryBySourcePage(currentPageId, {
     pollUntilFound: shouldPollForSummary && isBookUpload,
   });
-  const { data: uploadSummaryRecord } = useSummaryBySourceUpload(!isSummaryUpload && !isBookUpload ? uploadId : undefined, {
+  const { data: uploadSummaryRecord } = useSummaryBySourceUpload(uploadId, {
     pollUntilFound: shouldPollForSummary && !isBookUpload,
   });
   const activeSummaryRecord = isBookUpload ? pageSummaryRecord : uploadSummaryRecord;
@@ -236,20 +234,6 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
     [deleteHighlightMutation],
   );
 
-  const queueCurrentPageSummary = useCallback(() => {
-    if (!currentPageId) return;
-
-    summarizePageMutation.mutate(currentPageId, {
-      onSuccess: () => {
-        setQueuedSummaryPageId(currentPageId);
-        setIsSummarizePopoverOpen(false);
-        toast.info("Summary queued", {
-          description: `Generating summary for page ${pageSettings.currentPage}...`,
-        });
-      },
-    });
-  }, [currentPageId, summarizePageMutation, pageSettings.currentPage]);
-
   const queueRangeSummary = useCallback(async () => {
     if (!isBookUpload || !uploadId || totalPages < 1) return;
 
@@ -347,18 +331,6 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
     setSettings({ viewMode: enabled ? "scroll" : "paginate" });
   };
 
-  const toggleReadingMode = () => {
-    if (!isReadingMode) {
-      previousSidebarState.current = { left: leftSidebarOpen, right: rightSidebarOpen };
-      setOpen(false);
-      setOpenRight(false);
-    } else {
-      setOpen(previousSidebarState.current.left);
-      setOpenRight(previousSidebarState.current.right);
-    }
-    setReadingMode(!isReadingMode);
-  };
-
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       readerContainerRef.current?.requestFullscreen();
@@ -407,21 +379,15 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
   return (
     <div
       ref={readerContainerRef}
-      className={cn(
-        "h-full w-full flex flex-col transition-colors duration-300 overflow-hidden",
-        (isFullscreen || isReadingMode) && "bg-(--reader-bg-color)",
-      )}
+      className={cn("h-full w-full flex flex-col transition-colors duration-300 overflow-hidden", isFullscreen && "bg-(--reader-bg-color)")}
       style={cssVariables}
     >
       {showHeader && (
         <header
           className={cn(
             "shrink-0 border-b z-20 transition-colors duration-300",
-            isReadingMode
-              ? "bg-(--reader-bg-color) border-(--reader-text-color)/10"
-              : "bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60",
+            "bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60",
           )}
-          style={isReadingMode ? { color: settings.textColor } : undefined}
         >
           <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
             <div className="flex items-center gap-3 min-w-0 shrink">
@@ -500,17 +466,15 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                     }, 100);
                   }
                 }}
-                isReadingMode={isReadingMode}
               />
               {!isSummaryUpload &&
-                (isBookUpload || !hasExistingSummary) &&
+                !hasExistingSummary &&
                 (isBookUpload ? (
                   <Popover
                     open={isSummarizePopoverOpen}
                     onOpenChange={(open) => {
                       setIsSummarizePopoverOpen(open);
                       if (open) {
-                        setSummarizeMode("page");
                         setRangeStartPage(String(pageSettings.currentPage));
                         setRangeEndPage(String(pageSettings.currentPage));
                       }
@@ -529,67 +493,49 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                           : "Summarize"}
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent align="end" className="w-80 space-y-3">
+                    <PopoverContent align="end" className="w-68 space-y-3 p-3">
                       <div className="space-y-1">
-                        <div className="text-sm font-medium">Summarize</div>
-                        <div className="text-xs text-muted-foreground">Choose current page or a page range.</div>
+                        <p className="text-sm font-medium">Summarize page range</p>
+                        <p className="text-xs text-muted-foreground">Defaults to the current page.</p>
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant={summarizeMode === "page" ? "default" : "outline"}
-                          className="flex-1"
-                          onClick={() => setSummarizeMode("page")}
-                          disabled={isRangeSummaryPending || summarizePageMutation.isPending || summarizePagesMutation.isPending}
-                        >
-                          Current page
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={summarizeMode === "range" ? "default" : "outline"}
-                          className="flex-1"
-                          onClick={() => setSummarizeMode("range")}
-                          disabled={isRangeSummaryPending || summarizePageMutation.isPending || summarizePagesMutation.isPending}
-                        >
-                          Page range
-                        </Button>
-                      </div>
-                      {summarizeMode === "range" && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <Label htmlFor="summary-range-start">Start</Label>
-                            <Input
-                              id="summary-range-start"
-                              type="number"
-                              min={1}
-                              max={totalPages}
-                              value={rangeStartPage}
-                              onChange={(event) => setRangeStartPage(event.target.value)}
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label htmlFor="summary-range-end">End</Label>
-                            <Input
-                              id="summary-range-end"
-                              type="number"
-                              min={1}
-                              max={totalPages}
-                              value={rangeEndPage}
-                              onChange={(event) => setRangeEndPage(event.target.value)}
-                            />
-                          </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <Label htmlFor="summary-range-start" className="text-xs">
+                            Start page
+                          </Label>
+                          <Input
+                            id="summary-range-start"
+                            type="number"
+                            min={1}
+                            max={totalPages}
+                            value={rangeStartPage}
+                            onChange={(event) => setRangeStartPage(event.target.value)}
+                            className="h-8"
+                          />
                         </div>
-                      )}
+                        <div className="space-y-1">
+                          <Label htmlFor="summary-range-end" className="text-xs">
+                            End page
+                          </Label>
+                          <Input
+                            id="summary-range-end"
+                            type="number"
+                            min={1}
+                            max={totalPages}
+                            value={rangeEndPage}
+                            onChange={(event) => setRangeEndPage(event.target.value)}
+                            className="h-8"
+                          />
+                        </div>
+                      </div>
                       <Button
-                        className="w-full"
-                        onClick={summarizeMode === "page" ? queueCurrentPageSummary : queueRangeSummary}
+                        className="w-full h-8"
+                        onClick={queueRangeSummary}
                         disabled={isRangeSummaryPending || summarizePageMutation.isPending || summarizePagesMutation.isPending || !currentPageId}
                       >
                         {isRangeSummaryPending || summarizePageMutation.isPending || summarizePagesMutation.isPending
                           ? "Queueing..."
-                          : summarizeMode === "page"
-                            ? "Summarize Current Page"
-                            : "Queue Page Range"}
+                          : "Queue Summary"}
                       </Button>
                     </PopoverContent>
                   </Popover>
@@ -620,11 +566,11 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                     <TooltipContent>Generate summary for this document</TooltipContent>
                   </Tooltip>
                 ))}
-              {!isSummaryUpload && (
+              {!isSummaryUpload && (!isBookUpload || hasExistingSummary) && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
-                      variant="ghost"
+                      variant={isSummaryVisible ? "secondary" : "ghost"}
                       size="icon"
                       className="h-8 w-8"
                       onClick={() => {
@@ -644,20 +590,12 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                         openSummarySplit(activeSummaryRecord.summary_upload, summarySourcePageId);
                       }}
                     >
-                      {isSummaryVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      <Sparkles className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>{isSummaryVisible ? "Hide summary" : "Show summary"}</TooltipContent>
+                  <TooltipContent>{isSummaryVisible ? "Hide summary pane" : "Show summary pane"}</TooltipContent>
                 </Tooltip>
               )}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant={isReadingMode ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={toggleReadingMode}>
-                    <BookMarked className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>{isReadingMode ? "Exit Reading Mode" : "Reading Mode"}</TooltipContent>
-              </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleFullscreen}>
@@ -669,9 +607,9 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
               <ReaderSettingsPanel settings={settings} onSettingsChange={setSettings} onApplyTheme={applyTheme} onReset={resetSettings} />
             </div>
           </div>
-          <div className={cn("h-0.5", isReadingMode ? "bg-(--reader-text-color)/10" : "bg-muted")}>
+          <div className={cn("h-0.5", "bg-muted")}>
             <div
-              className={cn("h-full transition-all duration-300", isReadingMode ? "bg-(--reader-text-color)/30" : "bg-primary/50")}
+              className={cn("h-full transition-all duration-300", "bg-primary/50")}
               style={{
                 width: `${(pageSettings.currentPage / (totalPages || 1)) * 100}%`,
               }}
@@ -789,11 +727,8 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
         <footer
           className={cn(
             "shrink-0 border-t px-3 sm:px-6 py-4 transition-colors duration-300",
-            isReadingMode
-              ? "bg-(--reader-bg-color) border-(--reader-text-color)/10"
-              : "bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60",
+            "bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60",
           )}
-          style={isReadingMode ? { color: settings.textColor } : undefined}
         >
           <div className="max-w-4xl mx-auto grid grid-cols-[auto_1fr_auto] items-center gap-2 text-xs">
             <span className="opacity-60">1</span>
@@ -811,8 +746,6 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                   }, 50);
                 }
               }}
-              isReadingMode={isReadingMode}
-              textColor={settings.textColor}
               uploadId={uploadId}
             />
             <span className="opacity-60">{totalPages}</span>

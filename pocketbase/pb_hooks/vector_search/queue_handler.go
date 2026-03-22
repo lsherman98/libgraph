@@ -106,7 +106,7 @@ func handleChunkEmbedPollJob(app *pocketbase.PocketBase, job *core.Record) error
 		return fmt.Errorf("payload embedding_operation_id is required")
 	}
 
-	operationRecord, err := app.FindRecordById(collections.EmbeddingOperations, operationID)
+	operationRecord, err := app.FindRecordById(collections.EmbeddingJobs, operationID)
 	if err != nil {
 		return err
 	}
@@ -290,13 +290,6 @@ func submitEmbeddingOperationAndProcessSync(app *pocketbase.PocketBase, job *cor
 		return err
 	}
 
-	app.Logger().Info("[vector_search] sync bulk embedding completed",
-		"job_id", job.Id,
-		"model", modelName,
-		"processed", processed,
-		"failed", failed,
-	)
-
 	return nil
 }
 
@@ -321,27 +314,8 @@ func processChunkEmbeddingsSyncBulk(app *pocketbase.PocketBase, chunks []chunkRe
 				firstErr = err
 			}
 			failed += len(batch)
-			app.Logger().Error("[vector_search] sync bulk embed request failed",
-				"model", modelName,
-				"start", start,
-				"end", end,
-				"error", err,
-			)
 			continue
 		}
-
-		firstVectorDims := 0
-		if len(vectors) > 0 && len(vectors[0]) > 0 {
-			firstVectorDims = len(vectors[0])
-		}
-		app.Logger().Info("[vector_search] sync bulk embed response",
-			"model", modelName,
-			"start", start,
-			"end", end,
-			"requested", len(batch),
-			"returned", len(vectors),
-			"first_vector_dims", firstVectorDims,
-		)
 
 		processable := min(len(vectors), len(batch))
 		for i := 0; i < processable; i++ {
@@ -361,13 +335,6 @@ func processChunkEmbeddingsSyncBulk(app *pocketbase.PocketBase, chunks []chunkRe
 
 		if len(vectors) < len(batch) {
 			failed += len(batch) - len(vectors)
-			app.Logger().Warn("[vector_search] sync bulk embed returned fewer vectors than requested",
-				"model", modelName,
-				"start", start,
-				"end", end,
-				"requested", len(batch),
-				"returned", len(vectors),
-			)
 			if firstErr == nil {
 				firstErr = fmt.Errorf("sync bulk embed returned fewer embeddings than requested: got %d, expected %d", len(vectors), len(batch))
 			}
@@ -378,7 +345,7 @@ func processChunkEmbeddingsSyncBulk(app *pocketbase.PocketBase, chunks []chunkRe
 }
 
 func createEmbeddingOperationRecord(app *pocketbase.PocketBase, job *core.Record, chunkIDs []string, providerOperationID string, modelName string, totalChunks int, maxAttempts int) (*core.Record, error) {
-	collection, err := app.FindCollectionByNameOrId(collections.EmbeddingOperations)
+	collection, err := app.FindCollectionByNameOrId(collections.EmbeddingJobs)
 	if err != nil {
 		return nil, err
 	}
@@ -405,7 +372,6 @@ func createEmbeddingOperationRecord(app *pocketbase.PocketBase, job *core.Record
 	operationRecord.Set("failed_chunks", 0)
 	operationRecord.Set("attempts", 0)
 	operationRecord.Set("max_attempts", maxAttempts)
-	operationRecord.Set("error_message", "")
 	operationRecord.Set("chunk_ids_json", chunkIDs)
 	operationRecord.Set("submitted_at", time.Now().UTC())
 	if err := app.Save(operationRecord); err != nil {
@@ -456,13 +422,9 @@ func enqueueEmbeddingPollJob(app *pocketbase.PocketBase, operationRecord *core.R
 		Payload: map[string]any{
 			"embedding_operation_id": operationID,
 		},
-		Priority:             100,
-		MaxAttempts:          5,
-		ScheduledAt:          &scheduledAt,
-		UserID:               userID,
-		UploadID:             uploadID,
-		PageID:               pageID,
-		EmbeddingOperationID: operationID,
+		UserID:   userID,
+		UploadID: uploadID,
+		PageID:   pageID,
 	})
 }
 
@@ -509,14 +471,14 @@ func rescheduleEmbeddingPollJob(app *pocketbase.PocketBase, job *core.Record, op
 	return app.Save(job)
 }
 
-func enqueuePendingEmbeddingPollJobs(app *pocketbase.PocketBase, limit int) {
+func enqueuePendingEmbeddingPollJobs(app *pocketbase.PocketBase, limit int) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	if limit <= 0 {
 		limit = 100
 	}
 
 	operations, err := app.FindRecordsByFilter(
-		collections.EmbeddingOperations,
+		collections.EmbeddingJobs,
 		"(status = 'submitted' || status = 'polling') && (next_poll_at = '' || next_poll_at = null || next_poll_at <= {:now})",
 		"next_poll_at,created",
 		limit,
@@ -524,14 +486,13 @@ func enqueuePendingEmbeddingPollJobs(app *pocketbase.PocketBase, limit int) {
 		dbx.Params{"now": now},
 	)
 	if err != nil {
-		app.Logger().Error("[vector_search] failed to fetch pending embedding operations", "error", err)
-		return
+		return err
 	}
 
 	for _, operationRecord := range operations {
 		opID := operationRecord.Id
 		existingJobs, err := app.FindRecordsByFilter(
-			collections.ProcessingJobs,
+			collections.Queue,
 			"embedding_operation = {:operationId} && job_type = {:jobType} && (status = 'queued' || status = 'running')",
 			"",
 			1,
@@ -539,7 +500,6 @@ func enqueuePendingEmbeddingPollJobs(app *pocketbase.PocketBase, limit int) {
 			dbx.Params{"operationId": opID, "jobType": processing.JobTypeChunkEmbedPoll},
 		)
 		if err != nil {
-			app.Logger().Warn("[vector_search] failed checking existing poll job", "operation_id", opID, "error", err)
 			continue
 		}
 
@@ -549,15 +509,16 @@ func enqueuePendingEmbeddingPollJobs(app *pocketbase.PocketBase, limit int) {
 
 		nextPollAt := time.Now().UTC()
 		if err := enqueueEmbeddingPollJob(app, operationRecord, nextPollAt); err != nil {
-			app.Logger().Warn("[vector_search] failed to enqueue poll job", "operation_id", opID, "error", err)
 			continue
 		}
 
 		operationRecord.Set("next_poll_at", nextPollAt)
 		if saveErr := app.Save(operationRecord); saveErr != nil {
-			app.Logger().Warn("[vector_search] failed to update next_poll_at", "operation_id", opID, "error", saveErr)
+			continue
 		}
 	}
+
+	return nil
 }
 
 func loadEmbeddableChunkRecords(app *pocketbase.PocketBase, chunkIDs []string) ([]*core.Record, error) {
@@ -572,10 +533,12 @@ func loadEmbeddableChunkRecords(app *pocketbase.PocketBase, chunkIDs []string) (
 		if uploadID == "" {
 			continue
 		}
+
 		uploadRecord, err := app.FindRecordById(collections.Uploads, uploadID)
 		if err != nil {
 			return nil, err
 		}
+
 		uploadType := strings.TrimSpace(uploadRecord.GetString("type"))
 		if uploadType == "summary" {
 			continue
@@ -597,6 +560,7 @@ func embeddingOperationChunkIDs(operationRecord *core.Record) ([]string, error) 
 	if err := json.Unmarshal([]byte(raw), &chunkIDs); err != nil {
 		return nil, err
 	}
+
 	return chunkIDs, nil
 }
 

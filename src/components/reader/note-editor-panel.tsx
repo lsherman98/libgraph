@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { X, Trash2, StickyNote } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { CreatableCombobox } from "@/components/creatable-combobox";
 import { useReaderStore } from "@/lib/stores/reader-store";
 import { AddToProjectButton } from "./add-to-project-button";
@@ -77,15 +77,6 @@ export function NoteEditorPanel() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-4 py-3 border-b">
-        <h3 className="font-semibold text-sm flex items-center gap-2">
-          <StickyNote className="h-4 w-4 text-blue-500" />
-          {isEditing ? "Edit Note" : "New Note"}
-        </h3>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleClose}>
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-5">
           {note.previewText && (

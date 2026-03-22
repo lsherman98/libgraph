@@ -64,17 +64,9 @@ func main() {
 		log.Println("No .env file found, using environment variables")
 	}
 
-	// if err := api.Init(app); err != nil {
-	// 	log.Fatal("Failed to initialize API hooks: ", err)
-	// }
-
 	if err := crons.Init(app); err != nil {
 		log.Fatal("Failed to initialize cron jobs: ", err)
 	}
-
-	// if err := stripe.Init(app); err != nil {
-	// 	log.Fatal("Failed to initialize Stripe hooks: ", err)
-	// }
 
 	if err := uploads.Init(app); err != nil {
 		log.Fatal("Failed to initialize Uploads hooks: ", err)
@@ -103,7 +95,6 @@ func main() {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.GET("/{path...}", apis.Static(os.DirFS("./pb_public"), true))
 
-		// Recover uploads that were stuck in PROCESSING state from a previous crash.
 		uploads.RecoverStuckUploads(app)
 
 		return se.Next()

@@ -61,8 +61,8 @@ export type EditorState =
     | { mode: "editing-note"; data: EditingNote };
 
 interface ReaderStore {
-    isReadingMode: boolean;
-    setReadingMode: (value: boolean) => void;
+    annotationTab: "highlights" | "bookmarks" | "notes" | "ai";
+    setAnnotationTab: (tab: "highlights" | "bookmarks" | "notes" | "ai") => void;
     currentUploadId: string | null;
     setCurrentUploadId: (uploadId: string | null) => void;
     currentPageId: string | null;
@@ -77,8 +77,8 @@ interface ReaderStore {
 }
 
 export const useReaderStore = create<ReaderStore>((set) => ({
-    isReadingMode: false,
-    setReadingMode: (value) => set({ isReadingMode: value }),
+    annotationTab: "highlights",
+    setAnnotationTab: (tab) => set({ annotationTab: tab }),
     currentUploadId: null,
     setCurrentUploadId: (uploadId) => set({ currentUploadId: uploadId }),
     currentPageId: null,

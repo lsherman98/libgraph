@@ -13,15 +13,12 @@ import {
   type HighlightsResponse,
   type BookmarksResponse,
   type PeopleResponse,
-  type PublicationsResponse,
   type TagsResponse,
   type TopicsResponse,
-  type PagesResponse,
   HighlightsColorOptions,
 } from "@/lib/pocketbase-types";
 import type { EnrichedNodesResponse, NodeRecordData } from "@/lib/types";
 
-// Type configuration for icons and colors
 const typeConfig: Record<NodesTypeOptions, { icon: React.ElementType; color: string; bgColor: string; label: string }> = {
   [NodesTypeOptions.upload]: {
     icon: FileText,
@@ -67,7 +64,6 @@ const typeConfig: Record<NodesTypeOptions, { icon: React.ElementType; color: str
   },
 };
 
-// Highlight color configuration
 const highlightColors: Record<HighlightsColorOptions, string> = {
   [HighlightsColorOptions.yellow]: "bg-yellow-200 dark:bg-yellow-900/50",
   [HighlightsColorOptions.green]: "bg-green-200 dark:bg-green-900/50",
@@ -90,7 +86,6 @@ function formatDate(dateString: string): string {
   });
 }
 
-// Upload detail component
 function UploadDetail({ data }: { data: UploadsResponse }) {
   return (
     <div className="space-y-4">
@@ -101,7 +96,6 @@ function UploadDetail({ data }: { data: UploadsResponse }) {
           <Badge variant={data.status === "SUCCESS" ? "default" : "outline"}>{data.status}</Badge>
         </div>
       </div>
-
       <div className="grid grid-cols-2 gap-3 text-sm">
         {data.num_pages && (
           <div className="flex items-center gap-2">
@@ -114,9 +108,7 @@ function UploadDetail({ data }: { data: UploadsResponse }) {
           <span>{formatDate(data.created)}</span>
         </div>
       </div>
-
       <Separator />
-
       <Button variant="default" className="w-full" asChild>
         <Link to="/workspace" search={{ id: data.id, type: "upload" }}>
           <ExternalLink className="h-4 w-4 mr-2" />
@@ -127,7 +119,6 @@ function UploadDetail({ data }: { data: UploadsResponse }) {
   );
 }
 
-// Highlight detail component
 function HighlightDetail({ data }: { data: HighlightsResponse }) {
   const colorClass = data.color ? highlightColors[data.color] : highlightColors.yellow;
 
@@ -176,14 +167,12 @@ function HighlightDetail({ data }: { data: HighlightsResponse }) {
   );
 }
 
-// Bookmark detail component
 function BookmarkDetail({ data }: { data: BookmarksResponse }) {
   return (
     <div className="space-y-4">
       <div>
         <h3 className="text-lg font-semibold">{data.comment || "Untitled Bookmark"}</h3>
       </div>
-
       {data.comment && (
         <Card className="bg-muted/50">
           <CardContent className="p-4">
@@ -191,7 +180,6 @@ function BookmarkDetail({ data }: { data: BookmarksResponse }) {
           </CardContent>
         </Card>
       )}
-
       <div className="flex items-center gap-4 text-sm text-muted-foreground">
         {data.page_number && (
           <div className="flex items-center gap-2">
@@ -204,9 +192,7 @@ function BookmarkDetail({ data }: { data: BookmarksResponse }) {
           <span>{formatDate(data.created)}</span>
         </div>
       </div>
-
       <Separator />
-
       {data.upload && (
         <Button variant="default" className="w-full" asChild>
           <Link to="/workspace" search={{ id: data.upload, type: "upload" }}>
@@ -219,7 +205,6 @@ function BookmarkDetail({ data }: { data: BookmarksResponse }) {
   );
 }
 
-// Person detail component
 function PersonDetail({ data }: { data: PeopleResponse }) {
   return (
     <div className="space-y-4">
@@ -229,7 +214,6 @@ function PersonDetail({ data }: { data: PeopleResponse }) {
           {data.type?.replace("_", " ")}
         </Badge>
       </div>
-
       {data.source && (
         <div>
           <span className="text-sm text-muted-foreground">Source: </span>
@@ -238,7 +222,6 @@ function PersonDetail({ data }: { data: PeopleResponse }) {
           </a>
         </div>
       )}
-
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Calendar className="h-4 w-4" />
         <span>Added {formatDate(data.created)}</span>
@@ -247,35 +230,6 @@ function PersonDetail({ data }: { data: PeopleResponse }) {
   );
 }
 
-// Publication detail component
-function PublicationDetail({ data }: { data: PublicationsResponse }) {
-  return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-lg font-semibold">{data.name || "Unknown Publication"}</h3>
-        <Badge variant="secondary" className="mt-1 capitalize">
-          {data.type?.replace("_", " ")}
-        </Badge>
-      </div>
-
-      {data.url && (
-        <div>
-          <span className="text-sm text-muted-foreground">URL: </span>
-          <a href={data.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
-            {data.url}
-          </a>
-        </div>
-      )}
-
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Calendar className="h-4 w-4" />
-        <span>Added {formatDate(data.created)}</span>
-      </div>
-    </div>
-  );
-}
-
-// Tag detail component
 function TagDetail({ data }: { data: TagsResponse }) {
   return (
     <div className="space-y-4">
@@ -294,7 +248,6 @@ function TagDetail({ data }: { data: TagsResponse }) {
   );
 }
 
-// Topic detail component
 function TopicDetail({ data }: { data: TopicsResponse }) {
   return (
     <div className="space-y-4">
@@ -313,34 +266,6 @@ function TopicDetail({ data }: { data: TopicsResponse }) {
   );
 }
 
-// Page detail component
-function PageDetail({ data }: { data: PagesResponse }) {
-  return (
-    <div className="space-y-4">
-      <div>
-        <h3 className="text-lg font-semibold">Page {data.page || "?"}</h3>
-      </div>
-
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Calendar className="h-4 w-4" />
-        <span>{formatDate(data.created)}</span>
-      </div>
-
-      <Separator />
-
-      {data.upload && (
-        <Button variant="default" className="w-full" asChild>
-          <Link to="/workspace" search={{ id: data.upload, type: "upload" }}>
-            <ExternalLink className="h-4 w-4 mr-2" />
-            Open Page
-          </Link>
-        </Button>
-      )}
-    </div>
-  );
-}
-
-// Render the appropriate detail component based on node type
 function renderRecordDetail(type: NodesTypeOptions, recordData: NodeRecordData) {
   switch (type) {
     case NodesTypeOptions.upload:
@@ -377,7 +302,6 @@ export function NodeDetailDialog({ node, open, onOpenChange }: NodeDetailDialogP
             <span>{config?.label || "Node"} Details</span>
           </DialogTitle>
         </DialogHeader>
-
         <ScrollArea className="max-h-[60vh]">
           <div className="pr-4">
             {node.record_data ? (

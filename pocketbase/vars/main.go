@@ -4,18 +4,16 @@ const (
 	UploadTypeBook    = "book"
 	UploadTypeSummary = "summary"
 
-	UploadStatusPending    = "PENDING"
-	UploadStatusProcessing = "PROCESSING"
-	UploadStatusFailed     = "FAILED"
-	UploadStatusSuccess    = "SUCCESS"
+	UploadStatusPending    = "pending"
+	UploadStatusProcessing = "processing"
+	UploadStatusFailed     = "failed"
+	UploadStatusSuccess    = "success"
 
-	QueueStatusQueued     = "queued"
-	QueueStatusRunning    = "running"
-	QueueStatusSuccess    = "success"
-	QueueStatusSucceeded  = QueueStatusSuccess
-	QueueStatusFailed     = "failed"
-	QueueStatusDeadletter = QueueStatusFailed
-	QueueStatusCancelled  = "cancelled"
+	QueueStatusQueued    = "queued"
+	QueueStatusRunning   = "running"
+	QueueStatusSuccess   = "success"
+	QueueStatusFailed    = "failed"
+	QueueStatusCancelled = "cancelled"
 
 	EmbeddingStatusQueued    = "queued"
 	EmbeddingStatusSubmitted = "submitted"

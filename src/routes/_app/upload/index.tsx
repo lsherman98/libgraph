@@ -284,7 +284,6 @@ function RouteComponent() {
       try {
         await uploadMutation.mutateAsync({
           file: fileData.file,
-          transcript_file: fileData.transcriptFile,
           title: fileData.name,
           type: fileData.type,
           people: fileData.subjects.length > 0 ? fileData.subjects : undefined,

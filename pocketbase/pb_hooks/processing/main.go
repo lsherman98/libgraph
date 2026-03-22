@@ -1,9 +1,6 @@
 package processing
 
 import (
-	"fmt"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/lsherman98/libgraph/pocketbase/collections"
@@ -25,12 +22,11 @@ const (
 const (
 	queuePollInterval = 10 * time.Second
 	embedPollInterval = 120 * time.Second
-	workerID          = "pb-main-worker"
 )
 
-type workerSpec struct {
+type Worker struct {
 	name     string
-	jobTypes []string
+	jobType  string
 	limit    int
 	interval time.Duration
 }
@@ -38,75 +34,39 @@ type workerSpec struct {
 type JobHandler func(app *pocketbase.PocketBase, job *core.Record) error
 
 type EnqueueRequest struct {
-	JobType              string
-	DedupeKey            string
-	Payload              map[string]any
-	Priority             int
-	MaxAttempts          int
-	ScheduledAt          *time.Time
-	UserID               string
-	UploadID             string
-	PageID               string
-	ChunkID              string
-	EmbeddingOperationID string
+	JobType   string
+	DedupeKey string
+	Payload   map[string]any
+	UserID    string
+	UploadID  string
+	PageID    string
 }
 
 var (
-	handlersMu sync.RWMutex
-	handlers   = map[string]JobHandler{}
+	handlers = map[string]JobHandler{}
 )
 
-const processingJobErrorMessageMaxLen = 5000
-
-func clampProcessingJobErrorMessage(message string) string {
-	trimmed := strings.TrimSpace(message)
-	if trimmed == "" {
-		return ""
-	}
-
-	runes := []rune(trimmed)
-	if len(runes) <= processingJobErrorMessageMaxLen {
-		return trimmed
-	}
-
-	suffix := " ... (truncated)"
-	maxContentLen := processingJobErrorMessageMaxLen - len([]rune(suffix))
-	if maxContentLen <= 0 {
-		return string(runes[:processingJobErrorMessageMaxLen])
-	}
-
-	return string(runes[:maxContentLen]) + suffix
-}
-
 func RegisterHandler(jobType string, handler JobHandler) {
-	handlersMu.Lock()
-	defer handlersMu.Unlock()
 	handlers[jobType] = handler
 }
 
 func Init(app *pocketbase.PocketBase) error {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
-		workers := []workerSpec{
-			{name: "upload-parse", jobTypes: []string{JobTypeUploadParseOrTranscribe}, limit: 2, interval: queuePollInterval},
-			{name: "chunk-generate", jobTypes: []string{JobTypeChunkGenerate}, limit: 4, interval: queuePollInterval},
-			{name: "page-summarize", jobTypes: []string{JobTypePageSummarize}, limit: 4, interval: queuePollInterval},
-			{name: "embed-submit", jobTypes: []string{JobTypeChunkEmbedSubmit}, limit: 3, interval: queuePollInterval},
-			{name: "embed-poll", jobTypes: []string{JobTypeChunkEmbedPoll}, limit: 8, interval: embedPollInterval},
+		workers := []Worker{
+			{name: "parse", jobType: JobTypeUploadParseOrTranscribe, limit: 2, interval: queuePollInterval},
+			{name: "chunk", jobType: JobTypeChunkGenerate, limit: 4, interval: queuePollInterval},
+			{name: "summarize", jobType: JobTypePageSummarize, limit: 4, interval: queuePollInterval},
+			{name: "embed-submit", jobType: JobTypeChunkEmbedSubmit, limit: 3, interval: queuePollInterval},
+			{name: "embed-poll", jobType: JobTypeChunkEmbedPoll, limit: 8, interval: embedPollInterval},
 		}
 
 		for _, spec := range workers {
-			spec := spec
 			routine.FireAndForget(func() {
-				interval := spec.interval
-				if interval <= 0 {
-					interval = queuePollInterval
-				}
-				ticker := time.NewTicker(interval)
+				ticker := time.NewTicker(spec.interval)
 				defer ticker.Stop()
 
-				for {
+				for range ticker.C {
 					processDueJobs(app, spec)
-					<-ticker.C
 				}
 			})
 		}
@@ -118,271 +78,105 @@ func Init(app *pocketbase.PocketBase) error {
 }
 
 func Enqueue(app *pocketbase.PocketBase, req EnqueueRequest) error {
-	if strings.TrimSpace(req.JobType) == "" {
-		return fmt.Errorf("processing enqueue: job type is required")
-	}
-	if strings.TrimSpace(req.DedupeKey) == "" {
-		return fmt.Errorf("processing enqueue: dedupe key is required")
-	}
-	if req.Priority == 0 {
-		req.Priority = 100
-	}
-	if req.MaxAttempts == 0 {
-		req.MaxAttempts = 5
-	}
-
 	existing, err := app.FindFirstRecordByFilter(
-		collections.ProcessingJobs,
+		collections.Queue,
 		"dedupe_key = {:dedupeKey}",
 		dbx.Params{"dedupeKey": req.DedupeKey},
 	)
 	if err == nil {
-		switch strings.TrimSpace(existing.GetString("status")) {
-		case vars.QueueStatusQueued, vars.QueueStatusRunning, vars.QueueStatusSuccess, "succeeded":
+		switch existing.GetString("status") {
+		case vars.QueueStatusQueued, vars.QueueStatusRunning, vars.QueueStatusSuccess:
 			return nil
-		case vars.QueueStatusFailed, vars.QueueStatusCancelled, "deadletter":
+		case vars.QueueStatusFailed, vars.QueueStatusCancelled:
 			existing.Set("status", vars.QueueStatusQueued)
 			existing.Set("started_at", nil)
 			existing.Set("finished_at", nil)
-			existing.Set("error_code", "")
-			existing.Set("error_message", "")
+			existing.Set("error_code", nil)
+			existing.Set("error_message", nil)
 			existing.Set("payload_json", req.Payload)
-			setOptionalRelations(existing, req)
 			return app.Save(existing)
 		default:
 			return nil
 		}
 	}
 
-	jobsCollection, colErr := app.FindCollectionByNameOrId(collections.ProcessingJobs)
-	if colErr != nil {
-		return colErr
+	jobsCollection, err := app.FindCollectionByNameOrId(collections.Queue)
+	if err != nil {
+		return err
 	}
 
 	record := core.NewRecord(jobsCollection)
-	jobType := req.JobType
-	switch req.JobType {
-	case JobTypeUploadParseOrTranscribe:
-		jobType = JobTypeUploadParseOrTranscribe
-	case JobTypeChunkGenerate:
-		jobType = JobTypeChunkGenerate
-	case JobTypePageSummarize:
-		jobType = JobTypePageSummarize
-	case JobTypeChunkEmbedSubmit:
-		jobType = JobTypeChunkEmbedSubmit
-	case JobTypeChunkEmbedPoll:
-		jobType = JobTypeChunkEmbedPoll
-	default:
-		return fmt.Errorf("processing enqueue: unsupported job type: %s", req.JobType)
-	}
-	record.Set("job_type", jobType)
+	record.Set("job_type", req.JobType)
 	record.Set("status", vars.QueueStatusQueued)
 	record.Set("dedupe_key", req.DedupeKey)
 	record.Set("payload_json", req.Payload)
-	setOptionalRelations(record, req)
+	record.Set("user", req.UserID)
+	record.Set("upload", req.UploadID)
+	record.Set("page", req.PageID)
 
-	saveErr := app.Save(record)
-	if saveErr != nil && strings.Contains(strings.ToLower(saveErr.Error()), "unique") {
-		return nil
+	err = app.Save(record)
+	if err != nil {
+		return err
 	}
 
-	return saveErr
+	return nil
 }
 
-func setOptionalRelations(record *core.Record, req EnqueueRequest) {
-	if req.UserID != "" {
-		record.Set("user", req.UserID)
-	}
-	if req.UploadID != "" {
-		record.Set("upload", req.UploadID)
-	}
-	if req.PageID != "" {
-		record.Set("page", req.PageID)
-	}
-	if req.ChunkID != "" {
-		record.Set("chunk", req.ChunkID)
-	}
-	if req.EmbeddingOperationID != "" {
-		record.Set("embedding_operation", req.EmbeddingOperationID)
-	}
-}
-
-func processDueJobs(app *pocketbase.PocketBase, worker workerSpec) {
-	if len(worker.jobTypes) == 0 || worker.limit <= 0 {
-		return
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339)
-	jobTypeFilters := make([]string, 0, len(worker.jobTypes))
-	params := dbx.Params{"now": now}
-	for i, jobType := range worker.jobTypes {
-		key := fmt.Sprintf("jobType%d", i)
-		jobTypeFilters = append(jobTypeFilters, fmt.Sprintf("job_type = {:%s}", key))
-		params[key] = jobType
-	}
-	jobTypeClause := "(" + strings.Join(jobTypeFilters, " || ") + ")"
-
+func processDueJobs(app *pocketbase.PocketBase, worker Worker) error {
 	records, err := app.FindRecordsByFilter(
-		collections.ProcessingJobs,
-		"status = 'queued' && "+jobTypeClause,
+		collections.Queue,
+		"status = 'queued' && job_type = {:jobType}",
 		"created",
 		worker.limit,
 		0,
-		params,
+		dbx.Params{"jobType": worker.jobType},
 	)
 	if err != nil {
-		app.Logger().Error("[processing] failed to fetch due jobs", "worker", worker.name, "error", err)
-		return
+		return err
 	}
 
 	for _, job := range records {
 		if err := claimJob(app, job, worker.name); err != nil {
-			app.Logger().Warn("[processing] failed to claim job", "jobId", job.Id, "error", err)
 			continue
 		}
 
-		execErr := executeJob(app, job)
-		if execErr != nil {
-			handleJobFailure(app, job, execErr)
-			continue
-		}
-
-		if strings.TrimSpace(job.GetString("status")) != vars.QueueStatusRunning {
+		err := executeJob(app, job)
+		if err != nil {
+			handleJobFailure(app, job, err)
 			continue
 		}
 
 		job.Set("status", vars.QueueStatusSuccess)
 		job.Set("finished_at", time.Now().UTC())
-		job.Set("error_code", "")
-		job.Set("error_message", "")
 		if err := app.Save(job); err != nil {
-			app.Logger().Error("[processing] failed to mark job as succeeded", "jobId", job.Id, "error", err)
 			continue
 		}
-
-		reconcileUploadStatus(app, strings.TrimSpace(job.GetString("upload")))
 	}
+
+	return nil
 }
 
 func claimJob(app *pocketbase.PocketBase, job *core.Record, workerName string) error {
 	now := time.Now().UTC()
 	job.Set("status", vars.QueueStatusRunning)
 	job.Set("started_at", now)
-	job.Set("worker_id", fmt.Sprintf("%s:%s", workerID, workerName))
-	job.Set("error_code", "")
-	job.Set("error_message", "")
+	job.Set("worker_id", workerName)
 	return app.Save(job)
 }
 
 func executeJob(app *pocketbase.PocketBase, job *core.Record) error {
 	jobType := job.GetString("job_type")
-
-	handlersMu.RLock()
 	handler := handlers[jobType]
-	handlersMu.RUnlock()
 
-	if handler == nil {
-		return fmt.Errorf("no handler registered for job_type=%s", jobType)
-	}
-
-	err := handler(app, job)
-	if err == nil {
-		return nil
-	}
-
-	if isNoRowsError(err) {
-		app.Logger().Info("[processing] skipping job because related record no longer exists", "jobId", job.Id, "jobType", jobType, "error", err)
-		return nil
-	}
-
-	return err
+	return handler(app, job)
 }
 
-func isNoRowsError(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	message := strings.ToLower(strings.TrimSpace(err.Error()))
-	if message == "" {
-		return false
-	}
-
-	return strings.Contains(message, "no rows in result set")
-}
-
-func handleJobFailure(app *pocketbase.PocketBase, job *core.Record, execErr error) {
+func handleJobFailure(app *pocketbase.PocketBase, job *core.Record, err error) {
 	now := time.Now().UTC()
 	job.Set("status", vars.QueueStatusFailed)
 	job.Set("finished_at", now)
-	job.Set("error_message", clampProcessingJobErrorMessage(execErr.Error()))
+	job.Set("error_message", err)
 	if err := app.Save(job); err != nil {
-		app.Logger().Error("[processing] failed to mark job as failed", "jobId", job.Id, "error", err)
 		return
-	}
-
-	reconcileUploadStatus(app, strings.TrimSpace(job.GetString("upload")))
-}
-
-func reconcileUploadStatus(app *pocketbase.PocketBase, uploadID string) {
-	uploadID = strings.TrimSpace(uploadID)
-	if uploadID == "" {
-		return
-	}
-
-	upload, err := app.FindRecordById(collections.Uploads, uploadID)
-	if err != nil {
-		app.Logger().Warn("[processing] unable to load upload for status reconciliation", "uploadId", uploadID, "error", err)
-		return
-	}
-
-	inProgressJobs, err := app.FindRecordsByFilter(
-		collections.ProcessingJobs,
-		"upload = {:uploadId} && (status = 'queued' || status = 'running')",
-		"",
-		1,
-		0,
-		dbx.Params{"uploadId": uploadID},
-	)
-	if err != nil {
-		app.Logger().Warn("[processing] unable to query in-progress jobs for upload", "uploadId", uploadID, "error", err)
-		return
-	}
-
-	if len(inProgressJobs) > 0 {
-		if !strings.EqualFold(upload.GetString("status"), vars.UploadStatusProcessing) {
-			upload.Set("status", vars.UploadStatusProcessing)
-			if saveErr := app.Save(upload); saveErr != nil {
-				app.Logger().Warn("[processing] failed to set upload status=PROCESSING", "uploadId", uploadID, "error", saveErr)
-			}
-		}
-		return
-	}
-
-	failedJobs, err := app.FindRecordsByFilter(
-		collections.ProcessingJobs,
-		"upload = {:uploadId} && (status = 'failed' || status = 'cancelled' || status = 'deadletter')",
-		"",
-		1,
-		0,
-		dbx.Params{"uploadId": uploadID},
-	)
-	if err != nil {
-		app.Logger().Warn("[processing] unable to query terminal failed jobs for upload", "uploadId", uploadID, "error", err)
-		return
-	}
-
-	desiredStatus := vars.UploadStatusSuccess
-	if len(failedJobs) > 0 {
-		desiredStatus = vars.UploadStatusFailed
-	}
-
-	if strings.EqualFold(upload.GetString("status"), desiredStatus) {
-		return
-	}
-
-	upload.Set("status", desiredStatus)
-	if err := app.Save(upload); err != nil {
-		app.Logger().Warn("[processing] failed to reconcile upload status", "uploadId", uploadID, "status", desiredStatus, "error", err)
 	}
 }

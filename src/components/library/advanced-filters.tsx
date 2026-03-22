@@ -239,7 +239,7 @@ interface FilterDropdownProps {
   className?: string;
 }
 
-function FilterDropdown({ label, values, placeholder, searchable, options, onToggle, className }: FilterDropdownProps) {
+function FilterDropdown({ values, placeholder, searchable, options, onToggle, className }: FilterDropdownProps) {
   return (
     <div className={`min-w-0 shrink-0 ${className ?? ""}`}>
       <CreatableCombobox

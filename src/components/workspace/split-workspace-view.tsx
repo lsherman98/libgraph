@@ -1,4 +1,4 @@
-import { useCallback, useState, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useWorkspaceTabsStore, type ReaderTab, type WriterTab, type WorkspaceTab } from "@/lib/stores/workspace-tabs-store";
 import { ReaderPane } from "@/components/reader/reader-pane";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
@@ -22,14 +22,25 @@ export function SplitWorkspaceView({
   onContentChange: parentOnContentChange,
   onTitleLoad,
 }: SplitWorkspaceViewProps) {
-  const { tabs, activeTabId, splitMode, splitTabId, panelSizes, updateReaderTabPage, updateTabTitle, setWriterTabDirty } = useWorkspaceTabsStore();
-  const [focusedTabId, setFocusedTabId] = useState<string | null>(null);
+  const {
+    tabs,
+    activeTabId,
+    splitMode,
+    splitTabId,
+    focusedPane,
+    setFocusedPane,
+    panelSizes,
+    updateReaderTabPage,
+    updateTabTitle,
+    setWriterTabDirty,
+  } = useWorkspaceTabsStore();
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const splitTab = splitTabId ? tabs.find((t) => t.id === splitTabId) : null;
 
   const [splitLocalContent, setSplitLocalContent] = useState<string>("");
-  const { data: splitProject } = useWritingProject(splitTab?.type === "writer" ? (splitTab as WriterTab).projectId : undefined);
+
+  const { data: splitProject } = useWritingProject(splitTab?.type === "writer" ? (splitTab as WriterTab).projectId : "");
   const splitAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const updateSplitProject = useUpdateWritingProject();
 
@@ -90,23 +101,6 @@ export function SplitWorkspaceView({
     };
   }, []);
 
-  useEffect(() => {
-    if (!activeTabId) {
-      setFocusedTabId(null);
-      return;
-    }
-
-    if (splitMode === "none" || !splitTabId) {
-      setFocusedTabId(activeTabId);
-      return;
-    }
-
-    const isFocusedTabVisible = focusedTabId === activeTabId || focusedTabId === splitTabId;
-    if (!isFocusedTabVisible) {
-      setFocusedTabId(activeTabId);
-    }
-  }, [activeTabId, splitMode, splitTabId, focusedTabId]);
-
   if (!activeTab) {
     return null;
   }
@@ -151,13 +145,13 @@ export function SplitWorkspaceView({
 
   if (splitMode === "none" || !splitTab) {
     return (
-      <div className={className} onMouseDown={() => setFocusedTabId(activeTab.id)} onFocusCapture={() => setFocusedTabId(activeTab.id)}>
+      <div className={className} onMouseDown={() => setFocusedPane("primary")} onFocusCapture={() => setFocusedPane("primary")}>
         {renderPane(activeTab, true, activeWriterProps)}
       </div>
     );
   }
 
-  const resolvedFocusedTabId = focusedTabId ?? activeTab.id;
+  const resolvedFocusedTabId = focusedPane === "secondary" ? splitTab.id : activeTab.id;
 
   return (
     <ResizablePanelGroup className={cn("flex h-full w-full", className)}>
@@ -167,8 +161,8 @@ export function SplitWorkspaceView({
             "h-full w-full overflow-hidden ring-1 ring-inset ring-transparent transition-shadow duration-150",
             resolvedFocusedTabId === activeTab.id && "ring-primary/40",
           )}
-          onMouseDown={() => setFocusedTabId(activeTab.id)}
-          onFocusCapture={() => setFocusedTabId(activeTab.id)}
+          onMouseDown={() => setFocusedPane("primary")}
+          onFocusCapture={() => setFocusedPane("primary")}
         >
           {renderPane(activeTab, resolvedFocusedTabId === activeTab.id, activeWriterProps)}
         </div>
@@ -180,8 +174,8 @@ export function SplitWorkspaceView({
             "h-full w-full overflow-hidden ring-1 ring-inset ring-transparent transition-shadow duration-150",
             resolvedFocusedTabId === splitTab.id && "ring-primary/40",
           )}
-          onMouseDown={() => setFocusedTabId(splitTab.id)}
-          onFocusCapture={() => setFocusedTabId(splitTab.id)}
+          onMouseDown={() => setFocusedPane("secondary")}
+          onFocusCapture={() => setFocusedPane("secondary")}
         >
           {renderPane(splitTab, resolvedFocusedTabId === splitTab.id, splitWriterProps)}
         </div>

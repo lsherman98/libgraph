@@ -10,7 +10,7 @@ import { useWritingProject, useHighlights, useBookmarks, useNotes } from "@/lib/
 import { useUpdateWritingProject } from "@/lib/api/mutations";
 import { useReaderStore } from "@/lib/stores/reader-store";
 import { useLocation } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { WorkspacePanel } from "./workspace";
@@ -23,40 +23,39 @@ interface RightSidebarProps extends React.ComponentProps<typeof Sidebar> {
 }
 
 export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPage, ...props }: RightSidebarProps) {
-  const { activeTabId, getTab } = useWorkspaceTabsStore();
-  const activeTab = activeTabId ? getTab(activeTabId) : null;
-  const isWriterTab = activeTab?.type === "writer";
-  const writerTab = isWriterTab ? (activeTab as WriterTab) : null;
-  const location = useLocation();
-  const { setOpenRight } = useSidebar();
+  const { activeTabId, splitMode, splitTabId, focusedPane, getTab } = useWorkspaceTabsStore();
 
-  const { data: project } = useWritingProject(writerTab?.projectId);
+  const { setOpenRight } = useSidebar();
   const updateProject = useUpdateWritingProject();
 
+  const location = useLocation();
   const isWorkspaceRoute = location.pathname.startsWith("/workspace");
 
-  const editorState = useReaderStore((state) => state.editorState);
+  const focusedTabId = splitMode === "horizontal" && splitTabId && focusedPane === "secondary" ? splitTabId : activeTabId;
+  const focusedTab = focusedTabId ? getTab(focusedTabId) : null;
+  const isWriterTab = focusedTab?.type === "writer";
+  const readerTab = focusedTab?.type === "reader" ? (focusedTab as ReaderTab) : null;
+  const writerTab = isWriterTab ? (focusedTab as WriterTab) : null;
 
+  const { data: project } = useWritingProject(writerTab?.projectId);
+  const { data: allHighlights = [] } = useHighlights(readerTab?.uploadId || undefined);
+  const { data: allBookmarks = [] } = useBookmarks(readerTab?.uploadId || undefined);
+  const { data: allNotes = [] } = useNotes(readerTab?.uploadId || undefined);
+
+  const annotationTab = useReaderStore((state) => state.annotationTab);
+  const setAnnotationTab = useReaderStore((state) => state.setAnnotationTab);
+  const editorState = useReaderStore((state) => state.editorState);
   const isHighlightEditorOpen = editorState?.mode === "pending-highlight" || editorState?.mode === "editing-highlight";
   const isBookmarkEditorOpen = editorState?.mode === "pending-bookmark" || editorState?.mode === "editing-bookmark";
   const isNoteEditorOpen = editorState?.mode === "pending-note" || editorState?.mode === "editing-note";
 
-  const readerTab = activeTab?.type === "reader" ? (activeTab as ReaderTab) : null;
-  const readerUploadId = readerTab?.uploadId ?? null;
-
-  const { data: allHighlights = [] } = useHighlights(readerUploadId || undefined);
-  const { data: allBookmarks = [] } = useBookmarks(readerUploadId || undefined);
-  const { data: allNotes = [] } = useNotes(readerUploadId || undefined);
-
-  const [annotationTab, setAnnotationTab] = useState<"highlights" | "bookmarks" | "notes" | "ai">("highlights");
-
   useEffect(() => {
-    if (!isWorkspaceRoute) {
+    if (!isWorkspaceRoute || !focusedTab) {
       setOpenRight(false);
     }
-  }, [isWorkspaceRoute]);
+  }, [isWorkspaceRoute, focusedTab, setOpenRight]);
 
-  if (!isWorkspaceRoute) {
+  if (!isWorkspaceRoute || !focusedTab) {
     return (
       <Sidebar collapsible="offcanvas" {...props}>
         <SidebarContent className="p-0" />

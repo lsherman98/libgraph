@@ -3,25 +3,25 @@ import { Collections, NodesTypeOptions, type Create, type EdgesResponse, type Su
 import type { ChatFilters, ChatResponseData, EnrichedNodesResponse, FTSSearchResult } from "../types"
 import { getUserId } from "../utils"
 
-export interface PageSummaryQueuedResponseData {
+export interface PageSummaryResponse {
     status: string;
     page_id: string;
     dedupe_key: string;
 }
 
-export interface PageSummaryBatchQueuedResponseData {
+export interface PageSummaryBatchResponse {
     status: string;
     page_ids: string[];
     dedupe_key: string;
 }
 
-export interface PageSummaryQueuedData {
+export interface PageSummaryData {
     status: string;
     pageId: string;
     dedupeKey: string;
 }
 
-export interface PageSummaryBatchQueuedData {
+export interface PageSummaryBatchData {
     status: string;
     pageIds: string[];
     dedupeKey: string;
@@ -174,64 +174,37 @@ export const getPages = async (uploadId?: string, page = 1, perPage = 10) => {
 }
 
 export const summarizePage = async (pageId: string) => {
-    const response = await pb.send<PageSummaryQueuedResponseData>(`/api/pages/${pageId}/summarize`, {
+    return await pb.send<PageSummaryResponse>(`/api/pages/${pageId}/summarize`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': pb.authStore.token,
         },
     });
-
-    return {
-        status: response.status,
-        pageId: response.page_id,
-        dedupeKey: response.dedupe_key,
-    } satisfies PageSummaryQueuedData;
 }
 
 export const summarizePages = async (pageIds: string[]) => {
-    const response = await pb.send<PageSummaryBatchQueuedResponseData>(`/api/pages/summarize`, {
+    return await pb.send<PageSummaryBatchResponse>(`/api/pages/summarize`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': pb.authStore.token,
         },
         body: JSON.stringify({ page_ids: pageIds }),
     });
-
-    return {
-        status: response.status,
-        pageIds: response.page_ids,
-        dedupeKey: response.dedupe_key,
-    } satisfies PageSummaryBatchQueuedData;
 }
 
-export const getSummaryBySourcePage = async (pageId?: string): Promise<SummariesResponse | null> => {
-    if (!pageId) return null;
-
-    try {
-        return await pb.collection(Collections.Summaries).getFirstListItem(`source_page = "${pageId}"`, {
-            sort: '-updated',
-        });
-    } catch (_err) {
-        return null;
-    }
+export const getSummaryBySourcePage = async (pageId: string) => {
+    return await pb.collection(Collections.Summaries).getFirstListItem(`source_page = "${pageId}"`, {
+        sort: '-updated',
+    });
 }
 
-export const getSummaryBySourceUpload = async (uploadId?: string): Promise<SummariesResponse | null> => {
-    if (!uploadId) return null;
-
-    try {
-        return await pb.collection(Collections.Summaries).getFirstListItem(`source_upload = "${uploadId}"`, {
-            sort: '-updated',
-        });
-    } catch (_err) {
-        return null;
-    }
+export const getSummaryBySourceUpload = async (uploadId: string) => {
+    return await pb.collection(Collections.Summaries).getFirstListItem(`source_upload = "${uploadId}"`, {
+        sort: '-updated',
+    });
 }
 
-export const getHighlights = async (uploadId?: string) => {
-    if (!uploadId) return null;
+export const getHighlights = async (uploadId: string) => {
     return await pb.collection(Collections.Highlights).getFullList({
         filter: `upload = "${uploadId}"`,
         sort: 'created'
@@ -257,8 +230,7 @@ export const deleteHighlight = async (id: string) => {
     return await pb.collection(Collections.Highlights).delete(id);
 }
 
-export const getBookmarks = async (uploadId?: string) => {
-    if (!uploadId) return null;
+export const getBookmarks = async (uploadId: string) => {
     return await pb.collection(Collections.Bookmarks).getFullList({
         filter: `upload = "${uploadId}"`,
         sort: 'page_number'
@@ -277,8 +249,7 @@ export const deleteBookmark = async (id: string) => {
     return await pb.collection(Collections.Bookmarks).delete(id);
 }
 
-export const getNotes = async (uploadId?: string) => {
-    if (!uploadId) return null;
+export const getNotes = async (uploadId: string) => {
     return await pb.collection(Collections.Notes).getFullList({
         filter: `upload = "${uploadId}"`,
         sort: 'page_number'
@@ -363,8 +334,7 @@ export const getWritingProjects = async () => {
     });
 }
 
-export const getWritingProject = async (id?: string) => {
-    if (!id) return null;
+export const getWritingProject = async (id: string) => {
     return await pb.collection(Collections.WritingProjects).getOne(id, {
         expand: 'tags,topics,linked_uploads,linked_highlights,linked_bookmarks,linked_notes'
     });
@@ -431,7 +401,7 @@ export const deleteCollection = async (id: string) => {
     return await pb.collection(Collections.Collections).delete(id);
 }
 
-export const getChats = async (type?: "chat" | "search") => {
+export const getChats = async (type: "chat" | "search") => {
     return await pb.collection(Collections.Chats).getFullList({
         sort: '-updated',
         ...(type ? { filter: `type = "${type}"` } : {}),
@@ -454,8 +424,7 @@ export const deleteChat = async (id: string) => {
     return await pb.collection(Collections.Chats).delete(id);
 }
 
-export const getMessages = async (chatId?: string) => {
-    if (!chatId) return null;
+export const getMessages = async (chatId: string) => {
     return await pb.collection(Collections.Messages).getFullList({
         filter: `chat = "${chatId}"`,
         sort: 'created'
@@ -468,15 +437,14 @@ export const createMessage = async (data: Create<Collections.Messages>) => {
 
 export const sendChatMessage = async (
     message: string,
-    mode: "chat" | "search" = "chat",
-    chatId?: string,
+    mode: "chat" | "search",
+    chatId: string,
     filters?: ChatFilters,
 ) => {
     return await pb.send<ChatResponseData>(`/api/chat`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': pb.authStore.token,
         },
         body: JSON.stringify({
             message,
@@ -508,9 +476,7 @@ export const fullTextSearch = async (uploadId: string, query: string, signal?: A
 }
 
 export const getPreferences = async () => {
-    try {
-        return await pb.collection(Collections.Preferences).getFirstListItem("")
-    } catch (error) { return null }
+    return await pb.collection(Collections.Preferences).getFirstListItem("")
 }
 
 export const createPreferences = async (data: Create<Collections.Preferences>) => {
@@ -523,31 +489,20 @@ export const updatePreferences = async (id: string, data: Update<Collections.Pre
 
 export const upsertPreferences = async (data: Create<Collections.Preferences>) => {
     const userId = getUserId();
-    if (!userId) {
-        throw new Error("User must be authenticated to save preferences");
-    }
 
     const existing = await getPreferences();
     if (existing) {
         return await updatePreferences(existing.id, data);
     }
 
-    try {
-        return await createPreferences({ ...data, user: userId });
-    } catch (error) {
-        const fallbackExisting = await pb.collection(Collections.Preferences).getFirstListItem(
-            `user = "${userId}"`
-        );
-        return await updatePreferences(fallbackExisting.id, data);
-    }
+    return await createPreferences({ ...data, user: userId });
+
 }
 
 export const getReadingProgress = async (uploadId: string) => {
-    try {
-        return await pb.collection(Collections.ReadingProgress).getFirstListItem(
-            `upload = "${uploadId}"`
-        );
-    } catch (error) { return null; }
+    return await pb.collection(Collections.ReadingProgress).getFirstListItem(
+        `upload = "${uploadId}"`
+    );
 }
 
 export const upsertReadingProgress = async (
@@ -555,30 +510,19 @@ export const upsertReadingProgress = async (
     data: { current_page?: number; scroll_position?: number }
 ) => {
     const userId = getUserId();
-    if (!userId) {
-        throw new Error("User must be authenticated to save reading progress");
-    }
 
     const existing = await getReadingProgress(uploadId);
     if (existing) {
         return await pb.collection(Collections.ReadingProgress).update(existing.id, data);
     }
 
-    try {
-        return await pb.collection(Collections.ReadingProgress).create({
-            ...data,
-            upload: uploadId,
-            user: userId,
-        });
-    } catch (error) {
-        const fallbackExisting = await pb.collection(Collections.ReadingProgress).getFirstListItem(
-            `user = "${userId}" && upload = "${uploadId}"`
-        );
-        return await pb.collection(Collections.ReadingProgress).update(fallbackExisting.id, data);
-    }
-}
+    return await pb.collection(Collections.ReadingProgress).create({
+        ...data,
+        upload: uploadId,
+        user: userId,
+    });
 
-// ── Reader sidebar chat ──────────────────────────────────────────────
+}
 
 export const getSidebarChats = async () => {
     return await pb.collection(Collections.Chats).getFullList({
@@ -613,7 +557,6 @@ export const sendSidebarChatMessage = async (
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': pb.authStore.token,
         },
         body: JSON.stringify({
             message,

@@ -63,6 +63,8 @@ export function ReaderAiChatPanel() {
   );
 
   const { data: sidebarChats = [] } = useSidebarChats();
+
+  if (!activeChatId) return null;
   const { data: dbMessages, isLoading: isLoadingMessages } = useMessages(activeChatId);
   const { data: chatContexts = [] } = useChatContexts(activeChatId);
   const { data: currentUpload } = useUploadById(currentUploadId || "");
@@ -180,16 +182,7 @@ export function ReaderAiChatPanel() {
     return () => {
       cancelled = true;
     };
-  }, [
-    currentUploadId,
-    currentPageId,
-    activeChatId,
-    contextConfirmed,
-    isBookUpload,
-    chatContexts,
-    addContext,
-    removeContext,
-  ]);
+  }, [currentUploadId, currentPageId, activeChatId, contextConfirmed, isBookUpload, chatContexts, addContext, removeContext]);
 
   // Handle pending chat text from highlight popover
   useEffect(() => {
@@ -230,10 +223,13 @@ export function ReaderAiChatPanel() {
         }
       }
 
-      addContext.mutate({
+      setContextConfirmed(true);
+
+      const existingContexts = chatId === activeChatId ? [...chatContexts] : [];
+      await Promise.all(existingContexts.map((ctx: ChatContextsResponse) => removeContext.mutateAsync(ctx.id)));
+
+      await addContext.mutateAsync({
         chat: chatId,
-        upload: currentUploadId || undefined,
-        page: currentPageId || undefined,
         text: pendingChatText,
         user: getUserId(),
       } as any);
@@ -241,7 +237,18 @@ export function ReaderAiChatPanel() {
     };
 
     addTextToChat();
-  }, [pendingChatText, isBookUpload, currentPageId, currentUploadId]);
+  }, [
+    pendingChatText,
+    isBookUpload,
+    currentPageId,
+    currentUploadId,
+    activeChatId,
+    chatContexts,
+    createChat,
+    addContext,
+    removeContext,
+    setPendingChatText,
+  ]);
 
   const contextCount = chatContexts.length;
   const canSend = input.trim().length > 0 && !sendMessage.isPending && contextCount > 0;

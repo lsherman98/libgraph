@@ -62,7 +62,8 @@ export function MarkdownContent({
 
   const editorState = useReaderStore((state) => state.editorState);
   const setEditorState = useReaderStore((state) => state.setEditorState);
-  const { toggleSidebar, open: sidebarOpen } = useSidebar();
+  const setAnnotationTab = useReaderStore((state) => state.setAnnotationTab);
+  const { setOpenRight, openRight } = useSidebar();
 
   const pendingHighlight = editorState?.mode === "pending-highlight" ? editorState.data : null;
 
@@ -186,14 +187,15 @@ export function MarkdownContent({
       },
     });
 
-    if (!sidebarOpen) {
-      toggleSidebar();
+    setAnnotationTab("highlights");
+    if (!openRight) {
+      setOpenRight(true);
     }
 
     setSelection(null);
     setTempHighlight(null);
     window.getSelection()?.removeAllRanges();
-  }, [selection, tempHighlight, pageId, setEditorState, sidebarOpen, toggleSidebar]);
+  }, [selection, tempHighlight, pageId, setEditorState, setAnnotationTab, openRight, setOpenRight]);
 
   const handleOpenExistingHighlightEditor = useCallback(() => {
     if (!activeHighlight || !pageId) return;
@@ -212,26 +214,28 @@ export function MarkdownContent({
       },
     });
 
-    if (!sidebarOpen) {
-      toggleSidebar();
+    setAnnotationTab("highlights");
+    if (!openRight) {
+      setOpenRight(true);
     }
 
     setActiveHighlight(null);
-  }, [activeHighlight, pageId, setEditorState, sidebarOpen, toggleSidebar]);
+  }, [activeHighlight, pageId, setEditorState, setAnnotationTab, openRight, setOpenRight]);
 
   const handleChatWithText = useCallback(() => {
     if (!selection) return;
-    const setPendingChatText = useReaderStore.getState().setPendingChatText;
+    const { setPendingChatText, setAnnotationTab } = useReaderStore.getState();
+    setAnnotationTab("ai");
     setPendingChatText(selection.text);
 
-    if (!sidebarOpen) {
-      toggleSidebar();
+    if (!openRight) {
+      setOpenRight(true);
     }
 
     setSelection(null);
     setTempHighlight(null);
     window.getSelection()?.removeAllRanges();
-  }, [selection, sidebarOpen, toggleSidebar]);
+  }, [selection, openRight, setOpenRight]);
 
   const getBlockId = useCallback(
     (node: any) => {

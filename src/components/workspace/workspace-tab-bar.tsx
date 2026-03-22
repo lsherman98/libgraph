@@ -22,7 +22,10 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
   const [splitPromptOpen, setSplitPromptOpen] = useState(false);
   const [newTabOpen, setNewTabOpen] = useState(false);
   const [initialDialogTab, setInitialDialogTab] = useState<"documents" | "projects">("documents");
-  const { tabs, activeTabId, splitMode, splitTabId, setActiveTab, removeTab, setSplitMode, closeSplit, getTab } = useWorkspaceTabsStore();
+  const { tabs, activeTabId, splitMode, splitTabId, focusedPane, setActiveTab, removeTab, setSplitMode, closeSplit, getTab } =
+    useWorkspaceTabsStore();
+
+  const focusedTabId = splitMode === "horizontal" && splitTabId && focusedPane === "secondary" ? splitTabId : activeTabId;
 
   const activeTab = activeTabId ? getTab(activeTabId) : null;
   const activeWriterTab = activeTab?.type === "writer" ? (activeTab as WriterTab) : null;
@@ -86,14 +89,16 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
         <SidebarTrigger className="-ml-1" />
         <Separator orientation="vertical" className="h-4" />
       </div>
-      <Tabs value={activeTabId || undefined} className="flex-1 min-w-0 overflow-x-auto no-scrollbar">
+      <Tabs value={focusedTabId || undefined} className="flex-1 min-w-0 overflow-x-auto no-scrollbar">
         <TabsList className="h-full bg-transparent p-0 gap-1">
           {tabs.map((tab) => (
             <TabItem
               key={tab.id}
               tab={tab}
-              isActive={tab.id === activeTabId}
-              isSplit={tab.id === splitTabId}
+              isActive={tab.id === focusedTabId}
+              isOpenPrimary={tab.id === activeTabId}
+              isOpenSecondary={tab.id === splitTabId}
+              showSplitIndicators={splitMode === "horizontal"}
               onClick={() => handleTabClick(tab)}
               onClose={(e) => handleTabClose(e, tab)}
             />

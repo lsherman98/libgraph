@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { usePreferences, useReadingProgress } from "@/lib/api/queries";
 import { useUpdatePreferences, useUpdateReadingProgress } from "@/lib/api/mutations";
+import { getUserId } from "../utils";
 
 export const FONT_FAMILIES = {
     system: { name: "System", value: "system-ui, -apple-system, sans-serif" },
@@ -86,7 +87,7 @@ export function useReaderSettings() {
     const scheduleSave = useCallback((newSettings: ReaderSettings) => {
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
         saveTimerRef.current = setTimeout(() => {
-            updatePreferences.mutate({ reader_settings: JSON.stringify(newSettings) });
+            updatePreferences.mutate({ reader_settings: JSON.stringify(newSettings), user: getUserId() });
         }, 1000);
     }, [updatePreferences]);
 
@@ -150,7 +151,7 @@ interface PageSettings {
     scrollPosition?: number;
 }
 
-export function usePageSettings(uploadId: string | undefined, initialPage?: number) {
+export function usePageSettings(uploadId: string, initialPage?: number) {
     const { data: progress, isSuccess } = useReadingProgress(uploadId);
     const updateProgress = useUpdateReadingProgress();
 

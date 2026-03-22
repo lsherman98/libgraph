@@ -285,7 +285,7 @@ function buildTooltipHTML(enrichedNode: EnrichedNodesResponse, isDark: boolean):
     if (typeof rd.content === "string" && rd.content) details.push(`Content: ${rd.content}`);
   }
 
-    <div style="font-size:10px;color:${color};font-weight:600;letter-spacing:0.2px;margin-top:3px;">${escapeHtml(formatLabel(type))}${uploadTypeLabel ? ` \u00B7 ${escapeHtml(uploadTypeLabel)}` : ""}</div>
+  const renderedDetails = details
     .slice(0, 4)
     .map((line) => {
       const value = line.length > 90 ? `${line.slice(0, 90)}…` : line;
@@ -303,7 +303,7 @@ function buildTooltipHTML(enrichedNode: EnrichedNodesResponse, isDark: boolean):
     box-shadow:0 8px 20px rgba(0,0,0,${isDark ? "0.45" : "0.16"});
   \">
     <div style=\"font-size:12px;font-weight:600;color:${textColor};line-height:1.35;word-break:break-word;\">${escapeHtml(title)}</div>
-    <div style=\"font-size:10px;color:${color};font-weight:600;text-transform:uppercase;letter-spacing:0.4px;margin-top:3px;\">${escapeHtml(type)}</div>
+    <div style=\"font-size:10px;color:${color};font-weight:600;letter-spacing:0.2px;margin-top:3px;\">${escapeHtml(formatLabel(type))}${uploadTypeLabel ? ` \u00B7 ${escapeHtml(uploadTypeLabel)}` : ""}</div>
     ${renderedDetails ? `<div style=\"margin-top:6px;display:grid;gap:2px;\">${renderedDetails}</div>` : ""}
   </div>`;
 }

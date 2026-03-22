@@ -40,24 +40,18 @@ function SourceCard({ source, rank, onSourceClick }: { source: ChatSource; rank:
   return (
     <div className="group rounded-lg border border-border bg-card transition-colors hover:border-primary/30 hover:bg-accent/30">
       <div className="flex items-start gap-3 p-3">
-        {/* Rank indicator */}
         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary text-xs font-bold">{rank}</div>
-
-        {/* Main content */}
         <div className="flex-1 min-w-0 space-y-1.5">
-          {/* Title row */}
           <div className="flex items-center gap-2">
             <button
               onClick={() => onSourceClick?.(source)}
               className="inline-flex items-start gap-1.5 text-sm font-medium text-foreground hover:text-primary transition-colors cursor-pointer text-left"
             >
               <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground mt-0.5" />
-              <span className="break-words min-w-0">{source.title || "Untitled Document"}</span>
+              <span className="wrap-break-word min-w-0">{source.title || "Untitled Document"}</span>
               <ExternalLink className="h-3 w-3 shrink-0 opacity-0 group-hover:opacity-60 transition-opacity" />
             </button>
           </div>
-
-          {/* Metadata row */}
           <div className="flex items-center gap-2 flex-wrap">
             {source.page_number != null && (
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 gap-1 font-normal">
@@ -83,8 +77,6 @@ function SourceCard({ source, rank, onSourceClick }: { source: ChatSource; rank:
               </div>
             )}
           </div>
-
-          {/* Text excerpt */}
           {hasText && (
             <div>
               <button

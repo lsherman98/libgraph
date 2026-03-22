@@ -49,7 +49,6 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           <Redo className="h-4 w-4" />
         </Button>
       </div>
-
       <div className="flex items-center gap-0.5 mr-1">
         <Toggle
           size="sm"
@@ -73,7 +72,6 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           <Heading3 className="h-4 w-4" />
         </Toggle>
       </div>
-
       <div className="flex items-center gap-0.5 mr-1">
         <Toggle size="sm" pressed={editor.isActive("bold")} onPressedChange={() => editor.chain().focus().toggleBold().run()}>
           <Bold className="h-4 w-4" />
@@ -91,7 +89,6 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           <Highlighter className="h-4 w-4" />
         </Toggle>
       </div>
-
       <div className="flex items-center gap-0.5 mr-1">
         <Toggle size="sm" pressed={editor.isActive("bulletList")} onPressedChange={() => editor.chain().focus().toggleBulletList().run()}>
           <List className="h-4 w-4" />
@@ -103,7 +100,6 @@ export function EditorToolbar({ editor }: EditorToolbarProps) {
           <ListTodo className="h-4 w-4" />
         </Toggle>
       </div>
-
       <div className="flex items-center gap-0.5">
         <Toggle size="sm" pressed={editor.isActive("blockquote")} onPressedChange={() => editor.chain().focus().toggleBlockquote().run()}>
           <Quote className="h-4 w-4" />

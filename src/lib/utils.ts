@@ -21,7 +21,6 @@ export function handleError(error: Error) {
 }
 
 export function getUserRecord(): UsersResponse {
-  // pb.collection("users").authRefresh();
   return pb.authStore.record as UsersResponse;
 }
 

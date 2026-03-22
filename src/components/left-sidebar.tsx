@@ -34,13 +34,7 @@ export function LeftSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) 
         icon: GitBranch,
       },
     ],
-    navSecondary: [
-      {
-        title: "Settings",
-        url: "/settings",
-        icon: Settings,
-      },
-    ],
+    navSecondary: [],
   };
 
   const user = pb.authStore.model;

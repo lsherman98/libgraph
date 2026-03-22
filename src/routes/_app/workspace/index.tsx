@@ -39,7 +39,9 @@ function RouteComponent() {
 
   const activeTab = activeTabId ? getTab(activeTabId) : null;
   const activeWriterTab = activeTab?.type === "writer" ? activeTab : null;
-  const { data: activeProject } = useWritingProject(activeWriterTab?.projectId);
+
+  if (!activeWriterTab) return null;
+  const { data: activeProject } = useWritingProject(activeWriterTab.projectId);
 
   const [localContent, setLocalContent] = useState<string>("");
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

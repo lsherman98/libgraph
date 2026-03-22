@@ -6,27 +6,38 @@ import { cn } from "@/lib/utils";
 interface TabItemProps {
   tab: WorkspaceTab;
   isActive: boolean;
-  isSplit: boolean;
+  isOpenPrimary: boolean;
+  isOpenSecondary: boolean;
+  showSplitIndicators: boolean;
   onClick: () => void;
   onClose: (e: React.MouseEvent) => void;
 }
 
-export function TabItem({ tab, isActive, isSplit, onClick, onClose }: TabItemProps) {
+export function TabItem({ tab, isActive, isOpenPrimary, isOpenSecondary, showSplitIndicators, onClick, onClose }: TabItemProps) {
   const isWriter = tab.type === "writer";
   const isDirty = isWriter ? (tab as WriterTab).isDirty : false;
+  const isOpenInSplit = isOpenPrimary || isOpenSecondary;
 
   return (
     <TabsTrigger
       value={tab.id}
       onClick={onClick}
-      className={cn("group relative gap-1.5 pr-8 max-w-50 data-[state=active]:shadow-sm", isSplit && !isActive && "bg-primary/10 border-primary/30")}
+      className={cn(
+        "group relative gap-1.5 pr-8 max-w-50 data-[state=active]:shadow-sm",
+        isOpenInSplit && isActive && "bg-primary/10 border-primary/30",
+      )}
     >
       {isWriter ? <PenLine className="h-3.5 w-3.5 shrink-0" /> : <FileText className="h-3.5 w-3.5 shrink-0" />}
       {isDirty && <span className="w-2 h-2 rounded-full bg-primary shrink-0" />}
       <span className="truncate" title={tab.title}>
         {tab.title || "Untitled"}
       </span>
-      {isSplit && !isActive && <span className="text-[10px] text-primary font-medium px-1.5 py-0.5 rounded-full bg-primary/10 shrink-0">Split</span>}
+      {showSplitIndicators && isOpenInSplit && (
+        <span className="flex items-center gap-1 shrink-0 ml-1.5" aria-label="Open in split view">
+          <span className={cn("h-1.5 w-1.5 rounded-full", isOpenPrimary ? "bg-primary" : "bg-muted-foreground/40")} />
+          <span className={cn("h-1.5 w-1.5 rounded-full", isOpenSecondary ? "bg-primary" : "bg-muted-foreground/40")} />
+        </span>
+      )}
       <span
         role="button"
         tabIndex={0}

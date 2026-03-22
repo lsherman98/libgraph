@@ -6,6 +6,7 @@ import {
     getWorkspaceLayoutSnapshot,
     type WorkspaceLayoutState,
 } from "@/lib/stores/workspace-tabs-store";
+import { getUserId } from "../utils";
 
 export function useWorkspaceTabsSync() {
     const { data: preferences, isSuccess } = usePreferences();
@@ -37,6 +38,7 @@ export function useWorkspaceTabsSync() {
                 const snapshot = getWorkspaceLayoutSnapshot();
                 updatePrefsRef.current.mutate({
                     workspace_layout: JSON.stringify(snapshot),
+                    user: getUserId(),
                 });
             }, 2000);
         });
