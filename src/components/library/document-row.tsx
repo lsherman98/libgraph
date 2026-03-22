@@ -22,10 +22,10 @@ export function DocumentRow({
 }) {
   const navigate = useNavigate();
   const TypeIcon = typeIcons[upload.type] || FileText;
-  const status = statusConfig[upload.status] || statusConfig.PENDING;
+  const status = statusConfig[upload.status] || statusConfig.pending;
   const StatusIcon = status.icon;
 
-  const isClickable = upload.status === "SUCCESS";
+  const isClickable = upload.status === "success";
   const linkedCount = upload.uploads?.length || 0;
 
   return (
@@ -66,7 +66,7 @@ export function DocumentRow({
           </div>
         </div>
       </TableCell>
-      {upload.status !== "SUCCESS" && (
+      {upload.status !== "success" && (
         <TableCell>
           <div className="flex items-center gap-2">
             <StatusIcon className={`h-4 w-4 ${status.className}`} />
@@ -74,7 +74,7 @@ export function DocumentRow({
           </div>
         </TableCell>
       )}
-      {upload.status === "SUCCESS" && <TableCell />}
+      {upload.status === "success" && <TableCell />}
       <TableCell className="text-muted-foreground">
         {new Date(upload.created).toLocaleDateString(undefined, {
           year: "numeric",

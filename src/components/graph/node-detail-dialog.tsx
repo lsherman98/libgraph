@@ -93,7 +93,7 @@ function UploadDetail({ data }: { data: UploadsResponse }) {
         <h3 className="text-lg font-semibold">{data.title || "Untitled Upload"}</h3>
         <div className="flex items-center gap-2 mt-1">
           <Badge variant="secondary">{data.type}</Badge>
-          <Badge variant={data.status === "SUCCESS" ? "default" : "outline"}>{data.status}</Badge>
+          <Badge variant={data.status === "success" ? "default" : "outline"}>{data.status}</Badge>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3 text-sm">

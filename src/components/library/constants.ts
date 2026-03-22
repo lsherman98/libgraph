@@ -17,25 +17,25 @@ export const typeIcons: Record<string, typeof FileText> = {
 };
 
 export const statusConfig = {
-  SUCCESS: {
+  success: {
     icon: CheckCircle2,
     variant: "default" as const,
     label: "Processed",
     className: "text-green-600 dark:text-green-400",
   },
-  PROCESSING: {
+  processing: {
     icon: Loader2,
     variant: "secondary" as const,
     label: "Processing",
     className: "text-blue-600 dark:text-blue-400 animate-spin",
   },
-  PENDING: {
+  pending: {
     icon: Clock,
     variant: "outline" as const,
     label: "Pending",
     className: "text-yellow-600 dark:text-yellow-400",
   },
-  FAILED: {
+  failed: {
     icon: AlertCircle,
     variant: "destructive" as const,
     label: "Failed",

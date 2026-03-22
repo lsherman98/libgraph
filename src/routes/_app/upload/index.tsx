@@ -291,7 +291,7 @@ function RouteComponent() {
           tags: fileData.tags.length > 0 ? fileData.tags : undefined,
           topic: fileData.topics.length > 0 ? fileData.topics : undefined,
           user: getUserId(),
-          status: UploadsStatusOptions.PENDING,
+          status: UploadsStatusOptions.pending,
         });
         updateFile(fileData.id, { status: "SUCCESS" });
       } catch (error) {

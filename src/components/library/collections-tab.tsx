@@ -130,7 +130,7 @@ export function CollectionsTab() {
   const [collectionUploads, setCollectionUploads] = useState<string[]>([]);
   const [uploadSearch, setUploadSearch] = useState("");
 
-  const successUploads = allUploads?.filter((u) => u.status === "SUCCESS") || [];
+  const successUploads = allUploads?.filter((u) => u.status === "success") || [];
 
   const resetForm = () => {
     setCollectionName("");

@@ -206,10 +206,10 @@ export enum EmbeddingJobsStatusOptions {
 	"succeeded" = "succeeded",
 	"failed" = "failed",
 }
-export type EmbeddingJobsRecord<Tchunk_ids_json = unknown> = {
+export type EmbeddingJobsRecord<Tchunk_ids = unknown> = {
 	batch?: boolean
 	batch_id?: string
-	chunk_ids_json?: null | Tchunk_ids_json
+	chunk_ids?: null | Tchunk_ids
 	created: IsoAutoDateString
 	error_message?: string
 	finished_at?: IsoDateString
@@ -359,7 +359,7 @@ export enum QueueStatusOptions {
 	"cancelled" = "cancelled",
 	"success" = "success",
 }
-export type QueueRecord<Tpayload_json = unknown> = {
+export type QueueRecord<Tpayload = unknown> = {
 	created: IsoAutoDateString
 	dedupe_key: string
 	error_code?: string
@@ -368,7 +368,7 @@ export type QueueRecord<Tpayload_json = unknown> = {
 	id: string
 	job_type: QueueJobTypeOptions
 	page?: RecordIdString
-	payload_json?: null | Tpayload_json
+	payload?: null | Tpayload
 	started_at?: IsoDateString
 	status: QueueStatusOptions
 	updated: IsoAutoDateString
@@ -437,10 +437,10 @@ export enum UploadsTypeOptions {
 }
 
 export enum UploadsStatusOptions {
-	"PENDING" = "PENDING",
-	"PROCESSING" = "PROCESSING",
-	"FAILED" = "FAILED",
-	"SUCCESS" = "SUCCESS",
+	"pending" = "pending",
+	"processing" = "processing",
+	"success" = "success",
+	"failed" = "failed",
 }
 export type UploadsRecord = {
 	created: IsoAutoDateString
@@ -505,7 +505,7 @@ export type ChatsResponse<Texpand = unknown> = Required<ChatsRecord> & BaseSyste
 export type CollectionsResponse<Texpand = unknown> = Required<CollectionsRecord> & BaseSystemFields<Texpand>
 export type DocumentChunksResponse<Texpand = unknown> = Required<DocumentChunksRecord> & BaseSystemFields<Texpand>
 export type EdgesResponse<Texpand = unknown> = Required<EdgesRecord> & BaseSystemFields<Texpand>
-export type EmbeddingJobsResponse<Tchunk_ids_json = unknown, Texpand = unknown> = Required<EmbeddingJobsRecord<Tchunk_ids_json>> & BaseSystemFields<Texpand>
+export type EmbeddingJobsResponse<Tchunk_ids = unknown, Texpand = unknown> = Required<EmbeddingJobsRecord<Tchunk_ids>> & BaseSystemFields<Texpand>
 export type HighlightsResponse<Texpand = unknown> = Required<HighlightsRecord> & BaseSystemFields<Texpand>
 export type MessagesResponse<Tsources = unknown, Texpand = unknown> = Required<MessagesRecord<Tsources>> & BaseSystemFields<Texpand>
 export type NodesResponse<Tdata = unknown, Texpand = unknown> = Required<NodesRecord<Tdata>> & BaseSystemFields<Texpand>
@@ -514,7 +514,7 @@ export type PagesResponse<Texpand = unknown> = Required<PagesRecord> & BaseSyste
 export type PeopleResponse<Texpand = unknown> = Required<PeopleRecord> & BaseSystemFields<Texpand>
 export type PreferencesResponse<Treader_settings = unknown, Tui_settings = unknown, Tworkspace_layout = unknown, Texpand = unknown> = Required<PreferencesRecord<Treader_settings, Tui_settings, Tworkspace_layout>> & BaseSystemFields<Texpand>
 export type PublicationsResponse<Texpand = unknown> = Required<PublicationsRecord> & BaseSystemFields<Texpand>
-export type QueueResponse<Tpayload_json = unknown, Texpand = unknown> = Required<QueueRecord<Tpayload_json>> & BaseSystemFields<Texpand>
+export type QueueResponse<Tpayload = unknown, Texpand = unknown> = Required<QueueRecord<Tpayload>> & BaseSystemFields<Texpand>
 export type ReadingProgressResponse<Texpand = unknown> = Required<ReadingProgressRecord> & BaseSystemFields<Texpand>
 export type SummariesResponse<Texpand = unknown> = Required<SummariesRecord> & BaseSystemFields<Texpand>
 export type TagsResponse<Texpand = unknown> = Required<TagsRecord> & BaseSystemFields<Texpand>

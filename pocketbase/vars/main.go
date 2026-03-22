@@ -20,7 +20,6 @@ const (
 	EmbeddingStatusPolling   = "polling"
 	EmbeddingStatusSucceeded = "succeeded"
 	EmbeddingStatusFailing   = "failing"
-	EmbeddingStatusCancelled = "cancelled"
 
 	ChatTypeSearch = "search"
 	ChatTypeChat   = "chat"

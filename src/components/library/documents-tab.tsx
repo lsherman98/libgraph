@@ -83,7 +83,7 @@ export function DocumentsTab() {
 
   const hasActiveFilters = Object.keys(filters).filter((k) => k !== "sortBy" && k !== "sortOrder" && filters[k as keyof UploadFilters]).length > 0;
 
-  const successUploads = uploads?.filter((u) => u.status === "SUCCESS") || [];
+  const successUploads = uploads?.filter((u) => u.status === "success") || [];
   const allSelected = successUploads.length > 0 && successUploads.every((u) => selectedIds.has(u.id));
   const someSelected = successUploads.some((u) => selectedIds.has(u.id));
 
