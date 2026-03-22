@@ -1,5 +1,5 @@
 import { pb } from "../pocketbase"
-import { Collections, NodesTypeOptions, type Create, type EdgesResponse, type SummariesResponse, type Update } from "../pocketbase-types"
+import { Collections, NodesTypeOptions, type Create, type EdgesResponse, type Update } from "../pocketbase-types"
 import type { ChatFilters, ChatResponseData, EnrichedNodesResponse, FTSSearchResult } from "../types"
 import { getUserId } from "../utils"
 

@@ -41,10 +41,10 @@ func Init(app *pocketbase.PocketBase) error {
 	var err error
 	geminiClient, err = genai.NewClient(context.Background(), option.WithAPIKey(apiKey))
 	if err != nil {
-		return fmt.Errorf("failed to create Gemini client: %w", err)
+		return err
 	}
 
-	registerQueueHandlers(app)
+	registerQueueHandlers()
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.POST("/api/chat", func(e *core.RequestEvent) error {
@@ -61,7 +61,10 @@ func Init(app *pocketbase.PocketBase) error {
 
 			var uploadIDs []string
 			if body.Filters != nil {
-				uploadIDs = resolveFilterUploadIDs(app, body.Filters)
+				uploadIDs, err = resolveFilterUploadIDs(app, body.Filters)
+				if err != nil {
+					return e.InternalServerError("failed to resolve filter upload IDs", err)
+				}
 			}
 
 			chatID := body.ChatID
@@ -389,17 +392,17 @@ func Init(app *pocketbase.PocketBase) error {
 	return nil
 }
 
-func registerQueueHandlers(app *pocketbase.PocketBase) {
+func registerQueueHandlers() {
 	processing.RegisterHandler(processing.JobTypePageSummarize, handlePageSummarizeJob)
 }
 
 func handlePageSummarizeJob(app *pocketbase.PocketBase, job *core.Record) error {
 	payload := pageSummarizePayload{}
-	if err := job.UnmarshalJSONField("payload_json", &payload); err != nil {
-		return fmt.Errorf("invalid payload_json: %w", err)
+	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
+		return err
 	}
 
-	if strings.TrimSpace(payload.UserID) == "" {
+	if payload.UserID == "" {
 		return fmt.Errorf("payload user_id is required")
 	}
 
@@ -407,7 +410,7 @@ func handlePageSummarizeJob(app *pocketbase.PocketBase, job *core.Record) error 
 		return handlePageRangeSummarizeJob(app, payload)
 	}
 
-	if strings.TrimSpace(payload.PageID) == "" {
+	if payload.PageID == "" {
 		return fmt.Errorf("payload page_id is required")
 	}
 
@@ -415,7 +418,7 @@ func handlePageSummarizeJob(app *pocketbase.PocketBase, job *core.Record) error 
 	if err != nil {
 		return err
 	}
-	uploadID := strings.TrimSpace(pageRecord.GetString("upload"))
+	uploadID := pageRecord.GetString("upload")
 	if uploadID == "" {
 		return fmt.Errorf("page %s missing upload relation", payload.PageID)
 	}
@@ -430,7 +433,7 @@ func handlePageSummarizeJob(app *pocketbase.PocketBase, job *core.Record) error 
 	}
 	if uploadType != "book" {
 		payload.FullDocument = true
-		if strings.TrimSpace(payload.UploadID) == "" {
+		if payload.UploadID == "" {
 			payload.UploadID = uploadID
 		}
 	}
@@ -447,9 +450,9 @@ func handlePageSummarizeJob(app *pocketbase.PocketBase, job *core.Record) error 
 
 	summary := ""
 	if payload.FullDocument {
-		uploadID := strings.TrimSpace(payload.UploadID)
+		uploadID := payload.UploadID
 		if uploadID == "" {
-			uploadID = strings.TrimSpace(pageRecord.GetString("upload"))
+			uploadID = pageRecord.GetString("upload")
 		}
 		if uploadID == "" {
 			return fmt.Errorf("upload_id is required for full document summary")
@@ -906,7 +909,7 @@ func buildSourcesFromCitations(citations []Citation, searchResults []vector_sear
 	return sources
 }
 
-func resolveFilterUploadIDs(app *pocketbase.PocketBase, filters *MetadataFilters) []string {
+func resolveFilterUploadIDs(app *pocketbase.PocketBase, filters *MetadataFilters) ([]string, error) {
 	uploadIDSet := make(map[string]bool)
 
 	for _, uid := range filters.Uploads {
@@ -916,7 +919,6 @@ func resolveFilterUploadIDs(app *pocketbase.PocketBase, filters *MetadataFilters
 	for _, collectionID := range filters.Collections {
 		record, err := app.FindRecordById("collections", collectionID)
 		if err != nil {
-			app.Logger().Error("[chat] failed to resolve collection", "id", collectionID, "error", err)
 			continue
 		}
 		for _, uid := range record.GetStringSlice("uploads") {
@@ -985,10 +987,7 @@ func resolveFilterUploadIDs(app *pocketbase.PocketBase, filters *MetadataFilters
 		filterStr := strings.Join(filterGroups, " "+condition+" ")
 		records, err := app.FindRecordsByFilter("uploads", filterStr, "", 0, 0, filterParams)
 		if err != nil {
-			app.Logger().Error("[chat] failed to query uploads for filters",
-				"filter", filterStr,
-				"error", err,
-			)
+			return nil, err
 		} else {
 			for _, r := range records {
 				uploadIDSet[r.Id] = true
@@ -1001,7 +1000,7 @@ func resolveFilterUploadIDs(app *pocketbase.PocketBase, filters *MetadataFilters
 		result = append(result, uid)
 	}
 
-	return result
+	return result, nil
 }
 
 func floatPtr(f float32) *float32 {
@@ -1017,7 +1016,7 @@ func loadSidebarPromptContexts(app *pocketbase.PocketBase, chatID, userID string
 		dbx.Params{"chatId": chatID, "userId": userID},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query chat_contexts: %w", err)
+		return nil, err
 	}
 
 	uploadTitleCache := make(map[string]string)
@@ -1034,7 +1033,6 @@ func loadSidebarPromptContexts(app *pocketbase.PocketBase, chatID, userID string
 		}
 		uploadRecord, err := app.FindRecordById(collections.Uploads, uploadID)
 		if err != nil {
-			app.Logger().Warn("[chat/reader_sidebar] failed to resolve upload title", "upload_id", uploadID, "error", err)
 			uploadTitleCache[uploadID] = "Document"
 			return "Document"
 		}
@@ -1056,7 +1054,6 @@ func loadSidebarPromptContexts(app *pocketbase.PocketBase, chatID, userID string
 		}
 		markdown, readErr := ReadPageMarkdown(app, pageRecord)
 		if readErr != nil {
-			app.Logger().Warn("[chat/reader_sidebar] failed to read page markdown", "page_id", pageID, "error", readErr)
 			return
 		}
 		trimmed := strings.TrimSpace(markdown)
@@ -1101,7 +1098,7 @@ func loadSidebarPromptContexts(app *pocketbase.PocketBase, chatID, userID string
 		pFrom := r.GetInt("page_from")
 		pTo := r.GetInt("page_to")
 		if pFrom > 0 && pTo >= pFrom && uploadID != "" {
-			pageRecords, pageErr := app.FindRecordsByFilter(
+			pageRecords, err := app.FindRecordsByFilter(
 				collections.Pages,
 				"upload = {:uploadId} && page >= {:fromPage} && page <= {:toPage}",
 				"page",
@@ -1109,8 +1106,8 @@ func loadSidebarPromptContexts(app *pocketbase.PocketBase, chatID, userID string
 				0,
 				dbx.Params{"uploadId": uploadID, "fromPage": pFrom, "toPage": pTo},
 			)
-			if pageErr != nil {
-				app.Logger().Warn("[chat/reader_sidebar] failed to resolve page range context", "upload_id", uploadID, "from", pFrom, "to", pTo, "error", pageErr)
+			if err != nil {
+				continue
 			} else {
 				for _, pageRecord := range pageRecords {
 					appendPageContext(pageRecord, "ctx-page-"+pageRecord.Id)
@@ -1122,8 +1119,6 @@ func loadSidebarPromptContexts(app *pocketbase.PocketBase, chatID, userID string
 		if pageID != "" {
 			pageRecord, err := app.FindRecordById(collections.Pages, pageID)
 			if err != nil {
-				app.Logger().Error("[chat/reader_sidebar] failed to resolve page to upload",
-					"page_id", pageID, "error", err)
 				continue
 			}
 			appendPageContext(pageRecord, "ctx-page-"+pageID)
@@ -1131,7 +1126,7 @@ func loadSidebarPromptContexts(app *pocketbase.PocketBase, chatID, userID string
 		}
 
 		if uploadID != "" {
-			pageRecords, pageErr := app.FindRecordsByFilter(
+			pageRecords, err := app.FindRecordsByFilter(
 				collections.Pages,
 				"upload = {:uploadId}",
 				"page",
@@ -1139,8 +1134,7 @@ func loadSidebarPromptContexts(app *pocketbase.PocketBase, chatID, userID string
 				0,
 				dbx.Params{"uploadId": uploadID},
 			)
-			if pageErr != nil {
-				app.Logger().Warn("[chat/reader_sidebar] failed to resolve upload context pages", "upload_id", uploadID, "error", pageErr)
+			if err != nil {
 				continue
 			}
 			for _, pageRecord := range pageRecords {
@@ -1160,20 +1154,20 @@ func ReadPageMarkdown(app *pocketbase.PocketBase, pageRecord *core.Record) (stri
 
 	fsys, err := app.NewFilesystem()
 	if err != nil {
-		return "", fmt.Errorf("failed to create filesystem: %w", err)
+		return "", err
 	}
 	defer fsys.Close()
 
 	filePath := pageRecord.BaseFilesPath() + "/" + filename
 	blob, err := fsys.GetReader(filePath)
 	if err != nil {
-		return "", fmt.Errorf("failed to read markdown from storage: %w", err)
+		return "", err
 	}
 	defer blob.Close()
 
 	content, err := io.ReadAll(blob)
 	if err != nil {
-		return "", fmt.Errorf("failed to read markdown bytes: %w", err)
+		return "", err
 	}
 
 	return string(content), nil

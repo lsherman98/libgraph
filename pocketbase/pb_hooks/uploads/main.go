@@ -46,7 +46,7 @@ const (
 )
 
 func Init(app *pocketbase.PocketBase) error {
-	registerQueueHandlers(app)
+	registerQueueHandlers()
 
 	app.OnRecordCreateRequest(collections.Uploads).BindFunc(func(e *core.RecordRequestEvent) error {
 		upload := e.Record
@@ -285,9 +285,7 @@ func optimizeAudioUploadFile(app *pocketbase.PocketBase, upload *core.Record) (b
 		return false, err
 	}
 
-	if err := scheduleUploadReprocessing(app, upload); err != nil {
-		app.Logger().Warn("failed to enqueue reprocessing after audio optimization", "uploadId", upload.Id, "error", err)
-	}
+	scheduleUploadReprocessing(app, upload)
 
 	return true, nil
 }

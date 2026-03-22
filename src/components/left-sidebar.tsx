@@ -2,7 +2,7 @@ import { NavMain } from "@/components/nav-main";
 import { NavSecondary } from "@/components/nav-secondary";
 import { NavUser } from "@/components/nav-user";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar";
-import { Settings, Files, CloudUpload, BookText, GitBranch, MessageSquare } from "lucide-react";
+import { Files, CloudUpload, BookText, GitBranch, MessageSquare } from "lucide-react";
 import { pb } from "@/lib/pocketbase";
 
 export function LeftSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {

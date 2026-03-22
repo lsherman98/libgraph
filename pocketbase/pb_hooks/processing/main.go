@@ -93,7 +93,7 @@ func Enqueue(app *pocketbase.PocketBase, req EnqueueRequest) error {
 			existing.Set("finished_at", nil)
 			existing.Set("error_code", nil)
 			existing.Set("error_message", nil)
-			existing.Set("payload_json", req.Payload)
+			existing.Set("payload", req.Payload)
 			return app.Save(existing)
 		default:
 			return nil
@@ -109,7 +109,7 @@ func Enqueue(app *pocketbase.PocketBase, req EnqueueRequest) error {
 	record.Set("job_type", req.JobType)
 	record.Set("status", vars.QueueStatusQueued)
 	record.Set("dedupe_key", req.DedupeKey)
-	record.Set("payload_json", req.Payload)
+	record.Set("payload", req.Payload)
 	record.Set("user", req.UserID)
 	record.Set("upload", req.UploadID)
 	record.Set("page", req.PageID)

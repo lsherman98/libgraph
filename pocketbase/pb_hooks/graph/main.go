@@ -285,9 +285,7 @@ func syncEdgesForRelation(app *pocketbase.PocketBase, sourceNodeId string, targe
 
 	for nodeId, edge := range existingMap {
 		if !desiredMap[nodeId] {
-			if err := app.Delete(edge); err != nil {
-				app.Logger().Error("failed to delete stale edge", "edge_id", edge.Id, "error", err)
-			}
+			app.Delete(edge)
 		}
 	}
 
@@ -498,10 +496,8 @@ func registerUploadHooks(app *pocketbase.PocketBase) {
 	app.OnRecordAfterDeleteSuccess(collections.Uploads).BindFunc(func(e *core.RecordEvent) error {
 		record := e.Record
 		userId := record.GetString("user")
-		if err := deleteNodeAndEdges(app, record.Id, userId, NodeTypeUpload); err != nil {
-			e.App.Logger().Error("failed to delete node and edges for upload", "error", err)
-		}
 
+		deleteNodeAndEdges(app, record.Id, userId, NodeTypeUpload)
 		syncSummaryGraphEdgesForUpload(app, record.Id, userId)
 
 		return e.Next()
@@ -557,9 +553,7 @@ func registerSimpleNodeHooks(app *pocketbase.PocketBase) {
 		userId := record.GetString("user")
 
 		label, data := collectionLabelData[collName](record)
-		if _, err := createNode(app, record.Id, collectionNodeType[collName], userId, label, data); err != nil {
-			app.Logger().Error("failed to create node", "collection", collName, "error", err)
-		}
+		createNode(app, record.Id, collectionNodeType[collName], userId, label, data);
 	}
 
 	app.OnRecordAfterCreateSuccess(collections.People).BindFunc(func(e *core.RecordEvent) error {
@@ -583,9 +577,7 @@ func registerSimpleNodeHooks(app *pocketbase.PocketBase) {
 		collName := record.Collection().Name
 		userId := record.GetString("user")
 
-		if err := deleteNodeAndEdges(app, record.Id, userId, collectionNodeType[collName]); err != nil {
-			app.Logger().Error("failed to delete node and edges", "collection", collName, "error", err)
-		}
+		deleteNodeAndEdges(app, record.Id, userId, collectionNodeType[collName])
 	}
 
 	app.OnRecordAfterDeleteSuccess(collections.People).BindFunc(func(e *core.RecordEvent) error {
@@ -622,9 +614,7 @@ func registerSimpleNodeHooks(app *pocketbase.PocketBase) {
 		userId := record.GetString("user")
 
 		label, data := collectionLabelData[collName](record)
-		if err := updateNodeData(app, record.Id, userId, collectionNodeType[collName], label, data); err != nil {
-			app.Logger().Error("failed to update node data", "collection", collName, "error", err)
-		}
+		updateNodeData(app, record.Id, userId, collectionNodeType[collName], label, data);
 	}
 
 	app.OnRecordAfterUpdateSuccess(collections.People).BindFunc(func(e *core.RecordEvent) error {

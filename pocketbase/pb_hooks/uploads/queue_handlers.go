@@ -32,14 +32,14 @@ type chunkGeneratePayload struct {
 
 const chunkEmbedEnqueueBatchSize = 250
 
-func registerQueueHandlers(app *pocketbase.PocketBase) {
+func registerQueueHandlers() {
 	processing.RegisterHandler(processing.JobTypeUploadParseOrTranscribe, handleUploadParseOrTranscribeJob)
 	processing.RegisterHandler(processing.JobTypeChunkGenerate, handleChunkGenerateJob)
 }
 
 func handleUploadParseOrTranscribeJob(app *pocketbase.PocketBase, job *core.Record) error {
 	payload := uploadJobPayload{}
-	if err := job.UnmarshalJSONField("payload_json", &payload); err != nil {
+	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
 		return err
 	}
 
@@ -126,9 +126,9 @@ func parseAudioUploadIntoPages(app *pocketbase.PocketBase, upload *core.Record) 
 	}
 
 	if strings.TrimSpace(transcriptMarkdown) != "" {
-		page, createErr := createPageRecord(app, upload, 1, fmt.Sprintf("%s_transcript.md", title), transcriptMarkdown)
-		if createErr != nil {
-			return nil, createErr
+		page, err := createPageRecord(app, upload, 1, fmt.Sprintf("%s_transcript.md", title), transcriptMarkdown)
+		if err != nil {
+			return nil, err
 		}
 
 		return []*core.Record{page}, nil
@@ -318,8 +318,8 @@ func enqueuePageSummarizeForPage(app *pocketbase.PocketBase, upload *core.Record
 
 func handleChunkGenerateJob(app *pocketbase.PocketBase, job *core.Record) error {
 	payload := chunkGeneratePayload{}
-	if err := job.UnmarshalJSONField("payload_json", &payload); err != nil {
-		return fmt.Errorf("invalid payload_json: %w", err)
+	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
+		return fmt.Errorf("invalid payload: %w", err)
 	}
 	if payload.PageID == "" || payload.UploadID == "" {
 		return fmt.Errorf("payload page_id and upload_id are required")
@@ -414,7 +414,6 @@ func hasPendingChunkGenerateJobs(app *pocketbase.PocketBase, uploadID string, cu
 		dbx.Params{"uploadId": uploadID, "jobType": processing.JobTypeChunkGenerate, "jobId": currentJobID},
 	)
 	if err != nil {
-		app.Logger().Warn("[uploads] failed to check pending chunk.generate jobs", "upload_id", uploadID, "error", err)
 		return true
 	}
 

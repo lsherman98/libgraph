@@ -76,20 +76,20 @@ func (c *Client) Transcribe(upload *core.Record) (*TranscriptionResponse, error)
 
 	fsys, err := c.App.NewFilesystem()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create filesystem: %w", err)
+		return nil, err
 	}
 	defer fsys.Close()
 
 	filePath := upload.BaseFilesPath() + "/" + filename
 	blob, err := fsys.GetReader(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get file from storage: %w", err)
+		return nil, err
 	}
 	defer blob.Close()
 
 	fileBytes, err := io.ReadAll(blob)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file bytes: %w", err)
+		return nil, err
 	}
 
 	var body bytes.Buffer
@@ -97,27 +97,27 @@ func (c *Client) Transcribe(upload *core.Record) (*TranscriptionResponse, error)
 
 	part, err := writer.CreateFormFile("file", filename)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create form file: %w", err)
+		return nil, err
 	}
-	
+
 	if _, err := part.Write(fileBytes); err != nil {
-		return nil, fmt.Errorf("failed to write file bytes: %w", err)
+		return nil, err
 	}
 
 	if err := writer.WriteField("model", transcriptionModel); err != nil {
-		return nil, fmt.Errorf("failed to write model field: %w", err)
+		return nil, err
 	}
 
 	if err := writer.WriteField("diarize", "true"); err != nil {
-		return nil, fmt.Errorf("failed to write diarize field: %w", err)
+		return nil, err
 	}
 
 	if err := writer.WriteField("timestamp_granularities", "segment"); err != nil {
-		return nil, fmt.Errorf("failed to write timestamp_granularities field: %w", err)
+		return nil, err
 	}
 
 	if err := writer.Close(); err != nil {
-		return nil, fmt.Errorf("failed to close multipart writer: %w", err)
+		return nil, err
 	}
 
 	payload := append([]byte(nil), body.Bytes()...)
@@ -130,25 +130,24 @@ func (c *Client) Transcribe(upload *core.Record) (*TranscriptionResponse, error)
 
 		req, err := http.NewRequest(http.MethodPost, baseURL+"/v1/audio/transcriptions", bytes.NewReader(payload))
 		if err != nil {
-			return nil, fmt.Errorf("failed to create request: %w", err)
+			return nil, err
 		}
 		req.Header.Set("x-api-key", c.APIKey)
 		req.Header.Set("Content-Type", contentType)
 
 		resp, err := c.HTTPClient.Do(req)
 		if err != nil {
-			lastErr = fmt.Errorf("transcription request failed: %w", err)
 			if attempt < maxRetryAttempts && isRetryableError(err) {
 				time.Sleep(backoffForAttempt(attempt))
 				continue
 			}
-			return nil, lastErr
+			return nil, err
 		}
 
 		respBody, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			lastErr = fmt.Errorf("failed to read response body: %w", err)
+			lastErr = err
 			if attempt < maxRetryAttempts {
 				time.Sleep(backoffForAttempt(attempt))
 				continue
@@ -157,7 +156,7 @@ func (c *Client) Transcribe(upload *core.Record) (*TranscriptionResponse, error)
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			lastErr = fmt.Errorf("mistral transcription API returned status %d: %s", resp.StatusCode, string(respBody))
+			lastErr = err
 			if attempt < maxRetryAttempts && isRetryableStatus(resp.StatusCode) {
 				time.Sleep(backoffForAttempt(attempt))
 				continue

@@ -28,7 +28,7 @@ func New(app *pocketbase.PocketBase) *Parser {
 func (p *Parser) makeTmpDir(prefix string) (string, error) {
 	baseDir := filepath.Join(".", tmpBaseDir)
 	if err := os.MkdirAll(baseDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create tmp base dir %s: %w", baseDir, err)
+		return "", err
 	}
 	return os.MkdirTemp(baseDir, prefix)
 }
@@ -52,7 +52,7 @@ func (p *Parser) ParseUpload(upload *core.Record, onPage func(Page) error) (*Par
 
 	fsys, err := p.App.NewFilesystem()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create filesystem: %w", err)
+		return nil, err
 	}
 	defer fsys.Close()
 
@@ -60,13 +60,13 @@ func (p *Parser) ParseUpload(upload *core.Record, onPage func(Page) error) (*Par
 
 	blob, err := fsys.GetReader(filePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get file from storage (path: %s): %w", filePath, err)
+		return nil, err
 	}
 	defer blob.Close()
 
 	fileBytes, err := io.ReadAll(blob)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file bytes: %w", err)
+		return nil, err
 	}
 
 	switch ext {
@@ -84,7 +84,7 @@ func (p *Parser) ParseUpload(upload *core.Record, onPage func(Page) error) (*Par
 func (p *Parser) parsePDF(fileBytes []byte, filename string, onPage func(Page) error) (*ParseResult, error) {
 	tmpDir, err := p.makeTmpDir("libgraph-pdf-*")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temp dir: %w", err)
+		return nil, err
 	}
 
 	defer func() {
@@ -97,12 +97,12 @@ func (p *Parser) parsePDF(fileBytes []byte, filename string, onPage func(Page) e
 	inputPath := filepath.Join(tmpDir, safeFilename)
 
 	if err := os.WriteFile(inputPath, fileBytes, 0644); err != nil {
-		return nil, fmt.Errorf("failed to write temp PDF: %w", err)
+		return nil, err
 	}
 
-	_, statErr := os.Stat(inputPath)
-	if statErr != nil {
-		return nil, fmt.Errorf("failed to stat temp PDF after write: %w", statErr)
+	_, err = os.Stat(inputPath)
+	if err != nil {
+		return nil, err
 	}
 
 	outputPattern := filepath.Join(tmpDir, "page_%d.pdf")
@@ -115,7 +115,7 @@ func (p *Parser) parsePDF(fileBytes []byte, filename string, onPage func(Page) e
 	globPattern := filepath.Join(tmpDir, "page_*.pdf")
 	pageFiles, err := filepath.Glob(globPattern)
 	if err != nil {
-		return nil, fmt.Errorf("failed to glob page files: %w", err)
+		return nil, err
 	}
 
 	if len(pageFiles) == 0 {
@@ -149,7 +149,6 @@ func (p *Parser) parsePDF(fileBytes []byte, filename string, onPage func(Page) e
 			md, err := runMarkitdown(pagePath)
 			if err != nil {
 				errs[idx] = fmt.Errorf("markitdown failed for page %d: %w", idx+1, err)
-				p.App.Logger().Error("parsePDF markitdown failed", "page", idx+1, "error", err)
 				return
 			}
 
@@ -193,7 +192,7 @@ func (p *Parser) parsePDF(fileBytes []byte, filename string, onPage func(Page) e
 func (p *Parser) parseEPUB(fileBytes []byte, filename string, onPage func(Page) error) (*ParseResult, error) {
 	tmpDir, err := p.makeTmpDir("libgraph-epub-*")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temp dir: %w", err)
+		return nil, err
 	}
 	defer func() {
 		if removeErr := os.RemoveAll(tmpDir); removeErr != nil {
@@ -204,7 +203,7 @@ func (p *Parser) parseEPUB(fileBytes []byte, filename string, onPage func(Page) 
 	safeFilename := sanitizeFilename(filename)
 	inputPath := filepath.Join(tmpDir, safeFilename)
 	if err := os.WriteFile(inputPath, fileBytes, 0644); err != nil {
-		return nil, fmt.Errorf("failed to write temp EPUB: %w", err)
+		return nil, err
 	}
 
 	pdfName := strings.TrimSuffix(safeFilename, filepath.Ext(safeFilename)) + ".pdf"
@@ -214,12 +213,12 @@ func (p *Parser) parseEPUB(fileBytes []byte, filename string, onPage func(Page) 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("ebook-convert failed: %w, stderr: %s", err, stderr.String())
+		return nil, err
 	}
 
 	pdfBytes, err := os.ReadFile(pdfPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read converted PDF: %w", err)
+		return nil, err
 	}
 
 	return p.parsePDF(pdfBytes, pdfName, onPage)
@@ -309,7 +308,7 @@ func runMarkitdown(filePath string) (string, error) {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("markitdown error (file=%s): %w, stderr: %s", filePath, err, stderr.String())
+		return "", err
 	}
 
 	return stdout.String(), nil
@@ -320,8 +319,8 @@ func splitPDFIntoPages(inputPath string, outputPattern string) (string, error) {
 		cmd := exec.Command("pdftk", inputPath, "burst", "output", outputPattern)
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
-		if runErr := cmd.Run(); runErr != nil {
-			return "pdftk", fmt.Errorf("pdftk failed: %w, stderr: %s", runErr, stderr.String())
+		if err := cmd.Run(); err != nil {
+			return "pdftk", err
 		}
 		return "pdftk", nil
 	}
@@ -330,8 +329,8 @@ func splitPDFIntoPages(inputPath string, outputPattern string) (string, error) {
 		cmd := exec.Command("pdfseparate", inputPath, outputPattern)
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
-		if runErr := cmd.Run(); runErr != nil {
-			return "pdfseparate", fmt.Errorf("pdfseparate failed: %w, stderr: %s", runErr, stderr.String())
+		if err := cmd.Run(); err != nil {
+			return "pdfseparate", err
 		}
 		return "pdfseparate", nil
 	}

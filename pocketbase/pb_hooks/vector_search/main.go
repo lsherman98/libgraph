@@ -3,14 +3,12 @@ package vector_search
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"strings"
 
 	"github.com/google/generative-ai-go/genai"
 	"github.com/lsherman98/libgraph/pocketbase/collections"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
-	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/routine"
 )
@@ -24,20 +22,15 @@ func Init(app *pocketbase.PocketBase) error {
 	var err error
 	client, err = createGoogleAiClient()
 	if err != nil {
-		return fmt.Errorf("vector_search: failed to create Google AI client: %w", err)
+		return err
 	}
 
-	registerQueueHandlers(app)
+	registerQueueHandlers()
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		if err := ensureEmbeddingsTable(app); err != nil {
-			return fmt.Errorf("vector_search: failed to create embeddings table: %w", err)
+			return err
 		}
-
-		se.Router.GET("/api/vector-search/status", func(e *core.RequestEvent) error {
-			stats := getEmbeddingStats(app)
-			return e.JSON(http.StatusOK, stats)
-		}).Bind(apis.RequireAuth())
 
 		return se.Next()
 	})
@@ -52,30 +45,18 @@ func Init(app *pocketbase.PocketBase) error {
 			return e.Next()
 		}
 
-		app.Logger().Info("[vector_search] chunk content updated; scheduling embedding reset",
-			"chunk_id", record.Id,
-		)
-
 		routine.FireAndForget(func() {
-			if err := deleteEmbeddingForRecord(app, record.Original()); err != nil {
-				app.Logger().Error("[vector_search] failed to delete old embedding on update", "id", record.Id, "error", err)
-			}
+			deleteEmbeddingForRecord(app, record.Original())
 
 			updateStmt := "UPDATE document_chunks SET vector_id = 0 WHERE id = {:chunkId}"
-			if _, err := app.DB().NewQuery(updateStmt).Bind(dbx.Params{"chunkId": record.Id}).Execute(); err != nil {
-				app.Logger().Error("[vector_search] failed to reset vector_id on update", "id", record.Id, "error", err)
-			} else {
-				app.Logger().Info("[vector_search] reset vector_id after content update", "chunk_id", record.Id)
-			}
+			app.DB().NewQuery(updateStmt).Bind(dbx.Params{"chunkId": record.Id}).Execute()
 		})
 		return e.Next()
 	})
 
 	app.OnRecordAfterDeleteSuccess(collections.DocumentChunks).BindFunc(func(e *core.RecordEvent) error {
 		record := e.Record
-		if err := deleteEmbeddingForRecord(app, record); err != nil {
-			app.Logger().Error("[vector_search] failed to delete embedding on delete", "id", record.Id, "error", err)
-		}
+		deleteEmbeddingForRecord(app, record)
 		return e.Next()
 	})
 
@@ -88,19 +69,7 @@ func Init(app *pocketbase.PocketBase) error {
 			"DELETE FROM %s WHERE id NOT IN (SELECT vector_id FROM document_chunks WHERE vector_id IS NOT NULL AND vector_id != 0)",
 			embeddingsTable,
 		)
-		result, err := app.DB().NewQuery(stmt).Execute()
-		if err != nil {
-			app.Logger().Error("[vector_search] failed to cleanup orphaned embeddings", "error", err)
-			return
-		}
-
-		rowsDeleted, rowsErr := result.RowsAffected()
-		if rowsErr != nil {
-			app.Logger().Warn("[vector_search] cleaned up orphaned embeddings but failed to determine deleted count", "error", rowsErr)
-			return
-		}
-
-		app.Logger().Info("[vector_search] cleaned up orphaned embeddings", "deleted_count", rowsDeleted)
+		app.DB().NewQuery(stmt).Execute()
 	})
 
 	return nil
@@ -150,12 +119,12 @@ func Search(app *pocketbase.PocketBase, query string, uploadIDs []string, k int)
 
 	vector, err := googleAiEmbedContent(client, genai.TaskTypeRetrievalQuery, "", genai.Text(query))
 	if err != nil {
-		return nil, fmt.Errorf("vector_search: failed to embed query: %w", err)
+		return nil, err
 	}
 
 	jsonVec, err := json.Marshal(vector)
 	if err != nil {
-		return nil, fmt.Errorf("vector_search: failed to marshal vector: %w", err)
+		return nil, err
 	}
 
 	params := dbx.Params{
@@ -182,11 +151,6 @@ func Search(app *pocketbase.PocketBase, query string, uploadIDs []string, k int)
 		stmt.WriteString("WHERE dc.vector_id IS NOT NULL AND dc.vector_id != 0 ")
 		stmt.WriteString("AND dc.upload IN (" + strings.Join(placeholders, ", ") + ") ")
 		stmt.WriteString(fmt.Sprintf("ORDER BY distance ASC LIMIT %d;", k))
-
-		app.Logger().Info("[vector_search] filtered search",
-			"upload_ids", uploadIDs,
-			"k", k,
-		)
 	} else {
 		fmt.Fprintf(&stmt, "SELECT dc.id, sub.distance, dc.content, dc.upload, dc.page_number, dc.chunk_index, u.title FROM (SELECT id, distance FROM %s WHERE embedding MATCH {:embedding} AND k = %d) sub ",
 			embeddingsTable, k)
@@ -203,12 +167,7 @@ func Search(app *pocketbase.PocketBase, query string, uploadIDs []string, k int)
 		Bind(params).
 		All(&results)
 	if err != nil {
-		app.Logger().Error("[vector_search] query execution failed",
-			"error", err,
-			"filtered", len(uploadIDs) > 0,
-			"upload_count", len(uploadIDs),
-		)
-		return nil, fmt.Errorf("vector_search: query failed: %w", err)
+		return nil, err
 	}
 
 	items := make([]SearchResult, 0, len(results))
@@ -252,9 +211,6 @@ func ensureEmbeddingsTable(app *pocketbase.PocketBase) error {
 		embeddingsTable, embeddingDims,
 	)
 	_, err := app.DB().NewQuery(stmt).Execute()
-	if err != nil {
-		app.Logger().Error("[vector_search] failed to create/verify embeddings table", "error", err)
-	}
 	return err
 }
 
@@ -269,10 +225,6 @@ func deleteEmbeddingForRecord(app *pocketbase.PocketBase, record *core.Record) e
 	_, err := app.DB().NewQuery(stmt).Bind(dbx.Params{
 		"id": vectorID,
 	}).Execute()
-
-	if err != nil {
-		app.Logger().Error("[vector_search] failed to delete embedding", "chunk_id", record.Id, "vector_id", vectorID, "error", err)
-	}
 
 	return err
 }

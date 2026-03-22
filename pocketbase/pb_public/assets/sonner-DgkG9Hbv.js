@@ -1,0 +1,1 @@
+import{j as e,T as t}from"./index-B-uZmyjf.js";import{z as s}from"./index-zKqMTmCT.js";const p=({...r})=>{const{theme:o="system"}=s();return e.jsx(t,{theme:o,className:"toaster group",style:{"--normal-bg":"var(--popover)","--normal-text":"var(--popover-foreground)","--normal-border":"var(--border)"},...r})};export{p as T};

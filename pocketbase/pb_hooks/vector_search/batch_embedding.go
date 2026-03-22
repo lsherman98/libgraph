@@ -79,12 +79,6 @@ func collectChunkRecords(app *pocketbase.PocketBase, records []*core.Record) []c
 				if upload, err := app.FindRecordById("uploads", uploadID); err == nil {
 					uploadTitle := upload.GetString("title")
 					uploadTitleCache[uploadID] = uploadTitle
-				} else {
-					app.Logger().Warn("[vector_search] failed to resolve upload title for chunk",
-						"upload_id", uploadID,
-						"chunk_id", record.Id,
-						"error", err,
-					)
 				}
 			}
 			title = uploadTitleCache[uploadID]
@@ -111,14 +105,6 @@ func processBatchEmbeddings(ctx context.Context, app *pocketbase.PocketBase, chu
 
 	modelName := embeddingModelName()
 	fullModel := fmt.Sprintf("models/%s", modelName)
-	app.Logger().Info("[vector_search] embedding batch started",
-		"display_name", displayName,
-		"model", modelName,
-		"chunks", len(chunks),
-		"batch_size", batchSize,
-		"poll_interval", pollInterval.String(),
-		"job_concurrency", jobConcurrency,
-	)
 
 	type batchJob struct {
 		start int
@@ -190,24 +176,10 @@ func processBatchEmbeddings(ctx context.Context, app *pocketbase.PocketBase, chu
 		}
 	}
 
-	app.Logger().Info("[vector_search] embedding batch finished",
-		"display_name", displayName,
-		"processed", processed,
-		"failed", failed,
-		"rate_limited", haltedByRateLimit,
-	)
-
 	return processed, failed, haltedByRateLimit
 }
 
 func processSingleEmbeddingBatch(ctx context.Context, app *pocketbase.PocketBase, batch []chunkRecord, batchLabel string, start, end int, fullModel, modelName string, pollInterval time.Duration, totalChunks int) (processed, failed int, haltedByRateLimit bool) {
-	app.Logger().Info("[vector_search] submitting embed batch job",
-		"label", batchLabel,
-		"batch_size", len(batch),
-		"start_offset", start,
-		"end_offset", end,
-	)
-
 	requests := make([]inlinedEmbedContentRequest, len(batch))
 	for i, c := range batch {
 		requests[i] = inlinedEmbedContentRequest{
@@ -225,19 +197,12 @@ func processSingleEmbeddingBatch(ctx context.Context, app *pocketbase.PocketBase
 
 	op, err := submitBatchEmbedJob(ctx, requests, batchLabel, modelName)
 	if err != nil {
-		app.Logger().Error("[vector_search] failed to submit batch job",
-			"label", batchLabel,
-			"error", err,
-		)
 		failed += len(batch)
 		if isRateLimited(err) {
 			remainingChunks := totalChunks - end
 			if remainingChunks < 0 {
 				remainingChunks = 0
 			}
-			app.Logger().Warn("[vector_search] rate limited, stopping batch processing — will retry on next cron run",
-				"remaining_chunks", remainingChunks,
-			)
 			return processed, failed, true
 		}
 		return processed, failed, false
@@ -245,35 +210,14 @@ func processSingleEmbeddingBatch(ctx context.Context, app *pocketbase.PocketBase
 
 	result, err := waitForBatchJob(ctx, op.Name, pollInterval)
 	if err != nil {
-		app.Logger().Error("[vector_search] batch job failed",
-			"name", op.Name,
-			"label", batchLabel,
-			"error", err,
-		)
 		failed += len(batch)
 		return processed, failed, false
 	}
 
 	responses := result.Output.getInlinedResponses()
 	if len(responses) == 0 {
-		app.Logger().Error("[vector_search] no inline responses in batch result",
-			"name", op.Name,
-			"label", batchLabel,
-			"state", result.State,
-			"has_output", result.Output != nil,
-			"raw_debug", result.RawDebug,
-		)
 		failed += len(batch)
 		return processed, failed, false
-	}
-
-	if len(responses) != len(batch) {
-		app.Logger().Warn("[vector_search] response count mismatch for batch job",
-			"name", op.Name,
-			"label", batchLabel,
-			"expected", len(batch),
-			"received", len(responses),
-		)
 	}
 
 	processable := min(len(responses), len(batch))
@@ -282,28 +226,16 @@ func processSingleEmbeddingBatch(ctx context.Context, app *pocketbase.PocketBase
 		chunk := batch[i]
 
 		if resp.Error != nil {
-			app.Logger().Error("[vector_search] batch embed error for chunk",
-				"chunk_id", chunk.Record.Id,
-				"code", resp.Error.Code,
-				"message", resp.Error.Message,
-			)
 			failed++
 			continue
 		}
 
 		if resp.Response == nil || resp.Response.Embedding == nil || len(resp.Response.Embedding.Values) == 0 {
-			app.Logger().Error("[vector_search] empty embedding in batch response",
-				"chunk_id", chunk.Record.Id,
-			)
 			failed++
 			continue
 		}
 
 		if err := storeChunkEmbedding(app, chunk.Record, resp.Response.Embedding.Values); err != nil {
-			app.Logger().Error("[vector_search] failed to store batch embedding",
-				"chunk_id", chunk.Record.Id,
-				"error", err,
-			)
 			failed++
 			continue
 		}
@@ -313,17 +245,6 @@ func processSingleEmbeddingBatch(ctx context.Context, app *pocketbase.PocketBase
 	if len(responses) < len(batch) {
 		missing := len(batch) - len(responses)
 		failed += missing
-		app.Logger().Error("[vector_search] batch job returned fewer responses than requested",
-			"name", op.Name,
-			"label", batchLabel,
-			"missing", missing,
-		)
-	} else if len(responses) > len(batch) {
-		app.Logger().Warn("[vector_search] batch job returned extra responses",
-			"name", op.Name,
-			"label", batchLabel,
-			"extra", len(responses)-len(batch),
-		)
 	}
 
 	return processed, failed, false
@@ -422,7 +343,7 @@ func submitBatchEmbedJob(ctx context.Context, requests []inlinedEmbedContentRequ
 
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("marshal batch request: %w", err)
+		return nil, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
@@ -433,13 +354,13 @@ func submitBatchEmbedJob(ctx context.Context, requests []inlinedEmbedContentRequ
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("batch create HTTP request failed: %w", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("reading response body: %w", err)
+		return nil, err
 	}
 
 	if resp.StatusCode == http.StatusTooManyRequests {
@@ -452,8 +373,9 @@ func submitBatchEmbedJob(ctx context.Context, requests []inlinedEmbedContentRequ
 
 	var op batchOperation
 	if err := json.Unmarshal(respBody, &op); err != nil {
-		return nil, fmt.Errorf("parsing operation response: %w", err)
+		return nil, err
 	}
+
 	return &op, nil
 }
 
@@ -497,7 +419,7 @@ func submitBulkEmbedContentChunk(ctx context.Context, apiKey, modelName string, 
 
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("marshal batchEmbedContents request: %w", err)
+		return nil, err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(jsonBody))
@@ -508,13 +430,13 @@ func submitBulkEmbedContentChunk(ctx context.Context, apiKey, modelName string, 
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("batchEmbedContents HTTP request failed: %w", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("reading response body: %w", err)
+		return nil, err
 	}
 
 	if resp.StatusCode == http.StatusTooManyRequests {
@@ -527,7 +449,7 @@ func submitBulkEmbedContentChunk(ctx context.Context, apiKey, modelName string, 
 
 	var parsed restBulkEmbedContentResponse
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
-		return nil, fmt.Errorf("parsing batchEmbedContents response: %w", err)
+		return nil, err
 	}
 
 	if len(parsed.Embeddings) == 0 && parsed.Embedding != nil {
@@ -565,13 +487,13 @@ func getBatchJobStatus(ctx context.Context, batchName string) (*batchOperation, 
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, nil, fmt.Errorf("batch status HTTP request failed: %w", err)
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, nil, fmt.Errorf("reading response body: %w", err)
+		return nil, nil, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -580,7 +502,7 @@ func getBatchJobStatus(ctx context.Context, batchName string) (*batchOperation, 
 
 	var op batchOperation
 	if err := json.Unmarshal(respBody, &op); err != nil {
-		return nil, nil, fmt.Errorf("parsing operation: %w", err)
+		return nil, nil, err
 	}
 
 	return &op, respBody, nil
@@ -660,7 +582,7 @@ func storeChunkEmbedding(app *pocketbase.PocketBase, record *core.Record, values
 
 	jsonVec, err := json.Marshal(values)
 	if err != nil {
-		return fmt.Errorf("marshal embedding: %w", err)
+		return err
 	}
 
 	// Use NonconcurrentDB for all writes so the INSERT and
@@ -671,14 +593,14 @@ func storeChunkEmbedding(app *pocketbase.PocketBase, record *core.Record, values
 	if _, err := db.NewQuery(insertStmt).Bind(dbx.Params{
 		"embedding": string(jsonVec),
 	}).Execute(); err != nil {
-		return fmt.Errorf("insert embedding: %w", err)
+		return err
 	}
 
 	// Retrieve the rowid on the same connection – LastInsertId() from
 	// sql.Result is unreliable for vec0 virtual tables.
 	var idRow dbx.NullStringMap
 	if err := db.NewQuery("SELECT last_insert_rowid() AS id").One(&idRow); err != nil {
-		return fmt.Errorf("get vector id: %w", err)
+		return err
 	}
 
 	var vectorID int64
@@ -696,42 +618,26 @@ func storeChunkEmbedding(app *pocketbase.PocketBase, record *core.Record, values
 		"chunkId":  record.Id,
 	}).Execute()
 	if err != nil {
-		_, cleanupErr := db.NewQuery(fmt.Sprintf("DELETE FROM %s WHERE id = {:id}", embeddingsTable)).Bind(dbx.Params{
+		_, err := db.NewQuery(fmt.Sprintf("DELETE FROM %s WHERE id = {:id}", embeddingsTable)).Bind(dbx.Params{
 			"id": vectorID,
 		}).Execute()
-		if cleanupErr != nil {
-			app.Logger().Error("[vector_search] failed to cleanup orphan embedding after link failure",
-				"chunk_id", record.Id,
-				"vector_id", vectorID,
-				"error", cleanupErr,
-			)
+		if err != nil {
+			return err
 		}
-		return fmt.Errorf("update vector_id: %w", err)
+		return err
 	}
 
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected == 0 {
-		_, cleanupErr := db.NewQuery(fmt.Sprintf("DELETE FROM %s WHERE id = {:id}", embeddingsTable)).Bind(dbx.Params{
+		_, err := db.NewQuery(fmt.Sprintf("DELETE FROM %s WHERE id = {:id}", embeddingsTable)).Bind(dbx.Params{
 			"id": vectorID,
 		}).Execute()
-		if cleanupErr != nil {
-			app.Logger().Error("[vector_search] failed to cleanup orphan embedding after skipped link",
-				"chunk_id", record.Id,
-				"vector_id", vectorID,
-				"error", cleanupErr,
-			)
+		if err != nil {
+			return err
 		}
-		app.Logger().Debug("[vector_search] skipping embedding link; chunk already linked",
-			"chunk_id", record.Id,
-			"vector_id", vectorID,
-		)
+
 		return nil
 	}
-
-	app.Logger().Debug("[vector_search] stored embedding",
-		"chunk_id", record.Id,
-		"vector_id", vectorID,
-	)
 
 	return nil
 }

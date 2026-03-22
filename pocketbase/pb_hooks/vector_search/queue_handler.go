@@ -41,15 +41,15 @@ func clampEmbeddingOperationErrorMessage(message string) string {
 	return string(runes[:maxContentLen]) + suffix
 }
 
-func registerQueueHandlers(app *pocketbase.PocketBase) {
+func registerQueueHandlers() {
 	processing.RegisterHandler(processing.JobTypeChunkEmbedSubmit, handleChunkEmbedSubmitJob)
 	processing.RegisterHandler(processing.JobTypeChunkEmbedPoll, handleChunkEmbedPollJob)
 }
 
 func handleChunkEmbedSubmitJob(app *pocketbase.PocketBase, job *core.Record) error {
 	payload := chunkEmbedPayload{}
-	if err := job.UnmarshalJSONField("payload_json", &payload); err != nil {
-		return fmt.Errorf("invalid payload_json: %w", err)
+	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
+		return err
 	}
 
 	chunkIDs := make([]string, 0, len(payload.ChunkIDs))
@@ -79,12 +79,6 @@ func handleChunkEmbedSubmitJob(app *pocketbase.PocketBase, job *core.Record) err
 	}
 
 	useBatch := batchEmbeddingEnabled()
-	app.Logger().Info("[vector_search] chunk embed submit mode selected",
-		"batch", useBatch,
-		"chunk_count", len(chunks),
-		"job_id", job.Id,
-	)
-
 	if useBatch {
 		return submitEmbeddingOperationAndEnqueuePoll(app, job, chunks)
 	}
@@ -94,8 +88,8 @@ func handleChunkEmbedSubmitJob(app *pocketbase.PocketBase, job *core.Record) err
 
 func handleChunkEmbedPollJob(app *pocketbase.PocketBase, job *core.Record) error {
 	payload := chunkEmbedPayload{}
-	if err := job.UnmarshalJSONField("payload_json", &payload); err != nil {
-		return fmt.Errorf("invalid payload_json: %w", err)
+	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
+		return err
 	}
 
 	operationID := strings.TrimSpace(payload.EmbeddingOperationID)
@@ -263,7 +257,7 @@ func submitEmbeddingOperationAndProcessSync(app *pocketbase.PocketBase, job *cor
 		return err
 	}
 
-	processed, failed, processErr := processChunkEmbeddingsSyncBulk(app, chunks, modelName)
+	processed, failed, err := processChunkEmbeddingsSyncBulk(app, chunks, modelName)
 	now := time.Now().UTC()
 
 	operationRecord.Set("succeeded_chunks", processed)
@@ -271,10 +265,10 @@ func submitEmbeddingOperationAndProcessSync(app *pocketbase.PocketBase, job *cor
 	operationRecord.Set("total_chunks", len(chunks))
 	operationRecord.Set("attempts", 1)
 
-	if processErr != nil || failed > 0 {
+	if err != nil || failed > 0 {
 		errMessage := fmt.Sprintf("sync embedding completed with failures: %d", failed)
-		if processErr != nil {
-			errMessage = processErr.Error()
+		if err != nil {
+			errMessage = err.Error()
 		}
 		errMessage = clampEmbeddingOperationErrorMessage(errMessage)
 		operationRecord.Set("status", "failing")
@@ -372,7 +366,7 @@ func createEmbeddingOperationRecord(app *pocketbase.PocketBase, job *core.Record
 	operationRecord.Set("failed_chunks", 0)
 	operationRecord.Set("attempts", 0)
 	operationRecord.Set("max_attempts", maxAttempts)
-	operationRecord.Set("chunk_ids_json", chunkIDs)
+	operationRecord.Set("chunk_ids", chunkIDs)
 	operationRecord.Set("submitted_at", time.Now().UTC())
 	if err := app.Save(operationRecord); err != nil {
 		return nil, err
@@ -440,7 +434,7 @@ func rescheduleEmbeddingPollJob(app *pocketbase.PocketBase, job *core.Record, op
 	job.Set("finished_at", nil)
 	job.Set("error_code", "")
 	job.Set("error_message", "")
-	job.Set("payload_json", map[string]any{
+	job.Set("payload", map[string]any{
 		"embedding_operation_id": operationRecord.Id,
 	})
 
@@ -551,9 +545,9 @@ func loadEmbeddableChunkRecords(app *pocketbase.PocketBase, chunkIDs []string) (
 }
 
 func embeddingOperationChunkIDs(operationRecord *core.Record) ([]string, error) {
-	raw := operationRecord.GetString("chunk_ids_json")
+	raw := operationRecord.GetString("chunk_ids")
 	if strings.TrimSpace(raw) == "" {
-		return nil, fmt.Errorf("embedding operation %s has empty chunk_ids_json", operationRecord.Id)
+		return nil, fmt.Errorf("embedding operation %s has empty chunk_ids", operationRecord.Id)
 	}
 
 	chunkIDs := make([]string, 0)
