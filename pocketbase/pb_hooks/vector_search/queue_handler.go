@@ -114,7 +114,10 @@ func handleChunkEmbedPollJob(app *pocketbase.PocketBase, job *core.Record) error
 
 	providerOperationID := strings.TrimSpace(operationRecord.GetString("provider_operation_id"))
 	if providerOperationID == "" {
-		return fmt.Errorf("embedding operation missing provider_operation_id")
+		providerOperationID = strings.TrimSpace(operationRecord.GetString("batch_id"))
+	}
+	if providerOperationID == "" {
+		return fmt.Errorf("embedding operation missing provider_operation_id/batch_id")
 	}
 
 	batchOperation, rawBody, err := getBatchJobStatus(context.Background(), providerOperationID)
@@ -349,25 +352,16 @@ func createEmbeddingOperationRecord(app *pocketbase.PocketBase, job *core.Record
 	}
 
 	operationRecord := core.NewRecord(collection)
-	operationRecord.Set("processing_job", job.Id)
+	operationRecord.Set("job", job.Id)
 	jobUpload := job.GetString("upload")
 	jobPage := job.GetString("page")
 	jobUser := job.GetString("user")
 	operationRecord.Set("upload", jobUpload)
 	operationRecord.Set("page", jobPage)
 	operationRecord.Set("user", jobUser)
-
-	operationRecord.Set("provider", "gemini")
-	operationRecord.Set("provider_operation_id", providerOperationID)
+	operationRecord.Set("batch_id", providerOperationID)
 	operationRecord.Set("status", "submitted")
-	operationRecord.Set("model", modelName)
-	operationRecord.Set("total_chunks", totalChunks)
-	operationRecord.Set("succeeded_chunks", 0)
-	operationRecord.Set("failed_chunks", 0)
-	operationRecord.Set("attempts", 0)
-	operationRecord.Set("max_attempts", maxAttempts)
 	operationRecord.Set("chunk_ids", chunkIDs)
-	operationRecord.Set("submitted_at", time.Now().UTC())
 	if err := app.Save(operationRecord); err != nil {
 		return nil, err
 	}

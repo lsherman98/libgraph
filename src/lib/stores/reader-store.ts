@@ -67,7 +67,7 @@ interface ReaderStore {
     setCurrentUploadId: (uploadId: string | null) => void;
     currentPageId: string | null;
     currentPageNumber: number | null;
-    setCurrentPageState: (pageId: string | null, pageNumber: number | null) => void;
+    setCurrentPageState: (pageId?: string, pageNumber?: number) => void;
     navigateToPage: ((pageNumber: number, blockId?: string) => void) | null;
     setNavigateToPage: (fn: ((pageNumber: number, blockId?: string) => void) | null) => void;
     editorState: EditorState | null;

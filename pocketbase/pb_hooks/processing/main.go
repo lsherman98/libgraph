@@ -1,6 +1,7 @@
 package processing
 
 import (
+	"strings"
 	"time"
 
 	"github.com/lsherman98/libgraph/pocketbase/collections"
@@ -53,11 +54,11 @@ func RegisterHandler(jobType string, handler JobHandler) {
 func Init(app *pocketbase.PocketBase) error {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		workers := []Worker{
-			{name: "parse", jobType: JobTypeUploadParseOrTranscribe, limit: 2, interval: queuePollInterval},
-			{name: "chunk", jobType: JobTypeChunkGenerate, limit: 4, interval: queuePollInterval},
-			{name: "summarize", jobType: JobTypePageSummarize, limit: 4, interval: queuePollInterval},
-			{name: "embed-submit", jobType: JobTypeChunkEmbedSubmit, limit: 3, interval: queuePollInterval},
-			{name: "embed-poll", jobType: JobTypeChunkEmbedPoll, limit: 8, interval: embedPollInterval},
+			{name: "parse", jobType: JobTypeUploadParseOrTranscribe, limit: 12, interval: queuePollInterval},
+			{name: "chunk", jobType: JobTypeChunkGenerate, limit: 100, interval: queuePollInterval},
+			{name: "summarize", jobType: JobTypePageSummarize, limit: 8, interval: queuePollInterval},
+			{name: "embed-submit", jobType: JobTypeChunkEmbedSubmit, limit: 24, interval: queuePollInterval},
+			{name: "embed-poll", jobType: JobTypeChunkEmbedPoll, limit: 24, interval: embedPollInterval},
 		}
 
 		for _, spec := range workers {
@@ -151,6 +152,8 @@ func processDueJobs(app *pocketbase.PocketBase, worker Worker) error {
 		if err := app.Save(job); err != nil {
 			continue
 		}
+
+		markUploadSuccessfulIfComplete(app, job)
 	}
 
 	return nil
@@ -179,4 +182,102 @@ func handleJobFailure(app *pocketbase.PocketBase, job *core.Record, err error) {
 	if err := app.Save(job); err != nil {
 		return
 	}
+}
+
+func markUploadSuccessfulIfComplete(app *pocketbase.PocketBase, job *core.Record) {
+	uploadID := job.GetString("upload")
+	if uploadID == "" {
+		return
+	}
+
+	uploadRecord, err := app.FindRecordById(collections.Uploads, uploadID)
+	if err != nil {
+		return
+	}
+
+	reconcileUploadStatusFromQueue(app, uploadRecord)
+}
+
+func recoverHangingProcessingUploads(app *pocketbase.PocketBase) {
+	uploads, err := app.FindRecordsByFilter(
+		collections.Uploads,
+		"status = {:status}",
+		"updated",
+		0,
+		0,
+		dbx.Params{"status": vars.UploadStatusProcessing},
+	)
+	if err != nil {
+		return
+	}
+
+	for _, uploadRecord := range uploads {
+		reconcileUploadStatusFromQueue(app, uploadRecord)
+	}
+}
+
+func RecoverHangingProcessingUploads(app *pocketbase.PocketBase) {
+	recoverHangingProcessingUploads(app)
+}
+
+func reconcileUploadStatusFromQueue(app *pocketbase.PocketBase, uploadRecord *core.Record) {
+	if uploadRecord == nil {
+		return
+	}
+
+	uploadType := strings.TrimSpace(uploadRecord.GetString("type"))
+	if uploadType == vars.UploadTypeSummary {
+		return
+	}
+
+	uploadID := strings.TrimSpace(uploadRecord.Id)
+	if uploadID == "" {
+		return
+	}
+
+	status := strings.TrimSpace(uploadRecord.GetString("status"))
+	if status == vars.UploadStatusSuccess || status == vars.UploadStatusFailed {
+		return
+	}
+
+	inFlightJobs, err := app.FindRecordsByFilter(
+		collections.Queue,
+		"upload = {:uploadId} && (status = 'queued' || status = 'running')",
+		"",
+		1,
+		0,
+		dbx.Params{"uploadId": uploadID},
+	)
+	if err != nil || len(inFlightJobs) > 0 {
+		return
+	}
+
+	failedJobs, err := app.FindRecordsByFilter(
+		collections.Queue,
+		"upload = {:uploadId} && (status = 'failed' || status = 'cancelled')",
+		"",
+		1,
+		0,
+		dbx.Params{"uploadId": uploadID},
+	)
+	if err != nil || len(failedJobs) > 0 {
+		uploadRecord.Set("status", vars.UploadStatusFailed)
+		app.Save(uploadRecord)
+		return
+	}
+
+	successJobs, err := app.FindRecordsByFilter(
+		collections.Queue,
+		"upload = {:uploadId} && status = 'success'",
+		"",
+		1,
+		0,
+		dbx.Params{"uploadId": uploadID},
+	)
+	if err != nil || len(successJobs) == 0 {
+		return
+	}
+
+	uploadRecord.Set("status", vars.UploadStatusSuccess)
+	app.Save(uploadRecord)
 }

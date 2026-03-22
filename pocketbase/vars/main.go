@@ -21,6 +21,10 @@ const (
 	EmbeddingStatusSucceeded = "succeeded"
 	EmbeddingStatusFailing   = "failing"
 
+	SummaryStatusProcessing = "processing"
+	SummaryStatusFailed     = "failed"
+	SummaryStatusSuccess    = "success"
+
 	ChatTypeSearch = "search"
 	ChatTypeChat   = "chat"
 

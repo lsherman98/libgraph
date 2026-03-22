@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery, useInfiniteQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useInfiniteQuery, skipToken } from "@tanstack/react-query";
 import { getPeople, getPublications, getFirstPage, getPageByNumber, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection, fullTextSearch, getPreferences, getReadingProgress, getSummaryBySourcePage, getSummaryBySourceUpload, getSidebarChats, getChatContexts } from "./api";
 import type { UploadFilters } from "./api";
 import type { NodesTypeOptions } from "../pocketbase-types";
@@ -44,55 +44,57 @@ export function useUploads(filters?: UploadFilters) {
     });
 }
 
-export function useUploadById(id: string) {
+export function useUploadById(id?: string) {
     return useQuery({
         queryKey: queryKeys.uploads.detail(id),
-        queryFn: () => getUpload(id),
+        queryFn: id ? () => getUpload(id) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
 
-export function useFirstPage(uploadId: string) {
+export function useFirstPage(uploadId?: string) {
     return useQuery({
         queryKey: queryKeys.pages.first(uploadId),
-        queryFn: () => getFirstPage(uploadId),
+        queryFn: uploadId ? () => getFirstPage(uploadId) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
 
-export function usePageByNumber(uploadId: string, pageNumber: number) {
+export function usePageByNumber(uploadId?: string, pageNumber?: number) {
     return useQuery({
         queryKey: queryKeys.pages.byNumber(uploadId, pageNumber),
-        queryFn: () => getPageByNumber(uploadId, pageNumber),
+        queryFn: uploadId && pageNumber != null ? () => getPageByNumber(uploadId, pageNumber) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
 
-export function usePageMarkdown(pageId: string) {
+export function usePageMarkdown(pageId?: string) {
     return useQuery({
         queryKey: queryKeys.pages.markdown(pageId),
-        queryFn: async () => {
-            const url = await getPageUrl(pageId);
-            if (!url) return null;
-            const response = await fetch(url);
-            return await response.text();
-        },
+        queryFn: pageId
+            ? async () => {
+                const url = await getPageUrl(pageId);
+                if (!url) return null;
+                const response = await fetch(url);
+                return await response.text();
+            }
+            : skipToken,
         placeholderData: keepPreviousData,
     });
 }
 
-export function usePages(uploadId: string, page: number = 1, perPage: number = 20) {
+export function usePages(uploadId?: string, page: number = 1, perPage: number = 20) {
     return useQuery({
         queryKey: queryKeys.pages.list(uploadId, page, perPage),
-        queryFn: () => getPages(uploadId, page, perPage),
+        queryFn: uploadId ? () => getPages(uploadId, page, perPage) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
 
-export function useSummaryBySourcePage(pageId: string, options?: { pollUntilFound?: boolean }) {
+export function useSummaryBySourcePage(pageId?: string, options?: { pollUntilFound?: boolean }) {
     return useQuery({
         queryKey: queryKeys.summaries.bySourcePage(pageId),
-        queryFn: () => getSummaryBySourcePage(pageId),
+        queryFn: pageId ? () => getSummaryBySourcePage(pageId) : skipToken,
         refetchInterval: (query) => {
             if (!options?.pollUntilFound) return false;
             return query.state.data ? false : 2000;
@@ -101,10 +103,10 @@ export function useSummaryBySourcePage(pageId: string, options?: { pollUntilFoun
     });
 }
 
-export function useSummaryBySourceUpload(uploadId: string, options?: { pollUntilFound?: boolean }) {
+export function useSummaryBySourceUpload(uploadId?: string, options?: { pollUntilFound?: boolean }) {
     return useQuery({
         queryKey: queryKeys.summaries.bySourceUpload(uploadId),
-        queryFn: () => getSummaryBySourceUpload(uploadId),
+        queryFn: uploadId ? () => getSummaryBySourceUpload(uploadId) : skipToken,
         refetchInterval: (query) => {
             if (!options?.pollUntilFound) return false;
             return query.state.data ? false : 2000;
@@ -113,10 +115,10 @@ export function useSummaryBySourceUpload(uploadId: string, options?: { pollUntil
     });
 }
 
-export function useInfinitePages(uploadId: string, perPage: number = 5, initialPage: number = 1) {
+export function useInfinitePages(uploadId?: string, perPage: number = 5, initialPage: number = 1) {
     return useInfiniteQuery({
         queryKey: queryKeys.pages.infinite(uploadId, perPage, initialPage),
-        queryFn: ({ pageParam }) => getPages(uploadId, pageParam, perPage),
+        queryFn: uploadId ? ({ pageParam }) => getPages(uploadId, pageParam, perPage) : skipToken,
         initialPageParam: initialPage,
         getNextPageParam: (lastPage) =>
             lastPage && lastPage.page != null && lastPage.totalPages != null && lastPage.page < lastPage.totalPages
@@ -125,34 +127,34 @@ export function useInfinitePages(uploadId: string, perPage: number = 5, initialP
     });
 }
 
-export function useHighlights(uploadId: string) {
+export function useHighlights(uploadId?: string) {
     return useQuery({
         queryKey: queryKeys.highlights.byUpload(uploadId),
-        queryFn: () => getHighlights(uploadId),
+        queryFn: uploadId ? () => getHighlights(uploadId) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
 
-export function usePageHighlights(pageId: string) {
+export function usePageHighlights(pageId?: string) {
     return useQuery({
         queryKey: queryKeys.highlights.byPage(pageId),
-        queryFn: () => getHighlightsForPage(pageId),
+        queryFn: pageId ? () => getHighlightsForPage(pageId) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
 
-export function useBookmarks(uploadId: string) {
+export function useBookmarks(uploadId?: string) {
     return useQuery({
         queryKey: queryKeys.bookmarks.byUpload(uploadId),
-        queryFn: () => getBookmarks(uploadId),
+        queryFn: uploadId ? () => getBookmarks(uploadId) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
 
-export function useNotes(uploadId: string) {
+export function useNotes(uploadId?: string) {
     return useQuery({
         queryKey: queryKeys.notes.byUpload(uploadId),
-        queryFn: () => getNotes(uploadId),
+        queryFn: uploadId ? () => getNotes(uploadId) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
@@ -165,10 +167,10 @@ export function useNodes(type?: NodesTypeOptions) {
     });
 }
 
-export function useNode(id: string) {
+export function useNode(id?: string) {
     return useQuery({
         queryKey: queryKeys.nodes.detail(id),
-        queryFn: () => getNodeById(id),
+        queryFn: id ? () => getNodeById(id) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
@@ -181,10 +183,10 @@ export function useEdges(filters?: { sourceId?: string; targetId?: string; type?
     });
 }
 
-export function useEdge(id: string) {
+export function useEdge(id?: string) {
     return useQuery({
         queryKey: queryKeys.edges.detail(id),
-        queryFn: () => getEdgeById(id),
+        queryFn: id ? () => getEdgeById(id) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
@@ -205,10 +207,10 @@ export function useWritingProjects() {
     });
 }
 
-export function useWritingProject(id: string) {
+export function useWritingProject(id?: string) {
     return useQuery({
         queryKey: queryKeys.writingProjects.detail(id),
-        queryFn: () => getWritingProject(id),
+        queryFn: id ? () => getWritingProject(id) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
@@ -229,34 +231,34 @@ export function useCollections() {
     });
 }
 
-export function useCollection(id: string) {
+export function useCollection(id?: string) {
     return useQuery({
         queryKey: queryKeys.collections.detail(id),
-        queryFn: () => getCollection(id),
+        queryFn: id ? () => getCollection(id) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
 
-export function useChats(type: "chat" | "search") {
+export function useChats(type?: "chat" | "search") {
     return useQuery({
         queryKey: queryKeys.chats.list(type),
-        queryFn: () => getChats(type),
+        queryFn: type ? () => getChats(type) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
 
-export function useChat(id: string) {
+export function useChat(id?: string) {
     return useQuery({
         queryKey: queryKeys.chats.detail(id),
-        queryFn: () => getChat(id),
+        queryFn: id ? () => getChat(id) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
 
-export function useMessages(chatId: string) {
+export function useMessages(chatId?: string) {
     return useQuery({
         queryKey: queryKeys.messages.byChat(chatId),
-        queryFn: () => getMessages(chatId),
+        queryFn: chatId ? () => getMessages(chatId) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
@@ -269,19 +271,20 @@ export function useSidebarChats() {
     });
 }
 
-export function useChatContexts(chatId: string) {
+export function useChatContexts(chatId?: string) {
     return useQuery({
         queryKey: queryKeys.chatContexts.byChat(chatId),
-        queryFn: () => getChatContexts(chatId),
+        queryFn: chatId ? () => getChatContexts(chatId) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
 
-export function useFullTextSearch(uploadId: string, query: string) {
+export function useFullTextSearch(uploadId?: string, query?: string) {
+    const normalizedQuery = query?.trim() ?? "";
+
     return useQuery({
-        queryKey: queryKeys.fts.search(uploadId, query),
-        queryFn: ({ signal }) => fullTextSearch(uploadId, query, signal),
-        enabled: query.trim().length > 0,
+        queryKey: queryKeys.fts.search(uploadId, normalizedQuery),
+        queryFn: uploadId && normalizedQuery.length > 0 ? ({ signal }) => fullTextSearch(uploadId, normalizedQuery, signal) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
@@ -293,9 +296,9 @@ export function usePreferences() {
     });
 }
 
-export function useReadingProgress(uploadId: string) {
+export function useReadingProgress(uploadId?: string) {
     return useQuery({
         queryKey: queryKeys.readingProgress.byUpload(uploadId),
-        queryFn: () => getReadingProgress(uploadId),
+        queryFn: uploadId ? () => getReadingProgress(uploadId) : skipToken,
     });
 }

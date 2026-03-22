@@ -69,14 +69,12 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
     }
   }, [pageSettingsLoaded, pageSettings.currentPage, onPageChange]);
 
-  const { data: firstPageData } = usePages(uploadId ?? null, 1, 1);
+  const { data: firstPageData } = usePages(uploadId, 1, 1);
   const totalPages = firstPageData?.totalItems || 0;
   const firstPageId = firstPageData?.items[0]?.id ?? null;
 
-  const { data: currentPageData } = usePages(uploadId ?? null, pageSettings.currentPage, 1);
-  const currentPageId = currentPageData?.items[0]?.id ?? null;
-
-  if (!currentPageId) return null;
+  const { data: currentPageData } = usePages(uploadId, pageSettings.currentPage, 1);
+  const currentPageId = currentPageData?.items[0]?.id;
 
   const isSummaryUpload = upload?.type === "summary";
   const isBookUpload = upload?.type === "book";
@@ -125,9 +123,6 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
 
     openSummarySplit(activeSummaryRecord.summary_upload, summarySourcePageId);
     setQueuedSummaryPageId(null);
-    toast.success(isBookUpload ? "Page summarized" : "Document summarized", {
-      description: isBookUpload ? `Summary opened for page ${pageSettings.currentPage}.` : "Summary opened for this document.",
-    });
   }, [
     queuedSummaryPageId,
     currentPageId,
@@ -170,8 +165,8 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
     }
   }, [navigateToPageFromAnnotation, setNavigateToPage, isActive]);
 
-  const { data: bookmarksData = [] } = useBookmarks(uploadId ?? null);
-  const { data: notesData = [] } = useNotes(uploadId ?? null);
+  const { data: bookmarksData = [] } = useBookmarks(uploadId);
+  const { data: notesData = [] } = useNotes(uploadId);
   const createHighlightMutation = useCreateHighlight();
   const updateHighlightMutation = useUpdateHighlight();
   const deleteHighlightMutation = useDeleteHighlight();
@@ -283,10 +278,6 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
       if (currentPageId && selectedPageIDs.includes(currentPageId) && queuedCount > 0) {
         setQueuedSummaryPageId(currentPageId);
       }
-
-      toast.info("Summary queued", {
-        description: `Generating one summary for ${queuedCount} selected page${queuedCount === 1 ? "" : "s"}.`,
-      });
 
       setIsSummarizePopoverOpen(false);
     } finally {
@@ -401,47 +392,55 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" className="h-7 w-7" disabled={pageSettings.currentPage <= 1} onClick={() => navigatePage("prev")}>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <div className="flex items-center gap-1.5 px-1">
-                  <Input
-                    type="number"
-                    min={1}
-                    max={totalPages}
-                    value={pageSettings.currentPage}
-                    onChange={(e) => {
-                      const page = parseInt(e.target.value, 10);
-                      if (page >= 1 && page <= totalPages) {
-                        handlePageChange(page);
-                        if (settings.viewMode === "scroll") {
-                          setTimeout(() => {
-                            const el = document.getElementById(`page-${page}`);
-                            if (el) {
-                              el.scrollIntoView({
-                                behavior: "smooth",
-                                block: "start",
-                              });
-                            }
-                          }, 50);
+              {!isSummaryUpload && (
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    disabled={pageSettings.currentPage <= 1}
+                    onClick={() => navigatePage("prev")}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div className="flex items-center gap-1.5 px-1">
+                    <Input
+                      type="number"
+                      min={1}
+                      max={totalPages}
+                      value={pageSettings.currentPage}
+                      onChange={(e) => {
+                        const page = parseInt(e.target.value, 10);
+                        if (page >= 1 && page <= totalPages) {
+                          handlePageChange(page);
+                          if (settings.viewMode === "scroll") {
+                            setTimeout(() => {
+                              const el = document.getElementById(`page-${page}`);
+                              if (el) {
+                                el.scrollIntoView({
+                                  behavior: "smooth",
+                                  block: "start",
+                                });
+                              }
+                            }, 50);
+                          }
                         }
-                      }
-                    }}
-                    className="w-16 h-7 text-center text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">/ {totalPages || "–"}</span>
+                      }}
+                      className="w-16 h-7 text-center text-sm [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">/ {totalPages || "–"}</span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    disabled={pageSettings.currentPage >= totalPages}
+                    onClick={() => navigatePage("next")}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
-                  disabled={pageSettings.currentPage >= totalPages}
-                  onClick={() => navigatePage("next")}
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
+              )}
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <div className="hidden xl:flex items-center gap-2 px-2 border-r">
@@ -453,20 +452,22 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
               <div className="hidden xl:flex items-center gap-1 px-2 border-r">
                 <QuickFontSizeControl fontSize={settings.fontSize} onChange={(fontSize) => setSettings({ fontSize })} />
               </div>
-              <DocumentSearchBar
-                uploadId={uploadId}
-                onNavigateToPage={(pageNumber) => {
-                  handlePageChange(pageNumber);
-                  if (settings.viewMode === "scroll") {
-                    setTimeout(() => {
-                      const el = document.getElementById(`page-${pageNumber}`);
-                      if (el) {
-                        el.scrollIntoView({ behavior: "smooth", block: "start" });
-                      }
-                    }, 100);
-                  }
-                }}
-              />
+              {!isSummaryUpload && (
+                <DocumentSearchBar
+                  uploadId={uploadId}
+                  onNavigateToPage={(pageNumber) => {
+                    handlePageChange(pageNumber);
+                    if (settings.viewMode === "scroll") {
+                      setTimeout(() => {
+                        const el = document.getElementById(`page-${pageNumber}`);
+                        if (el) {
+                          el.scrollIntoView({ behavior: "smooth", block: "start" });
+                        }
+                      }, 100);
+                    }
+                  }}
+                />
+              )}
               {!isSummaryUpload &&
                 !hasExistingSummary &&
                 (isBookUpload ? (
@@ -493,50 +494,53 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                           : "Summarize"}
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent align="end" className="w-68 space-y-3 p-3">
+                    <PopoverContent align="end" className="w-80 space-y-3 p-3">
                       <div className="space-y-1">
                         <p className="text-sm font-medium">Summarize page range</p>
                         <p className="text-xs text-muted-foreground">Defaults to the current page.</p>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1">
-                          <Label htmlFor="summary-range-start" className="text-xs">
-                            Start page
-                          </Label>
-                          <Input
-                            id="summary-range-start"
-                            type="number"
-                            min={1}
-                            max={totalPages}
-                            value={rangeStartPage}
-                            onChange={(event) => setRangeStartPage(event.target.value)}
-                            className="h-8"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="summary-range-end" className="text-xs">
-                            End page
-                          </Label>
-                          <Input
-                            id="summary-range-end"
-                            type="number"
-                            min={1}
-                            max={totalPages}
-                            value={rangeEndPage}
-                            onChange={(event) => setRangeEndPage(event.target.value)}
-                            className="h-8"
-                          />
+                      <div className="space-y-2">
+                        <div className="flex items-end gap-2">
+                          <div className="flex-1 space-y-1">
+                            <Label htmlFor="summary-range-start" className="text-xs">
+                              Start page
+                            </Label>
+                            <Input
+                              id="summary-range-start"
+                              type="number"
+                              min={1}
+                              max={totalPages}
+                              value={rangeStartPage}
+                              onChange={(event) => setRangeStartPage(event.target.value)}
+                              className="h-8"
+                            />
+                          </div>
+                          <div className="flex-1 space-y-1">
+                            <Label htmlFor="summary-range-end" className="text-xs">
+                              End page
+                            </Label>
+                            <Input
+                              id="summary-range-end"
+                              type="number"
+                              min={1}
+                              max={totalPages}
+                              value={rangeEndPage}
+                              onChange={(event) => setRangeEndPage(event.target.value)}
+                              className="h-8"
+                            />
+                          </div>
+                          <Button
+                            variant={"outline"}
+                            className="h-8 px-3"
+                            onClick={queueRangeSummary}
+                            disabled={isRangeSummaryPending || summarizePageMutation.isPending || summarizePagesMutation.isPending || !currentPageId}
+                          >
+                            {isRangeSummaryPending || summarizePageMutation.isPending || summarizePagesMutation.isPending
+                              ? "Summarizing..."
+                              : "Summarize"}
+                          </Button>
                         </div>
                       </div>
-                      <Button
-                        className="w-full h-8"
-                        onClick={queueRangeSummary}
-                        disabled={isRangeSummaryPending || summarizePageMutation.isPending || summarizePagesMutation.isPending || !currentPageId}
-                      >
-                        {isRangeSummaryPending || summarizePageMutation.isPending || summarizePagesMutation.isPending
-                          ? "Queueing..."
-                          : "Queue Summary"}
-                      </Button>
                     </PopoverContent>
                   </Popover>
                 ) : (
@@ -552,9 +556,6 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                           summarizePageMutation.mutate(currentPageId, {
                             onSuccess: () => {
                               setQueuedSummaryPageId(uploadId);
-                              toast.info("Summary queued", {
-                                description: "Generating summary for this document...",
-                              });
                             },
                           });
                         }}

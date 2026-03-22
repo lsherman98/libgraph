@@ -27,8 +27,7 @@ export interface PageSummaryBatchData {
     dedupeKey: string;
 }
 
-export async function getPageUrl(id?: string) {
-    if (!id) return null;
+export async function getPageUrl(id: string) {
     const [record, token] = await Promise.all([
         pb.collection(Collections.Pages).getOne(id),
         pb.files.getToken()
@@ -165,8 +164,7 @@ export const getPageByNumber = async (uploadId: string, pageNumber: number) => {
     return await pb.collection(Collections.Pages).getFirstListItem(`upload = "${uploadId}" && page = ${pageNumber}`);
 }
 
-export const getPages = async (uploadId?: string, page = 1, perPage = 10) => {
-    if (!uploadId) return null;
+export const getPages = async (uploadId: string, page = 1, perPage = 10) => {
     return await pb.collection(Collections.Pages).getList(page, perPage, {
         filter: `upload = "${uploadId}"`,
         sort: 'page'
@@ -438,7 +436,7 @@ export const createMessage = async (data: Create<Collections.Messages>) => {
 export const sendChatMessage = async (
     message: string,
     mode: "chat" | "search",
-    chatId: string,
+    chatId?: string,
     filters?: ChatFilters,
 ) => {
     return await pb.send<ChatResponseData>(`/api/chat`, {

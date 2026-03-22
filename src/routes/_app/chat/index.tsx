@@ -31,7 +31,6 @@ function ChatPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  if (!activeChatId) return null;
   const { data: dbMessages, isLoading: isLoadingMessages } = useMessages(activeChatId);
 
   const displayMessages: LocalMessage[] = useMemo(() => {

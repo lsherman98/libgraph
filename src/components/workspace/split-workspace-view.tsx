@@ -40,7 +40,7 @@ export function SplitWorkspaceView({
 
   const [splitLocalContent, setSplitLocalContent] = useState<string>("");
 
-  const { data: splitProject } = useWritingProject(splitTab?.type === "writer" ? (splitTab as WriterTab).projectId : "");
+  const { data: splitProject } = useWritingProject(splitTab?.type === "writer" ? (splitTab as WriterTab).projectId : undefined);
   const splitAutoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const updateSplitProject = useUpdateWritingProject();
 

@@ -64,10 +64,9 @@ export function ReaderAiChatPanel() {
 
   const { data: sidebarChats = [] } = useSidebarChats();
 
-  if (!activeChatId) return null;
   const { data: dbMessages, isLoading: isLoadingMessages } = useMessages(activeChatId);
   const { data: chatContexts = [] } = useChatContexts(activeChatId);
-  const { data: currentUpload } = useUploadById(currentUploadId || "");
+  const { data: currentUpload } = useUploadById(currentUploadId ?? undefined);
   const isBookUpload = currentUpload?.type === UploadsTypeOptions.book;
 
   const createChat = useCreateSidebarChat();
@@ -433,7 +432,6 @@ export function ReaderAiChatPanel() {
     return <FileText className="h-2.5 w-2.5 shrink-0" />;
   };
 
-  // Helper: get current document title from tabs
   const currentDocTitle = useMemo(() => {
     if (!currentUploadId) return null;
     const tab = tabs.find((t): t is ReaderTab => t.type === "reader" && t.uploadId === currentUploadId);

@@ -14,6 +14,7 @@ import (
 	"github.com/lsherman98/libgraph/pocketbase/collections"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/processing"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/vector_search"
+	"github.com/lsherman98/libgraph/pocketbase/vars"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
@@ -1303,7 +1304,7 @@ func UpsertPageSummaryArtifact(app *pocketbase.PocketBase, sourcePageRecord *cor
 
 		summaryUploadRecord.Set("title", summaryTitle)
 		summaryUploadRecord.Set("file", summaryUploadFile)
-		summaryUploadRecord.Set("status", "SUCCESS")
+		summaryUploadRecord.Set("status", vars.UploadStatusSuccess)
 		summaryUploadRecord.Set("num_pages", 1)
 		summaryUploadRecord.Set("type", "summary")
 		if saveErr := app.Save(summaryUploadRecord); saveErr != nil {
@@ -1320,7 +1321,7 @@ func UpsertPageSummaryArtifact(app *pocketbase.PocketBase, sourcePageRecord *cor
 			return nil, nil, nil, saveErr
 		}
 
-		summaryRecord.Set("status", "success")
+		summaryRecord.Set("status", vars.SummaryStatusSuccess)
 		if saveErr := app.Save(summaryRecord); saveErr != nil {
 			return nil, nil, nil, saveErr
 		}
@@ -1337,7 +1338,7 @@ func UpsertPageSummaryArtifact(app *pocketbase.PocketBase, sourcePageRecord *cor
 	summaryUploadRecord.Set("title", summaryTitle)
 	summaryUploadRecord.Set("file", summaryUploadFile)
 	summaryUploadRecord.Set("type", "summary")
-	summaryUploadRecord.Set("status", "SUCCESS")
+	summaryUploadRecord.Set("status", vars.UploadStatusSuccess)
 	summaryUploadRecord.Set("num_pages", 1)
 	summaryUploadRecord.Set("user", userID)
 	if saveErr := app.Save(summaryUploadRecord); saveErr != nil {
@@ -1365,7 +1366,7 @@ func UpsertPageSummaryArtifact(app *pocketbase.PocketBase, sourcePageRecord *cor
 	newSummaryRecord.Set("summary_upload", summaryUploadRecord.Id)
 	newSummaryRecord.Set("summary_page", summaryPageRecord.Id)
 	newSummaryRecord.Set("scope", "page")
-	newSummaryRecord.Set("status", "success")
+	newSummaryRecord.Set("status", vars.SummaryStatusSuccess)
 	if saveErr := app.Save(newSummaryRecord); saveErr != nil {
 		return nil, nil, nil, saveErr
 	}

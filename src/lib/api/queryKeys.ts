@@ -5,7 +5,7 @@ export const queryKeys = {
     uploads: {
         all: ["uploads"] as const,
         list: (filters?: UploadFilters) => [...queryKeys.uploads.all, "list", filters] as const,
-        detail: (id: string) => [...queryKeys.uploads.all, "detail", id] as const,
+        detail: (id?: string) => [...queryKeys.uploads.all, "detail", id] as const,
     },
     people: {
         all: ["people"] as const,
@@ -25,9 +25,9 @@ export const queryKeys = {
             [...queryKeys.pages.all, "list", uploadId, page, perPage] as const,
         infinite: (uploadId?: string, perPage?: number, initialPage?: number) =>
             [...queryKeys.pages.all, "infinite", uploadId, perPage, initialPage] as const,
-        first: (uploadId: string) =>
+        first: (uploadId?: string) =>
             [...queryKeys.pages.all, "first", uploadId] as const,
-        byNumber: (uploadId: string, pageNumber: number) =>
+        byNumber: (uploadId?: string, pageNumber?: number) =>
             [...queryKeys.pages.all, "byNumber", uploadId, pageNumber] as const,
         markdown: (pageId?: string) =>
             [...queryKeys.pages.all, "markdown", pageId] as const,
@@ -43,7 +43,7 @@ export const queryKeys = {
         all: ["highlights"] as const,
         byUpload: (uploadId?: string) =>
             [...queryKeys.highlights.all, "upload", uploadId] as const,
-        byPage: (pageId: string) =>
+        byPage: (pageId?: string) =>
             [...queryKeys.highlights.all, "page", pageId] as const,
     },
     bookmarks: {
@@ -60,14 +60,14 @@ export const queryKeys = {
         all: ["nodes"] as const,
         list: (type?: NodesTypeOptions) =>
             [...queryKeys.nodes.all, "list", type] as const,
-        detail: (id: string) =>
+        detail: (id?: string) =>
             [...queryKeys.nodes.all, "detail", id] as const,
     },
     edges: {
         all: ["edges"] as const,
         list: (filters?: { sourceId?: string; targetId?: string; type?: string }) =>
             [...queryKeys.edges.all, "list", filters] as const,
-        detail: (id: string) =>
+        detail: (id?: string) =>
             [...queryKeys.edges.all, "detail", id] as const,
     },
     graph: {
@@ -85,14 +85,14 @@ export const queryKeys = {
     collections: {
         all: ["collections"] as const,
         list: () => [...queryKeys.collections.all, "list"] as const,
-        detail: (id: string) =>
+        detail: (id?: string) =>
             [...queryKeys.collections.all, "detail", id] as const,
     },
     chats: {
         all: ["chats"] as const,
         list: (type?: "chat" | "search") =>
             [...queryKeys.chats.all, "list", type] as const,
-        detail: (id: string) =>
+        detail: (id?: string) =>
             [...queryKeys.chats.all, "detail", id] as const,
     },
     sidebarChats: {
@@ -111,7 +111,7 @@ export const queryKeys = {
     },
     fts: {
         all: ["fts"] as const,
-        search: (uploadId: string, query: string) =>
+        search: (uploadId?: string, query?: string) =>
             [...queryKeys.fts.all, uploadId, query] as const,
     },
     preferences: {
@@ -119,7 +119,7 @@ export const queryKeys = {
     },
     readingProgress: {
         all: ["readingProgress"] as const,
-        byUpload: (uploadId: string) =>
+        byUpload: (uploadId?: string) =>
             [...queryKeys.readingProgress.all, uploadId] as const,
     },
 } as const;

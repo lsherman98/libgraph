@@ -20,10 +20,8 @@ export function AnnotationsPanel({ activeTab = "highlights", onNavigateToPage: p
   const storeUploadId = useReaderStore((state) => state.currentUploadId);
   const storeNavigateToPage = useReaderStore((state) => state.navigateToPage);
 
-  const uploadId = storeUploadId;
+  const uploadId = storeUploadId ?? undefined;
   const onNavigateToPage = storeNavigateToPage ?? propNavigateToPage ?? null;
-
-  if (!uploadId) return null;
 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewType, setPreviewType] = useState<"highlight" | "bookmark" | "note">("highlight");

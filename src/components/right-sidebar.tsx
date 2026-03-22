@@ -37,10 +37,10 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
   const readerTab = focusedTab?.type === "reader" ? (focusedTab as ReaderTab) : null;
   const writerTab = isWriterTab ? (focusedTab as WriterTab) : null;
 
-  const { data: project } = useWritingProject(writerTab?.projectId || "");
-  const { data: allHighlights = [] } = useHighlights(readerTab?.uploadId || "");
-  const { data: allBookmarks = [] } = useBookmarks(readerTab?.uploadId || "");
-  const { data: allNotes = [] } = useNotes(readerTab?.uploadId || "");
+  const { data: project } = useWritingProject(writerTab?.projectId);
+  const { data: allHighlights = [] } = useHighlights(readerTab?.uploadId);
+  const { data: allBookmarks = [] } = useBookmarks(readerTab?.uploadId);
+  const { data: allNotes = [] } = useNotes(readerTab?.uploadId);
 
   const annotationTab = useReaderStore((state) => state.annotationTab);
   const setAnnotationTab = useReaderStore((state) => state.setAnnotationTab);

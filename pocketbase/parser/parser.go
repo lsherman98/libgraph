@@ -2,15 +2,13 @@ package parser
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -105,85 +103,38 @@ func (p *Parser) parsePDF(fileBytes []byte, filename string, onPage func(Page) e
 		return nil, err
 	}
 
-	outputPattern := filepath.Join(tmpDir, "page_%d.pdf")
-
-	splitter, err := splitPDFIntoPages(inputPath, outputPattern)
+	liteparseOutput, err := runLiteParseJSON(inputPath)
 	if err != nil {
 		return nil, err
 	}
-
-	globPattern := filepath.Join(tmpDir, "page_*.pdf")
-	pageFiles, err := filepath.Glob(globPattern)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(pageFiles) == 0 {
-		entries, _ := os.ReadDir(tmpDir)
-		var names []string
-		for _, e := range entries {
-			names = append(names, e.Name())
-		}
-		return nil, fmt.Errorf("%s produced no pages", splitter)
-	}
-
-	sort.Slice(pageFiles, func(i, j int) bool {
-		numI := extractPageNumber(pageFiles[i])
-		numJ := extractPageNumber(pageFiles[j])
-		return numI < numJ
-	})
-
-	pages := make([]Page, len(pageFiles))
-	errs := make([]error, len(pageFiles))
-
-	sem := make(chan struct{}, p.WorkerPool)
-	var wg sync.WaitGroup
-
-	for i, pf := range pageFiles {
-		wg.Add(1)
-		go func(idx int, pagePath string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			md, err := runMarkitdown(pagePath)
-			if err != nil {
-				errs[idx] = fmt.Errorf("markitdown failed for page %d: %w", idx+1, err)
-				return
-			}
-
-			pg := Page{
-				PageNumber: idx + 1,
-				Markdown:   md,
-			}
-			pages[idx] = pg
-
-			if onPage != nil {
-				if err := onPage(pg); err != nil {
-					p.App.Logger().Error("parsePDF callback error", "page", idx+1, "error", err)
-				}
-			}
-		}(i, pf)
-	}
-	wg.Wait()
 
 	result := &ParseResult{}
-	var failedCount, emptyCount int
-	for i, page := range pages {
-		if errs[i] != nil {
-			p.App.Logger().Error("page conversion failed", "page", i+1, "error", errs[i])
-			failedCount++
-			continue
+	var emptyCount int
+	for i, parsedPage := range liteparseOutput.Pages {
+		pageNumber := parsedPage.Page
+		if pageNumber <= 0 {
+			pageNumber = i + 1
 		}
+
+		page := Page{
+			PageNumber: pageNumber,
+			Markdown:   parsedPage.Text,
+		}
+
 		if strings.TrimSpace(page.Markdown) != "" {
 			result.Pages = append(result.Pages, page)
+			if onPage != nil {
+				if err := onPage(page); err != nil {
+					p.App.Logger().Error("parsePDF callback error", "page", page.PageNumber, "error", err)
+				}
+			}
 		} else {
 			emptyCount++
 		}
 	}
 
 	if len(result.Pages) == 0 {
-		return nil, fmt.Errorf("all pages failed to convert (failed=%d, empty=%d, total=%d)", failedCount, emptyCount, len(pageFiles))
+		return nil, fmt.Errorf("liteparse returned no non-empty pages (empty=%d, total=%d)", emptyCount, len(liteparseOutput.Pages))
 	}
 
 	return result, nil
@@ -301,41 +252,50 @@ func splitTextIntoPages(text string, maxPageSize int) []string {
 	return pages
 }
 
-func runMarkitdown(filePath string) (string, error) {
-	cmd := exec.Command("markitdown", filePath)
+type liteParseJSONOutput struct {
+	Pages []liteParsePage `json:"pages"`
+}
+
+type liteParsePage struct {
+	Page int    `json:"page"`
+	Text string `json:"text"`
+}
+
+func runLiteParseJSON(filePath string) (*liteParseJSONOutput, error) {
+	liteparseCmd, err := findLiteParseCommand()
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := exec.Command(liteparseCmd, "parse", filePath, "--format", "json", "--no-ocr", "-q")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", err
+		stderrMsg := strings.TrimSpace(stderr.String())
+		if stderrMsg == "" {
+			return nil, fmt.Errorf("liteparse parse failed: %w", err)
+		}
+		return nil, fmt.Errorf("liteparse parse failed: %w: %s", err, stderrMsg)
 	}
 
-	return stdout.String(), nil
+	var parsed liteParseJSONOutput
+	if err := json.Unmarshal(stdout.Bytes(), &parsed); err != nil {
+		return nil, fmt.Errorf("invalid liteparse json output: %w", err)
+	}
+
+	return &parsed, nil
 }
 
-func splitPDFIntoPages(inputPath string, outputPattern string) (string, error) {
-	if _, err := exec.LookPath("pdftk"); err == nil {
-		cmd := exec.Command("pdftk", inputPath, "burst", "output", outputPattern)
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		if err := cmd.Run(); err != nil {
-			return "pdftk", err
+func findLiteParseCommand() (string, error) {
+	for _, candidate := range []string{"lit", "liteparse"} {
+		if _, err := exec.LookPath(candidate); err == nil {
+			return candidate, nil
 		}
-		return "pdftk", nil
 	}
 
-	if _, err := exec.LookPath("pdfseparate"); err == nil {
-		cmd := exec.Command("pdfseparate", inputPath, outputPattern)
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		if err := cmd.Run(); err != nil {
-			return "pdfseparate", err
-		}
-		return "pdfseparate", nil
-	}
-
-	return "", fmt.Errorf("pdf parsing requires a page-splitting tool: install pdftk or pdfseparate")
+	return "", fmt.Errorf("pdf parsing requires liteparse CLI: install @llamaindex/liteparse (provides 'lit')")
 }
 
 func sanitizeFilename(name string) string {
@@ -354,17 +314,6 @@ func sanitizeFilename(name string) string {
 	}
 
 	return safe + ext
-}
-
-func extractPageNumber(path string) int {
-	base := filepath.Base(path)
-	base = strings.TrimPrefix(base, "page_")
-	base = strings.TrimSuffix(base, filepath.Ext(base))
-	n, err := strconv.Atoi(base)
-	if err != nil {
-		return 0
-	}
-	return n
 }
 
 func IsDocumentFile(filename string) bool {

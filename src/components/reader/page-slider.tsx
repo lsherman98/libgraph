@@ -22,8 +22,7 @@ export function PageSlider({
   const previewPageNumber = hoverPage ?? (isDragging ? currentPage : null);
   const { data: previewPageData } = usePages(uploadId, previewPageNumber ?? 1, 1);
 
-  if (!previewPageData) return null;
-  const previewPageId = previewPageData.items[0].id;
+  const previewPageId = previewPageData?.items[0]?.id;
   const { data: previewMarkdown } = usePageMarkdown(previewPageId);
 
   const previewSnippet = useMemo(() => {

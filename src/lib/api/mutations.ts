@@ -371,7 +371,7 @@ export function useCreateMessage() {
 interface SendChatMessageOptions {
     mode: "chat" | "search";
     filters: ChatFilters;
-    activeChatId: string;
+    activeChatId: string | undefined;
     setActiveChatId: (id: string) => void;
     setInput: (value: string) => void;
 }
@@ -461,7 +461,6 @@ export function useUpdateReadingProgress() {
     return useMutation({
         mutationFn: ({ uploadId, data }: { uploadId: string; data: { current_page?: number; scroll_position?: number } }) =>
             upsertReadingProgress(uploadId, data),
-        onError: handleError,
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.readingProgress.byUpload(variables.uploadId) });
         },
