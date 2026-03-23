@@ -108,11 +108,7 @@ export function BlockActions({
   const handleNotePopoverOpenChange = (open: boolean) => {
     setIsNotePopoverOpen(open);
 
-    if (
-      !open &&
-      (editorState?.mode === "pending-note" || editorState?.mode === "editing-note") &&
-      editorState.data.blockId === blockId
-    ) {
+    if (!open && (editorState?.mode === "pending-note" || editorState?.mode === "editing-note") && editorState.data.blockId === blockId) {
       setEditorState(null);
     }
   };
@@ -355,11 +351,7 @@ export function BlockActions({
         >
           <div>
             <label className="text-xs font-medium uppercase text-muted-foreground mb-2 block">Note</label>
-            <Textarea
-              value={noteContentValue}
-              onChange={(e) => setNoteContentValue(e.target.value)}
-              className="min-h-24 text-sm resize-none"
-            />
+            <Textarea value={noteContentValue} onChange={(e) => setNoteContentValue(e.target.value)} className="min-h-24 text-sm resize-none" />
           </div>
           <div>
             <label className="text-xs font-medium uppercase text-muted-foreground mb-2 block">Tags</label>
@@ -374,7 +366,12 @@ export function BlockActions({
           </div>
           <div className="flex items-center justify-end gap-2">
             {hasNote && (
-              <Button variant="ghost" size="sm" className="mr-auto text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleDeleteNote}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mr-auto text-destructive hover:text-destructive hover:bg-destructive/10"
+                onClick={handleDeleteNote}
+              >
                 <Trash2 className="h-4 w-4 mr-1" />
                 Delete
               </Button>

@@ -124,7 +124,12 @@ export function HighlightEditorPopover({ onClose }: HighlightEditorPopoverProps)
 
       <div className="flex items-center justify-end gap-2">
         {isEditing && (
-          <Button variant="ghost" size="sm" className="mr-auto text-destructive hover:text-destructive hover:bg-destructive/10" onClick={handleDelete}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mr-auto text-destructive hover:text-destructive hover:bg-destructive/10"
+            onClick={handleDelete}
+          >
             <Trash2 className="h-4 w-4 mr-1" />
             Delete
           </Button>

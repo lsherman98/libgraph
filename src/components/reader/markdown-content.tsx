@@ -356,7 +356,10 @@ export function MarkdownContent({
         return (
           <h1
             id={blockId}
-            className={cn("text-2xl font-bold mt-8 mb-4 first:mt-0 group relative", (isBookmarkTarget || isNoteTarget) && "rounded-md border border-border px-2 -mx-2")}
+            className={cn(
+              "text-2xl font-bold mt-8 mb-4 first:mt-0 group relative",
+              (isBookmarkTarget || isNoteTarget) && "rounded-md border border-border px-2 -mx-2",
+            )}
           >
             {blockId && d.pageId && d.pageNumber && (
               <BlockActions
@@ -389,7 +392,13 @@ export function MarkdownContent({
         const hasNote = blockId ? d.hasNoteForBlock(blockId) : false;
         const note = blockId ? d.getNoteForBlock(blockId) : undefined;
         return (
-          <h2 id={blockId} className={cn("text-xl font-semibold mt-6 mb-3 group relative", (isBookmarkTarget || isNoteTarget) && "rounded-md border border-border px-2 -mx-2") }>
+          <h2
+            id={blockId}
+            className={cn(
+              "text-xl font-semibold mt-6 mb-3 group relative",
+              (isBookmarkTarget || isNoteTarget) && "rounded-md border border-border px-2 -mx-2",
+            )}
+          >
             {blockId && d.pageId && d.pageNumber && (
               <BlockActions
                 blockId={blockId}
@@ -464,7 +473,10 @@ export function MarkdownContent({
         const hasNote = blockId ? d.hasNoteForBlock(blockId) : false;
         const note = blockId ? d.getNoteForBlock(blockId) : undefined;
         return (
-          <p id={blockId} className={cn("reader-paragraph group relative", (isBookmarkTarget || isNoteTarget) && "rounded-md border border-border px-2 -mx-2") }>
+          <p
+            id={blockId}
+            className={cn("reader-paragraph group relative", (isBookmarkTarget || isNoteTarget) && "rounded-md border border-border px-2 -mx-2")}
+          >
             {blockId && d.pageId && d.pageNumber && (
               <BlockActions
                 blockId={blockId}
@@ -558,13 +570,7 @@ export function MarkdownContent({
             />
           </PopoverAnchor>
         )}
-        <PopoverContent
-          side="left"
-          align="center"
-          sideOffset={8}
-          className="w-80 space-y-3"
-          onOpenAutoFocus={(e) => e.preventDefault()}
-        >
+        <PopoverContent side="left" align="center" sideOffset={8} className="w-80 space-y-3" onOpenAutoFocus={(e) => e.preventDefault()}>
           <HighlightEditorPopover onClose={handleCloseHighlightEditor} />
         </PopoverContent>
       </Popover>
