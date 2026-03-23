@@ -1,10 +1,12 @@
-import { useState, useEffect, useRef, useCallback, isValidElement, type ReactNode } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo, isValidElement, type ReactNode } from "react";
 import { HighlightsColorOptions } from "@/lib/pocketbase-types";
 import { useSidebar } from "@/components/ui/sidebar";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { useReaderStore } from "@/lib/stores/reader-store";
 import Markdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import { HighlightPopover, ExistingHighlightPopover, HighlightMark } from "@/components/reader/highlight-popover";
+import { HighlightEditorPopover } from "@/components/reader/highlight-editor-popover";
 import { BlockActions } from "@/components/reader/bookmark-button";
 import {
   injectHighlightsIntoMarkdown,
@@ -14,6 +16,12 @@ import {
   type SelectionInfo,
   type HighlightInput,
 } from "@/lib/highlight-utils";
+import { cn } from "@/lib/utils";
+
+interface EditorAnchorPosition {
+  x: number;
+  y: number;
+}
 
 export function extractText(children: ReactNode): string {
   if (typeof children === "string") return children;
@@ -57,21 +65,39 @@ export function MarkdownContent({
   const [selection, setSelection] = useState<SelectionInfo | null>(null);
   const [activeHighlight, setActiveHighlight] = useState<{ element: HTMLElement; highlight: HighlightInput } | null>(null);
   const [tempHighlight, setTempHighlight] = useState<HighlightInput | null>(null);
+  const [highlightEditorPosition, setHighlightEditorPosition] = useState<EditorAnchorPosition | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
   const editorState = useReaderStore((state) => state.editorState);
   const setEditorState = useReaderStore((state) => state.setEditorState);
-  const setAnnotationTab = useReaderStore((state) => state.setAnnotationTab);
   const { setOpenRight, openRight } = useSidebar();
 
   const pendingHighlight = editorState?.mode === "pending-highlight" ? editorState.data : null;
+  const pendingBookmark = editorState?.mode === "pending-bookmark" ? editorState.data : null;
+  const activeNote = editorState?.mode === "pending-note" || editorState?.mode === "editing-note" ? editorState.data : null;
+  const isHighlightEditorOpen = editorState?.mode === "pending-highlight" || editorState?.mode === "editing-highlight";
 
   useEffect(() => {
     if (tempHighlight) {
       window.getSelection()?.removeAllRanges();
     }
   }, [tempHighlight]);
+
+  const getApproximateSelectionOffset = useCallback((range: Range): number | undefined => {
+    const container = contentRef.current;
+    if (!container) return undefined;
+
+    const preRange = range.cloneRange();
+
+    try {
+      preRange.selectNodeContents(container);
+      preRange.setEnd(range.startContainer, range.startOffset);
+      return preRange.toString().length;
+    } catch {
+      return undefined;
+    }
+  }, []);
 
   const handleMouseUp = useCallback(
     (e: React.MouseEvent) => {
@@ -94,69 +120,72 @@ export function MarkdownContent({
         }
       }
 
-      requestAnimationFrame(() => {
-        const selectionInfo = getSelectionInfo();
-        if (selectionInfo && selectionInfo.text.length > 0) {
-          setSelection(selectionInfo);
-          setActiveHighlight(null);
+      const selectionInfo = getSelectionInfo();
 
-          if (content) {
-            const offsets = findTextOffset(content, selectionInfo.text);
-            if (offsets) {
-              setTempHighlight({
-                id: "temp-selection",
-                text: selectionInfo.text,
-                color: HighlightsColorOptions.yellow,
-                start_offset: offsets.start,
-                end_offset: offsets.end,
-                comment: "",
-                tags: [],
-              });
-            } else {
-              setTempHighlight(null);
-            }
+      if (selectionInfo && selectionInfo.text.length > 0) {
+        setSelection(selectionInfo);
+        setActiveHighlight(null);
+
+        if (content) {
+          const approximatePosition = getApproximateSelectionOffset(selectionInfo.range);
+          const offsets = findTextOffset(content, selectionInfo.text, approximatePosition);
+          if (offsets) {
+            setTempHighlight({
+              id: "temp-selection",
+              text: selectionInfo.text,
+              color: HighlightsColorOptions.yellow,
+              start_offset: offsets.start,
+              end_offset: offsets.end,
+              comment: "",
+              tags: [],
+            });
+          } else {
+            setTempHighlight(null);
           }
-        } else {
-          setSelection(null);
-          setTempHighlight(null);
         }
-      });
+      } else {
+        setSelection(null);
+        setTempHighlight(null);
+      }
     },
-    [highlights, content],
+    [highlights, content, getApproximateSelectionOffset],
   );
 
   const handleHighlight = useCallback(
     (color: HighlightsColorOptions, note?: string, tags?: string[]) => {
-      if (!selection || !content || !onCreateHighlight) return;
+      if (!selection || !content || !onCreateHighlight) {
+        return;
+      }
 
       let startOffset, endOffset;
       if (tempHighlight && tempHighlight.text === selection.text) {
         startOffset = tempHighlight.start_offset;
         endOffset = tempHighlight.end_offset;
       } else {
-        const offsets = findTextOffset(content, selection.text);
+        const approximatePosition = getApproximateSelectionOffset(selection.range);
+        const offsets = findTextOffset(content, selection.text, approximatePosition);
         if (!offsets) {
-          console.warn("Could not find text offset for selection");
           return;
         }
         startOffset = offsets.start;
         endOffset = offsets.end;
       }
 
-      onCreateHighlight({
+      const payload = {
         color,
         text: selection.text,
         note,
         tags,
         start_offset: startOffset,
         end_offset: endOffset,
-      });
+      };
+      onCreateHighlight(payload);
 
       setSelection(null);
       setTempHighlight(null);
       window.getSelection()?.removeAllRanges();
     },
-    [selection, content, onCreateHighlight, tempHighlight],
+    [selection, content, onCreateHighlight, tempHighlight, getApproximateSelectionOffset],
   );
 
   const handleUpdateHighlightColor = useCallback(
@@ -167,6 +196,12 @@ export function MarkdownContent({
     [activeHighlight, onUpdateHighlight],
   );
 
+  const activeHighlightData = useMemo(() => {
+    if (!activeHighlight) return null;
+
+    return highlights.find((highlight) => highlight.id === activeHighlight.highlight.id) ?? activeHighlight.highlight;
+  }, [activeHighlight, highlights]);
+
   const handleDeleteActiveHighlight = useCallback(() => {
     if (!activeHighlight || !onDeleteHighlight) return;
     onDeleteHighlight(activeHighlight.highlight.id);
@@ -175,6 +210,9 @@ export function MarkdownContent({
 
   const handleOpenNewHighlightEditor = useCallback(() => {
     if (!selection || !tempHighlight || !pageId) return;
+
+    const editorY = Math.max(selection.position.y - 8, 12);
+    setHighlightEditorPosition({ x: selection.position.x, y: editorY });
 
     setEditorState({
       mode: "pending-highlight",
@@ -187,20 +225,18 @@ export function MarkdownContent({
       },
     });
 
-    setAnnotationTab("highlights");
-    if (!openRight) {
-      setOpenRight(true);
-    }
-
     setSelection(null);
     setTempHighlight(null);
     window.getSelection()?.removeAllRanges();
-  }, [selection, tempHighlight, pageId, setEditorState, setAnnotationTab, openRight, setOpenRight]);
+  }, [selection, tempHighlight, pageId, setEditorState]);
 
   const handleOpenExistingHighlightEditor = useCallback(() => {
-    if (!activeHighlight || !pageId) return;
+    if (!activeHighlight || !activeHighlightData || !pageId) return;
 
-    const highlight = activeHighlight.highlight;
+    const highlight = activeHighlightData;
+    const rect = activeHighlight.element.getBoundingClientRect();
+    const editorY = Math.max(rect.top - 8, 12);
+    setHighlightEditorPosition({ x: rect.left + rect.width / 2, y: editorY });
 
     setEditorState({
       mode: "editing-highlight",
@@ -214,13 +250,19 @@ export function MarkdownContent({
       },
     });
 
-    setAnnotationTab("highlights");
-    if (!openRight) {
-      setOpenRight(true);
-    }
-
     setActiveHighlight(null);
-  }, [activeHighlight, pageId, setEditorState, setAnnotationTab, openRight, setOpenRight]);
+  }, [activeHighlight, activeHighlightData, pageId, setEditorState]);
+
+  useEffect(() => {
+    if (!isHighlightEditorOpen) {
+      setHighlightEditorPosition(null);
+    }
+  }, [isHighlightEditorOpen]);
+
+  const handleCloseHighlightEditor = useCallback(() => {
+    setEditorState(null);
+    setHighlightEditorPosition(null);
+  }, [setEditorState]);
 
   const handleChatWithText = useCallback(() => {
     if (!selection) return;
@@ -273,6 +315,192 @@ export function MarkdownContent({
     [notes],
   );
 
+  const renderDataRef = useRef({
+    getBlockId,
+    isBlockBookmarked,
+    getBookmarkForBlock,
+    hasNoteForBlock,
+    getNoteForBlock,
+    pageId,
+    pageNumber,
+    highlights,
+    pendingBookmark,
+    activeNote,
+  });
+  renderDataRef.current = {
+    getBlockId,
+    isBlockBookmarked,
+    getBookmarkForBlock,
+    hasNoteForBlock,
+    getNoteForBlock,
+    pageId,
+    pageNumber,
+    highlights,
+    pendingBookmark,
+    activeNote,
+  };
+
+  const rehypePluginsList = useMemo(() => [rehypeRaw], []);
+
+  const markdownComponents = useMemo(
+    () => ({
+      h1: ({ node, children }: any) => {
+        const d = renderDataRef.current;
+        const blockId = d.getBlockId(node);
+        const isBookmarkTarget = !!blockId && d.pendingBookmark?.blockId === blockId;
+        const isNoteTarget = !!blockId && d.activeNote?.blockId === blockId;
+        const isBookmarked = blockId ? d.isBlockBookmarked(blockId) : false;
+        const bookmark = blockId ? d.getBookmarkForBlock(blockId) : undefined;
+        const hasNote = blockId ? d.hasNoteForBlock(blockId) : false;
+        const note = blockId ? d.getNoteForBlock(blockId) : undefined;
+        return (
+          <h1
+            id={blockId}
+            className={cn("text-2xl font-bold mt-8 mb-4 first:mt-0 group relative", (isBookmarkTarget || isNoteTarget) && "rounded-md border border-border px-2 -mx-2")}
+          >
+            {blockId && d.pageId && d.pageNumber && (
+              <BlockActions
+                blockId={blockId}
+                previewText={extractText(children)}
+                pageId={d.pageId}
+                pageNumber={d.pageNumber}
+                isBookmarked={isBookmarked}
+                bookmarkId={bookmark?.id}
+                bookmarkComment={bookmark?.label}
+                bookmarkTags={bookmark?.tags}
+                hasNote={hasNote}
+                noteId={note?.id}
+                noteContent={note?.content}
+                noteTags={note?.tags}
+                className="top-1"
+              />
+            )}
+            {children}
+          </h1>
+        );
+      },
+      h2: ({ node, children }: any) => {
+        const d = renderDataRef.current;
+        const blockId = d.getBlockId(node);
+        const isBookmarkTarget = !!blockId && d.pendingBookmark?.blockId === blockId;
+        const isNoteTarget = !!blockId && d.activeNote?.blockId === blockId;
+        const isBookmarked = blockId ? d.isBlockBookmarked(blockId) : false;
+        const bookmark = blockId ? d.getBookmarkForBlock(blockId) : undefined;
+        const hasNote = blockId ? d.hasNoteForBlock(blockId) : false;
+        const note = blockId ? d.getNoteForBlock(blockId) : undefined;
+        return (
+          <h2 id={blockId} className={cn("text-xl font-semibold mt-6 mb-3 group relative", (isBookmarkTarget || isNoteTarget) && "rounded-md border border-border px-2 -mx-2") }>
+            {blockId && d.pageId && d.pageNumber && (
+              <BlockActions
+                blockId={blockId}
+                previewText={extractText(children)}
+                pageId={d.pageId}
+                pageNumber={d.pageNumber}
+                isBookmarked={isBookmarked}
+                bookmarkId={bookmark?.id}
+                bookmarkComment={bookmark?.label}
+                bookmarkTags={bookmark?.tags}
+                hasNote={hasNote}
+                noteId={note?.id}
+                noteContent={note?.content}
+                noteTags={note?.tags}
+                className="top-0.5"
+              />
+            )}
+            {children}
+          </h2>
+        );
+      },
+      h3: ({ node, children }: any) => {
+        const d = renderDataRef.current;
+        const blockId = d.getBlockId(node);
+        return (
+          <h3 id={blockId} className="text-lg font-medium mt-5 mb-2">
+            {children}
+          </h3>
+        );
+      },
+      pre: ({ children }: any) => (
+        <pre className="my-4 p-4 rounded-lg bg-black/5 dark:bg-white/5 overflow-x-auto font-mono text-sm max-w-full whitespace-pre-wrap wrap-break-word">
+          {children}
+        </pre>
+      ),
+      code: ({ children }: any) => <code>{children}</code>,
+      blockquote: ({ node, children }: any) => {
+        const d = renderDataRef.current;
+        const blockId = d.getBlockId(node);
+        return (
+          <blockquote id={blockId} className="my-4 pl-4 border-l-4 border-current/20 italic opacity-90">
+            {children}
+          </blockquote>
+        );
+      },
+      ul: ({ node, children }: any) => {
+        const d = renderDataRef.current;
+        const blockId = d.getBlockId(node);
+        return (
+          <ul id={blockId} className="my-4 pl-6 list-disc space-y-1">
+            {children}
+          </ul>
+        );
+      },
+      ol: ({ node, children }: any) => {
+        const d = renderDataRef.current;
+        const blockId = d.getBlockId(node);
+        return (
+          <ol id={blockId} className="my-4 pl-6 list-decimal space-y-1">
+            {children}
+          </ol>
+        );
+      },
+      li: ({ children }: any) => <li>{children}</li>,
+      p: ({ node, children }: any) => {
+        const d = renderDataRef.current;
+        const blockId = d.getBlockId(node);
+        const isBookmarkTarget = !!blockId && d.pendingBookmark?.blockId === blockId;
+        const isNoteTarget = !!blockId && d.activeNote?.blockId === blockId;
+        const isBookmarked = blockId ? d.isBlockBookmarked(blockId) : false;
+        const bookmark = blockId ? d.getBookmarkForBlock(blockId) : undefined;
+        const hasNote = blockId ? d.hasNoteForBlock(blockId) : false;
+        const note = blockId ? d.getNoteForBlock(blockId) : undefined;
+        return (
+          <p id={blockId} className={cn("reader-paragraph group relative", (isBookmarkTarget || isNoteTarget) && "rounded-md border border-border px-2 -mx-2") }>
+            {blockId && d.pageId && d.pageNumber && (
+              <BlockActions
+                blockId={blockId}
+                previewText={extractText(children)}
+                pageId={d.pageId}
+                pageNumber={d.pageNumber}
+                isBookmarked={isBookmarked}
+                bookmarkId={bookmark?.id}
+                bookmarkComment={bookmark?.label}
+                bookmarkTags={bookmark?.tags}
+                hasNote={hasNote}
+                noteId={note?.id}
+                noteContent={note?.content}
+                noteTags={note?.tags}
+                className="top-0"
+              />
+            )}
+            {children}
+          </p>
+        );
+      },
+      mark: ({ node, children, ...props }: any) => {
+        const d = renderDataRef.current;
+        const highlightId = props["data-highlight-id"] ?? props.dataHighlightId;
+        const className = props.className || props.class || "highlight-yellow";
+        const highlight = d.highlights.find((h: any) => h.id === highlightId);
+        return (
+          <HighlightMark highlightId={highlightId} className={className} note={highlight?.comment} tags={highlight?.tags}>
+            {children}
+          </HighlightMark>
+        );
+      },
+    }),
+    [],
+  );
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -315,149 +543,31 @@ export function MarkdownContent({
 
   return (
     <div className="reader-content relative" ref={contentRef} onMouseUp={handleMouseUp}>
-      <Markdown
-        rehypePlugins={[rehypeRaw]}
-        components={{
-          h1: ({ node, children }) => {
-            const blockId = getBlockId(node);
-            const isBookmarked = blockId ? isBlockBookmarked(blockId) : false;
-            const bookmark = blockId ? getBookmarkForBlock(blockId) : undefined;
-            const hasNote = blockId ? hasNoteForBlock(blockId) : false;
-            const note = blockId ? getNoteForBlock(blockId) : undefined;
-            return (
-              <h1 id={blockId} className="text-2xl font-bold mt-8 mb-4 first:mt-0 group relative">
-                {blockId && pageId && pageNumber && (
-                  <BlockActions
-                    blockId={blockId}
-                    previewText={extractText(children)}
-                    pageId={pageId}
-                    pageNumber={pageNumber}
-                    isBookmarked={isBookmarked}
-                    bookmarkId={bookmark?.id}
-                    bookmarkComment={bookmark?.label}
-                    bookmarkTags={bookmark?.tags}
-                    hasNote={hasNote}
-                    noteId={note?.id}
-                    noteContent={note?.content}
-                    noteTags={note?.tags}
-                    className="top-1"
-                  />
-                )}
-                {children}
-              </h1>
-            );
-          },
-          h2: ({ node, children }) => {
-            const blockId = getBlockId(node);
-            const isBookmarked = blockId ? isBlockBookmarked(blockId) : false;
-            const bookmark = blockId ? getBookmarkForBlock(blockId) : undefined;
-            const hasNote = blockId ? hasNoteForBlock(blockId) : false;
-            const note = blockId ? getNoteForBlock(blockId) : undefined;
-            return (
-              <h2 id={blockId} className="text-xl font-semibold mt-6 mb-3 group relative">
-                {blockId && pageId && pageNumber && (
-                  <BlockActions
-                    blockId={blockId}
-                    previewText={extractText(children)}
-                    pageId={pageId}
-                    pageNumber={pageNumber}
-                    isBookmarked={isBookmarked}
-                    bookmarkId={bookmark?.id}
-                    bookmarkComment={bookmark?.label}
-                    bookmarkTags={bookmark?.tags}
-                    hasNote={hasNote}
-                    noteId={note?.id}
-                    noteContent={note?.content}
-                    noteTags={note?.tags}
-                    className="top-0.5"
-                  />
-                )}
-                {children}
-              </h2>
-            );
-          },
-          h3: ({ node, children }) => {
-            const blockId = getBlockId(node);
-            return (
-              <h3 id={blockId} className="text-lg font-medium mt-5 mb-2">
-                {children}
-              </h3>
-            );
-          },
-          pre: ({ children }) => (
-            <pre className="my-4 p-4 rounded-lg bg-black/5 dark:bg-white/5 overflow-x-auto font-mono text-sm max-w-full whitespace-pre-wrap wrap-break-word">
-              {children}
-            </pre>
-          ),
-          code: ({ children }) => <code>{children}</code>,
-          blockquote: ({ node, children }) => {
-            const blockId = getBlockId(node);
-            return (
-              <blockquote id={blockId} className="my-4 pl-4 border-l-4 border-current/20 italic opacity-90">
-                {children}
-              </blockquote>
-            );
-          },
-          ul: ({ node, children }) => {
-            const blockId = getBlockId(node);
-            return (
-              <ul id={blockId} className="my-4 pl-6 list-disc space-y-1">
-                {children}
-              </ul>
-            );
-          },
-          ol: ({ node, children }) => {
-            const blockId = getBlockId(node);
-            return (
-              <ol id={blockId} className="my-4 pl-6 list-decimal space-y-1">
-                {children}
-              </ol>
-            );
-          },
-          li: ({ children }) => <li>{children}</li>,
-          p: ({ node, children }) => {
-            const blockId = getBlockId(node);
-            const isBookmarked = blockId ? isBlockBookmarked(blockId) : false;
-            const bookmark = blockId ? getBookmarkForBlock(blockId) : undefined;
-            const hasNote = blockId ? hasNoteForBlock(blockId) : false;
-            const note = blockId ? getNoteForBlock(blockId) : undefined;
-            return (
-              <p id={blockId} className="reader-paragraph group relative">
-                {blockId && pageId && pageNumber && (
-                  <BlockActions
-                    blockId={blockId}
-                    previewText={extractText(children)}
-                    pageId={pageId}
-                    pageNumber={pageNumber}
-                    isBookmarked={isBookmarked}
-                    bookmarkId={bookmark?.id}
-                    bookmarkComment={bookmark?.label}
-                    bookmarkTags={bookmark?.tags}
-                    hasNote={hasNote}
-                    noteId={note?.id}
-                    noteContent={note?.content}
-                    noteTags={note?.tags}
-                    className="top-0"
-                  />
-                )}
-                {children}
-              </p>
-            );
-          },
-          mark: ({ node, children, ...props }) => {
-            const highlightId = (props as any)["data-highlight-id"];
-            const className = (props as any).className || "highlight-yellow";
-            const highlight = highlights.find((h) => h.id === highlightId);
-            return (
-              <HighlightMark highlightId={highlightId} className={className} note={highlight?.comment} tags={highlight?.tags}>
-                {children}
-              </HighlightMark>
-            );
-          },
-        }}
-      >
+      <Markdown rehypePlugins={rehypePluginsList} components={markdownComponents}>
         {processedContent}
       </Markdown>
+      <Popover open={isHighlightEditorOpen && !!highlightEditorPosition} onOpenChange={(open) => !open && handleCloseHighlightEditor()}>
+        {highlightEditorPosition && (
+          <PopoverAnchor asChild>
+            <div
+              className="fixed z-40 h-px w-px pointer-events-none"
+              style={{
+                left: `${highlightEditorPosition.x}px`,
+                top: `${highlightEditorPosition.y}px`,
+              }}
+            />
+          </PopoverAnchor>
+        )}
+        <PopoverContent
+          side="left"
+          align="center"
+          sideOffset={8}
+          className="w-80 space-y-3"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
+          <HighlightEditorPopover onClose={handleCloseHighlightEditor} />
+        </PopoverContent>
+      </Popover>
       <div ref={popoverRef}>
         {selection && (
           <HighlightPopover
@@ -472,11 +582,11 @@ export function MarkdownContent({
         )}
         {activeHighlight && (
           <ExistingHighlightPopover
-            highlightId={activeHighlight.highlight.id}
-            color={activeHighlight.highlight.color}
-            note={activeHighlight.highlight.comment}
-            tags={activeHighlight.highlight.tags}
-            text={activeHighlight.highlight.text}
+            highlightId={activeHighlightData?.id || activeHighlight.highlight.id}
+            color={activeHighlightData?.color || activeHighlight.highlight.color}
+            note={activeHighlightData?.comment}
+            tags={activeHighlightData?.tags}
+            text={activeHighlightData?.text || activeHighlight.highlight.text}
             position={{
               x: activeHighlight.element.getBoundingClientRect().left + activeHighlight.element.getBoundingClientRect().width / 2,
               y: activeHighlight.element.getBoundingClientRect().top - 10,

@@ -1,9 +1,6 @@
 import { Sidebar, SidebarContent, SidebarHeader, SidebarMenu, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 import { AnnotationsPanel } from "@/components/reader/annotations-panel";
-import { HighlightEditorPanel } from "@/components/reader/highlight-editor-panel";
-import { BookmarkEditorPanel } from "@/components/reader/bookmark-note-editor-panel";
-import { NoteEditorPanel } from "@/components/reader/note-editor-panel";
-import { Highlighter, Layers, PenLine, Bookmark, BookMarked, StickyNote, Pencil, Bot } from "lucide-react";
+import { Highlighter, Layers, BookMarked, Pencil, Bot } from "lucide-react";
 import { ReaderAiChatPanel } from "@/components/reader/reader-ai-chat-panel";
 import { useWorkspaceTabsStore, type WriterTab, type ReaderTab } from "@/lib/stores/workspace-tabs-store";
 import { useWritingProject, useHighlights, useBookmarks, useNotes } from "@/lib/api/queries";
@@ -44,10 +41,6 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
 
   const annotationTab = useReaderStore((state) => state.annotationTab);
   const setAnnotationTab = useReaderStore((state) => state.setAnnotationTab);
-  const editorState = useReaderStore((state) => state.editorState);
-  const isHighlightEditorOpen = editorState?.mode === "pending-highlight" || editorState?.mode === "editing-highlight";
-  const isBookmarkEditorOpen = editorState?.mode === "pending-bookmark" || editorState?.mode === "editing-bookmark";
-  const isNoteEditorOpen = editorState?.mode === "pending-note" || editorState?.mode === "editing-note";
 
   useEffect(() => {
     if (!isWorkspaceRoute || !focusedTab) {
@@ -121,35 +114,20 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
   }
 
   const getHeaderContent = () => {
-    if (isHighlightEditorOpen) {
-      return (
-        <>
-          <PenLine className="h-4 w-4" />
-          <span className="font-semibold text-sm">{editorState?.mode === "editing-highlight" ? "Edit Highlight" : "New Highlight"}</span>
-        </>
-      );
-    }
-    if (isBookmarkEditorOpen) {
-      return (
-        <>
-          <Bookmark className="h-4 w-4 text-amber-500" />
-          <span className="font-semibold text-sm">{editorState?.mode === "editing-bookmark" ? "Edit Bookmark" : "New Bookmark"}</span>
-        </>
-      );
-    }
-    if (isNoteEditorOpen) {
-      return (
-        <>
-          <StickyNote className="h-4 w-4 text-blue-500" />
-          <span className="font-semibold text-sm">{editorState?.mode === "editing-note" ? "Edit Note" : "New Note"}</span>
-        </>
-      );
-    }
-
     return (
-      <Tabs value={annotationTab} onValueChange={(v) => setAnnotationTab(v as "highlights" | "bookmarks" | "notes" | "ai")} className="w-full">
-        <TabsList className="w-full h-8">
-          <TabsTrigger value="highlights" className="flex-1 gap-1 text-xs h-7">
+      <Tabs value={annotationTab} onValueChange={(v) => setAnnotationTab(v as "highlights" | "bookmarks" | "notes" | "ai")} className="w-full gap-0">
+        <TabsList className="h-10 w-full rounded-none border-b border-border bg-transparent p-0">
+          <TabsTrigger
+            value="ai"
+            className="h-full flex-1 gap-1 rounded-none border-0 border-r border-border px-2 text-xs shadow-none data-[state=active]:border-b data-[state=active]:border-b-background data-[state=active]:bg-background data-[state=active]:shadow-none"
+          >
+            <Bot className="h-3.5 w-3.5" />
+            Chat
+          </TabsTrigger>
+          <TabsTrigger
+            value="highlights"
+            className="h-full flex-1 gap-1 rounded-none border-0 border-r border-border px-2 text-xs shadow-none data-[state=active]:border-b data-[state=active]:border-b-background data-[state=active]:bg-background data-[state=active]:shadow-none"
+          >
             <Highlighter className="h-3.5 w-3.5" />
             Highlights
             {(allHighlights ?? []).length > 0 && (
@@ -158,7 +136,10 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="bookmarks" className="flex-1 gap-1 text-xs h-7">
+          <TabsTrigger
+            value="bookmarks"
+            className="h-full flex-1 gap-1 rounded-none border-0 border-r border-border px-2 text-xs shadow-none data-[state=active]:border-b data-[state=active]:border-b-background data-[state=active]:bg-background data-[state=active]:shadow-none"
+          >
             <BookMarked className="h-3.5 w-3.5" />
             Bookmarks
             {(allBookmarks ?? []).length > 0 && (
@@ -167,7 +148,10 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="notes" className="flex-1 gap-1 text-xs h-7">
+          <TabsTrigger
+            value="notes"
+            className="h-full flex-1 gap-1 rounded-none border-0 px-2 text-xs shadow-none data-[state=active]:border-b data-[state=active]:border-b-background data-[state=active]:bg-background data-[state=active]:shadow-none"
+          >
             <Pencil className="h-3.5 w-3.5" />
             Notes
             {(allNotes ?? []).length > 0 && (
@@ -176,19 +160,12 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="ai" className="flex-1 gap-1 text-xs h-7">
-            <Bot className="h-3.5 w-3.5" />
-            AI
-          </TabsTrigger>
         </TabsList>
       </Tabs>
     );
   };
 
   const getContent = () => {
-    if (isHighlightEditorOpen) return <HighlightEditorPanel />;
-    if (isBookmarkEditorOpen) return <BookmarkEditorPanel />;
-    if (isNoteEditorOpen) return <NoteEditorPanel />;
     if (annotationTab === "ai") return <ReaderAiChatPanel />;
 
     return <AnnotationsPanel activeTab={annotationTab} onNavigateToPage={onNavigateToPage} />;
@@ -196,9 +173,9 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
-      <SidebarHeader className="border-b">
+      <SidebarHeader className="p-0">
         <SidebarMenu>
-          <SidebarMenuItem className="flex items-center gap-2 px-2">{getHeaderContent()}</SidebarMenuItem>
+          <SidebarMenuItem className="flex items-center gap-2 px-0">{getHeaderContent()}</SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent className={cn("p-0", annotationTab === "ai" && "overflow-hidden")}>{getContent()}</SidebarContent>

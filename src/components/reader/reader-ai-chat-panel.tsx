@@ -28,11 +28,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Plus, ArrowUp, Loader2, FileText, X, MessageSquare, MoreHorizontal, Pencil, Trash2, ChevronDown, Bot, Type, BookOpen } from "lucide-react";
+import { Plus, ArrowUp, Loader2, FileText, X, MessageSquare, MoreHorizontal, Pencil, Trash2, ChevronDown, Type, BookOpen } from "lucide-react";
 import { cn, getUserId } from "@/lib/utils";
 import type { MessagesResponse, ChatsResponse, ChatContextsResponse } from "@/lib/pocketbase-types";
 import { ChatsTypeOptions, UploadsTypeOptions } from "@/lib/pocketbase-types";
 import type { ChatSource } from "@/lib/types";
+import { PreviewDialog } from "@/components/workspace/preview-dialog";
+
+type DraftContextSelection =
+  | { type: "upload"; uploadId: string }
+  | { type: "page"; pageId: string; uploadId?: string; pageNumber?: number }
+  | { type: "range"; uploadId: string; pageFrom: number; pageTo: number; title?: string }
+  | { type: "text"; text: string };
 
 export function ReaderAiChatPanel() {
   const [activeChatId, setActiveChatId] = useState<string | undefined>();
@@ -41,17 +48,21 @@ export function ReaderAiChatPanel() {
   const [showChatList, setShowChatList] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
-  const [contextConfirmed, setContextConfirmed] = useState(false);
+  const [previewSource, setPreviewSource] = useState<ChatSource | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [pageRangeDialog, setPageRangeDialog] = useState<{ uploadId: string; title: string } | null>(null);
   const [pageFrom, setPageFrom] = useState("");
   const [pageTo, setPageTo] = useState("");
+  const [draftContextSelections, setDraftContextSelections] = useState<DraftContextSelection[]>([]);
+  const [confirmedDefaultContextByChat, setConfirmedDefaultContextByChat] = useState<Record<string, DraftContextSelection>>({});
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const isSyncingDefaultContextRef = useRef(false);
+  const pendingContextAddKeysRef = useRef<Set<string>>(new Set());
 
   const currentUploadId = useReaderStore((state) => state.currentUploadId);
   const currentPageId = useReaderStore((state) => state.currentPageId);
+  const currentPageNumber = useReaderStore((state) => state.currentPageNumber);
   const pendingChatText = useReaderStore((state) => state.pendingChatText);
   const setPendingChatText = useReaderStore((state) => state.setPendingChatText);
 
@@ -97,7 +108,10 @@ export function ReaderAiChatPanel() {
     return pendingMessages;
   }, [activeChatId, dbMessages, pendingMessages]);
 
-  const hasMessages = displayMessages.length > 0;
+  const activeChatContexts = useMemo(
+    () => (activeChatId ? chatContexts.filter((ctx: ChatContextsResponse) => ctx.chat === activeChatId) : []),
+    [chatContexts, activeChatId],
+  );
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -107,128 +121,22 @@ export function ReaderAiChatPanel() {
     if (activeChatId) setPendingMessages([]);
   }, [activeChatId]);
 
-  // When switching chats, reset confirmation state.
-  // Context is confirmed once the user explicitly confirms or sends a message.
-  useEffect(() => {
-    setContextConfirmed(false);
-  }, [activeChatId]);
-
-  // Auto-confirm once messages exist (user already sent something)
-  useEffect(() => {
-    if (hasMessages) setContextConfirmed(true);
-  }, [hasMessages]);
-
-  // Dynamic default context: when reader file changes and context is not yet confirmed,
-  // keep only the current auto context (doc/page) and remove stale ones.
-  useEffect(() => {
-    if (!activeChatId || !currentUploadId || contextConfirmed) return;
-    if (chatContexts.length === 0) return;
-    if (isSyncingDefaultContextRef.current) return;
-
-    let cancelled = false;
-
-    const syncDefaultContext = async () => {
-      isSyncingDefaultContextRef.current = true;
-      try {
-        if (isBookUpload) {
-          if (!currentPageId) return;
-
-          const pageContexts = chatContexts.filter((ctx: ChatContextsResponse) => !!ctx.page && !ctx.text && !ctx.page_from);
-          const stalePageContexts = pageContexts.filter((ctx: ChatContextsResponse) => ctx.page !== currentPageId);
-
-          for (const staleCtx of stalePageContexts) {
-            await removeContext.mutateAsync(staleCtx.id);
-          }
-
-          if (cancelled) return;
-
-          const hasCurrentPage = pageContexts.some((ctx: ChatContextsResponse) => ctx.page === currentPageId);
-          if (!hasCurrentPage) {
-            await addContext.mutateAsync({
-              chat: activeChatId,
-              upload: currentUploadId,
-              page: currentPageId,
-              user: getUserId(),
-            });
-          }
-          return;
-        }
-
-        const docContexts = chatContexts.filter((ctx: ChatContextsResponse) => !!ctx.upload && !ctx.page && !ctx.text && !ctx.page_from);
-        const staleDocContexts = docContexts.filter((ctx: ChatContextsResponse) => ctx.upload !== currentUploadId);
-
-        for (const staleCtx of staleDocContexts) {
-          await removeContext.mutateAsync(staleCtx.id);
-        }
-
-        if (cancelled) return;
-
-        const hasCurrentUpload = docContexts.some((ctx: ChatContextsResponse) => ctx.upload === currentUploadId);
-        if (!hasCurrentUpload) {
-          await addContext.mutateAsync({
-            chat: activeChatId,
-            upload: currentUploadId,
-            user: getUserId(),
-          });
-        }
-      } finally {
-        isSyncingDefaultContextRef.current = false;
-      }
-    };
-
-    syncDefaultContext();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [currentUploadId, currentPageId, activeChatId, contextConfirmed, isBookUpload, chatContexts, addContext, removeContext]);
-
   // Handle pending chat text from highlight popover
   useEffect(() => {
     if (!pendingChatText) return;
 
     const addTextToChat = async () => {
-      let chatId = activeChatId;
-      if (!chatId) {
-        // Create a new chat first
-        if (!currentUploadId) {
-          setPendingChatText(null);
-          return;
-        }
-        const userId = getUserId();
-        const record = await createChat.mutateAsync({
-          title: "New chat",
-          type: ChatsTypeOptions.reader_sidebar,
-          user: userId,
-        });
-        chatId = record.id;
-        setActiveChatId(chatId);
-        setPendingMessages([]);
-        setInput("");
-
-        if (isBookUpload && currentPageId) {
-          await addContext.mutateAsync({
-            chat: chatId,
-            upload: currentUploadId,
-            page: currentPageId,
-            user: userId,
-          });
-        } else {
-          await addContext.mutateAsync({
-            chat: chatId,
-            upload: currentUploadId,
-            user: userId,
-          });
-        }
+      if (!activeChatId) {
+        addDraftContext({ type: "text", text: pendingChatText });
+        setPendingChatText(null);
+        return;
       }
 
-      setContextConfirmed(true);
-
-      const existingContexts = chatId === activeChatId ? [...chatContexts] : [];
+      const existingContexts = [...activeChatContexts];
       await Promise.all(existingContexts.map((ctx: ChatContextsResponse) => removeContext.mutateAsync(ctx.id)));
 
       await addContext.mutateAsync({
-        chat: chatId,
+        chat: activeChatId,
         text: pendingChatText,
         user: getUserId(),
       } as any);
@@ -236,24 +144,90 @@ export function ReaderAiChatPanel() {
     };
 
     addTextToChat();
-  }, [
-    pendingChatText,
-    isBookUpload,
-    currentPageId,
-    currentUploadId,
-    activeChatId,
-    chatContexts,
-    createChat,
-    addContext,
-    removeContext,
-    setPendingChatText,
-  ]);
+  }, [pendingChatText, activeChatId, activeChatContexts, addContext, removeContext, setPendingChatText]);
 
-  const contextCount = chatContexts.length;
-  const canSend = input.trim().length > 0 && !sendMessage.isPending && contextCount > 0;
+  const contextCount = activeChatContexts.length;
+  const activeConfirmedDefaultContext = activeChatId ? confirmedDefaultContextByChat[activeChatId] : undefined;
+  const hasImplicitActiveContext =
+    !!activeChatId && contextCount === 0 && !activeConfirmedDefaultContext && !!currentUploadId && (!isBookUpload || !!currentPageId);
+  const hasExplicitDraftContexts = !activeChatId && draftContextSelections.length > 0;
+  const hasImplicitDraftContext = !activeChatId && draftContextSelections.length === 0 && !!currentUploadId && (!isBookUpload || !!currentPageId);
+  const hasDraftContext = hasExplicitDraftContexts || hasImplicitDraftContext;
+  const hasSendContext = activeChatId ? contextCount > 0 || hasImplicitActiveContext || !!activeConfirmedDefaultContext : hasDraftContext;
+  const displayedContextCount = activeChatId
+    ? contextCount > 0
+      ? contextCount
+      : activeConfirmedDefaultContext
+        ? 1
+        : hasImplicitActiveContext
+          ? 1
+          : 0
+    : hasExplicitDraftContexts
+      ? draftContextSelections.length
+      : hasImplicitDraftContext
+        ? 1
+        : 0;
+  const canSend = input.trim().length > 0 && !sendMessage.isPending && hasSendContext;
 
-  const handleNewChat = async () => {
-    if (!currentUploadId) return;
+  const singlePageContext = useMemo(() => {
+    const pageContexts = activeChatContexts.filter((ctx: ChatContextsResponse) => !!ctx.page && !ctx.text && !ctx.page_from);
+    if (pageContexts.length !== 1) return null;
+
+    const ctx = pageContexts[0] as ChatContextsResponse & {
+      expand?: {
+        page?: {
+          page?: number;
+        };
+      };
+    };
+
+    const pageNumber = ctx.expand?.page?.page;
+    return {
+      uploadId: ctx.upload,
+      pageNumber: typeof pageNumber === "number" && pageNumber > 0 ? pageNumber : undefined,
+    };
+  }, [activeChatContexts]);
+
+  const getDraftContextKey = (selection: DraftContextSelection) => {
+    if (selection.type === "upload") return `upload:${selection.uploadId}`;
+    if (selection.type === "page") return `page:${selection.uploadId || ""}:${selection.pageId}`;
+    if (selection.type === "range") return `range:${selection.uploadId}:${selection.pageFrom}:${selection.pageTo}`;
+    return `text:${selection.text}`;
+  };
+
+  const addDraftContext = (selection: DraftContextSelection) => {
+    const key = getDraftContextKey(selection);
+    setDraftContextSelections((prev) => {
+      if (prev.some((ctx) => getDraftContextKey(ctx) === key)) return prev;
+      return [...prev, selection];
+    });
+  };
+
+  const handleRemoveDraftContext = (selection: DraftContextSelection) => {
+    const key = getDraftContextKey(selection);
+    setDraftContextSelections((prev) => prev.filter((ctx) => getDraftContextKey(ctx) !== key));
+  };
+
+  const handleConfirmImplicitDraftContext = () => {
+    if (activeChatId || !hasImplicitDraftContext || !currentUploadId) return;
+
+    if (isBookUpload && currentPageId) {
+      addDraftContext({
+        type: "page",
+        uploadId: currentUploadId,
+        pageId: currentPageId,
+        pageNumber: currentPageNumber || undefined,
+      });
+      return;
+    }
+
+    addDraftContext({
+      type: "upload",
+      uploadId: currentUploadId,
+    });
+  };
+
+  const createChatShell = async () => {
     const userId = getUserId();
     const record = await createChat.mutateAsync({
       title: "New chat",
@@ -263,38 +237,23 @@ export function ReaderAiChatPanel() {
     setActiveChatId(record.id);
     setPendingMessages([]);
     setInput("");
-    setContextConfirmed(false);
-
-    if (isBookUpload && currentPageId) {
-      await addContext.mutateAsync({
-        chat: record.id,
-        upload: currentUploadId,
-        page: currentPageId,
-        user: userId,
-      });
-    } else {
-      await addContext.mutateAsync({
-        chat: record.id,
-        upload: currentUploadId,
-        user: userId,
-      });
-    }
+    return record.id;
   };
 
-  useEffect(() => {
-    if (activeChatId) return;
-    if (!currentUploadId) return;
-    if (pendingChatText) return;
-    if (createChat.isPending || addContext.isPending) return;
-
-    handleNewChat();
-  }, [activeChatId, currentUploadId, pendingChatText, createChat.isPending, addContext.isPending]);
+  const handleNewChat = () => {
+    setActiveChatId(undefined);
+    setPendingMessages([]);
+    setInput("");
+    setShowChatList(false);
+    setDraftContextSelections([]);
+  };
 
   const handleSelectChat = (chatId: string) => {
     setActiveChatId(chatId);
     setPendingMessages([]);
     setInput("");
     setShowChatList(false);
+    setDraftContextSelections([]);
   };
 
   const handleDeleteChat = (chatId: string) => {
@@ -303,52 +262,198 @@ export function ReaderAiChatPanel() {
       setActiveChatId(undefined);
       setPendingMessages([]);
       setInput("");
+      setDraftContextSelections([]);
     }
+    setConfirmedDefaultContextByChat((prev) => {
+      const next = { ...prev };
+      delete next[chatId];
+      return next;
+    });
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!canSend) return;
-    setContextConfirmed(true);
     const message = input.trim();
 
     if (!activeChatId) {
-      const now = Date.now();
-      setPendingMessages((prev) => [
-        ...prev,
-        { id: `pending-user-${now}`, role: "user", content: message },
-        { id: `pending-loading-${now}`, role: "assistant", content: "", isLoading: true },
-      ]);
+      if (!currentUploadId) return;
+
+      const userId = getUserId();
+      const newChatId = await createChatShell();
+      if (!newChatId) {
+        return;
+      }
+
+      const contextsToPersist =
+        draftContextSelections.length > 0
+          ? draftContextSelections
+          : isBookUpload && currentPageId
+            ? ([
+                {
+                  type: "page",
+                  uploadId: currentUploadId,
+                  pageId: currentPageId,
+                  pageNumber: currentPageNumber || undefined,
+                },
+              ] as DraftContextSelection[])
+            : ([{ type: "upload", uploadId: currentUploadId }] as DraftContextSelection[]);
+
+      const uniqueContexts = contextsToPersist.filter(
+        (ctx, idx, arr) => arr.findIndex((other) => getDraftContextKey(other) === getDraftContextKey(ctx)) === idx,
+      );
+
+      for (const draftContextSelection of uniqueContexts) {
+        if (draftContextSelection.type === "text") {
+          await addContext.mutateAsync({
+            chat: newChatId,
+            text: draftContextSelection.text,
+            user: userId,
+          } as any);
+          continue;
+        }
+
+        if (draftContextSelection.type === "page") {
+          await addContext.mutateAsync({
+            chat: newChatId,
+            upload: draftContextSelection.uploadId || currentUploadId,
+            page: draftContextSelection.pageId,
+            user: userId,
+          });
+          continue;
+        }
+
+        if (draftContextSelection.type === "range") {
+          await addContext.mutateAsync({
+            chat: newChatId,
+            upload: draftContextSelection.uploadId,
+            page_from: draftContextSelection.pageFrom,
+            page_to: draftContextSelection.pageTo,
+            user: userId,
+          } as any);
+          continue;
+        }
+
+        await addContext.mutateAsync({
+          chat: newChatId,
+          upload: draftContextSelection.uploadId,
+          user: userId,
+        });
+      }
+
+      sendMessage.mutate({ message, chatId: newChatId });
+      return;
     }
-    sendMessage.mutate(message);
+
+    if (activeConfirmedDefaultContext && activeChatId) {
+      if (activeConfirmedDefaultContext.type === "page") {
+        await addContext.mutateAsync({
+          chat: activeChatId,
+          upload: activeConfirmedDefaultContext.uploadId,
+          page: activeConfirmedDefaultContext.pageId,
+          user: getUserId(),
+        });
+      } else if (activeConfirmedDefaultContext.type === "upload") {
+        await addContext.mutateAsync({
+          chat: activeChatId,
+          upload: activeConfirmedDefaultContext.uploadId,
+          user: getUserId(),
+        });
+      }
+
+      setConfirmedDefaultContextByChat((prev) => {
+        const next = { ...prev };
+        delete next[activeChatId];
+        return next;
+      });
+    } else if (hasImplicitActiveContext && activeChatId && currentUploadId) {
+      await addContext.mutateAsync(
+        isBookUpload && currentPageId
+          ? {
+              chat: activeChatId,
+              upload: currentUploadId,
+              page: currentPageId,
+              user: getUserId(),
+            }
+          : {
+              chat: activeChatId,
+              upload: currentUploadId,
+              user: getUserId(),
+            },
+      );
+    }
+
+    sendMessage.mutate({ message });
   };
 
-  const handleConfirmContext = () => {
-    setContextConfirmed(true);
-  };
+  const handleAddUpload = async (uploadId: string) => {
+    if (!activeChatId) {
+      addDraftContext({ type: "upload", uploadId });
+      return;
+    }
 
-  const handleAddUpload = (uploadId: string) => {
-    if (!activeChatId) return;
-    const alreadyAdded = chatContexts.some((ctx: ChatContextsResponse) => ctx.upload === uploadId && !ctx.page && !ctx.text && !ctx.page_from);
+    const chatId = activeChatId;
+    const contextKey = `upload:${chatId}:${uploadId}`;
+    if (pendingContextAddKeysRef.current.has(contextKey)) return;
+
+    const alreadyAdded = activeChatContexts.some((ctx: ChatContextsResponse) => ctx.upload === uploadId && !ctx.page && !ctx.text && !ctx.page_from);
     if (alreadyAdded) return;
 
-    addContext.mutate({
-      chat: activeChatId,
-      upload: uploadId,
-      user: getUserId(),
-    });
+    pendingContextAddKeysRef.current.add(contextKey);
+    try {
+      await addContext.mutateAsync({
+        chat: chatId,
+        upload: uploadId,
+        user: getUserId(),
+      });
+    } finally {
+      pendingContextAddKeysRef.current.delete(contextKey);
+    }
   };
 
-  const handleAddCurrentPage = () => {
-    if (!activeChatId || !currentPageId) return;
-    const alreadyAdded = chatContexts.some((ctx: ChatContextsResponse) => ctx.page === currentPageId);
-    if (alreadyAdded) return;
+  const handleAddCurrentPage = async () => {
+    if (!currentPageId) return;
 
-    addContext.mutate({
-      chat: activeChatId,
-      upload: currentUploadId || undefined,
-      page: currentPageId,
-      user: getUserId(),
-    });
+    if (!activeChatId) {
+      addDraftContext({
+        type: "page",
+        pageId: currentPageId,
+        uploadId: currentUploadId || undefined,
+        pageNumber: currentPageNumber || undefined,
+      });
+      return;
+    }
+
+    const chatId = activeChatId;
+
+    const contextKey = `page:${chatId}:${currentPageId}`;
+    if (pendingContextAddKeysRef.current.has(contextKey)) return;
+
+    pendingContextAddKeysRef.current.add(contextKey);
+    try {
+      const contextsForChat = activeChatId === chatId ? activeChatContexts : [];
+      const isAlreadyCurrentPageContext = contextsForChat.some(
+        (ctx: ChatContextsResponse) => ctx.page === currentPageId && !ctx.text && !ctx.page_from,
+      );
+
+      if (isAlreadyCurrentPageContext) return;
+
+      const defaultDocContexts = contextsForChat.filter(
+        (ctx: ChatContextsResponse) => ctx.upload === currentUploadId && !ctx.page && !ctx.text && !ctx.page_from,
+      );
+
+      if (defaultDocContexts.length > 0) {
+        await Promise.all(defaultDocContexts.map((ctx: ChatContextsResponse) => removeContext.mutateAsync(ctx.id)));
+      }
+
+      await addContext.mutateAsync({
+        chat: chatId,
+        upload: currentUploadId || undefined,
+        page: currentPageId,
+        user: getUserId(),
+      });
+    } finally {
+      pendingContextAddKeysRef.current.delete(contextKey);
+    }
   };
 
   const handleOpenPageRangeDialog = (uploadId: string, title: string) => {
@@ -357,25 +462,76 @@ export function ReaderAiChatPanel() {
     setPageTo("");
   };
 
-  const handleAddPageRange = () => {
-    if (!activeChatId || !pageRangeDialog) return;
+  const handleAddPageRange = async () => {
+    if (!pageRangeDialog) return;
+
     const from = parseInt(pageFrom, 10);
     const to = parseInt(pageTo, 10);
     if (isNaN(from) || isNaN(to) || from < 1 || to < from) return;
 
-    addContext.mutate({
-      chat: activeChatId,
-      upload: pageRangeDialog.uploadId,
-      page_from: from,
-      page_to: to,
-      user: getUserId(),
-    } as any);
-    setPageRangeDialog(null);
+    if (!activeChatId) {
+      addDraftContext({
+        type: "range",
+        uploadId: pageRangeDialog.uploadId,
+        pageFrom: from,
+        pageTo: to,
+        title: pageRangeDialog.title,
+      });
+      setPageRangeDialog(null);
+      return;
+    }
+
+    const chatId = activeChatId;
+
+    const contextKey = `range:${chatId}:${pageRangeDialog.uploadId}:${from}-${to}`;
+    if (pendingContextAddKeysRef.current.has(contextKey)) return;
+
+    pendingContextAddKeysRef.current.add(contextKey);
+    try {
+      await addContext.mutateAsync({
+        chat: chatId,
+        upload: pageRangeDialog.uploadId,
+        page_from: from,
+        page_to: to,
+        user: getUserId(),
+      } as any);
+      setPageRangeDialog(null);
+    } finally {
+      pendingContextAddKeysRef.current.delete(contextKey);
+    }
   };
 
   const handleRemoveContext = (contextId: string) => {
-    if (chatContexts.length <= 1) return;
     removeContext.mutate(contextId);
+  };
+
+  const handleConfirmImplicitActiveContext = async () => {
+    if (!activeChatId || !hasImplicitActiveContext || !currentUploadId) return;
+
+    setConfirmedDefaultContextByChat((prev) => ({
+      ...prev,
+      [activeChatId]:
+        isBookUpload && currentPageId
+          ? {
+              type: "page",
+              uploadId: currentUploadId,
+              pageId: currentPageId,
+              pageNumber: currentPageNumber || undefined,
+            }
+          : {
+              type: "upload",
+              uploadId: currentUploadId,
+            },
+    }));
+  };
+
+  const handleRemoveConfirmedDefaultContext = () => {
+    if (!activeChatId) return;
+    setConfirmedDefaultContextByChat((prev) => {
+      const next = { ...prev };
+      delete next[activeChatId];
+      return next;
+    });
   };
 
   const handleStartRename = (chat: ChatsResponse) => {
@@ -389,6 +545,18 @@ export function ReaderAiChatPanel() {
     }
     setEditingId(null);
     setEditTitle("");
+  };
+
+  const handleSourceClick = (source: ChatSource) => {
+    const fallbackUploadId = source.upload_id ?? singlePageContext?.uploadId;
+    const fallbackPageNumber = source.page_number ?? singlePageContext?.pageNumber;
+
+    setPreviewSource({
+      ...source,
+      upload_id: fallbackUploadId,
+      page_number: fallbackPageNumber,
+    });
+    setIsPreviewOpen(true);
   };
 
   const adjustTextareaHeight = () => {
@@ -426,6 +594,30 @@ export function ReaderAiChatPanel() {
     return "Context item";
   };
 
+  const getContextHoverLabel = (ctx: ChatContextsResponse) => {
+    const expanded = (ctx as any).expand;
+    const uploadTitle = expanded?.upload?.title || "Document";
+
+    if (ctx.text) {
+      return ctx.text;
+    }
+
+    if (ctx.page_from && ctx.page_to) {
+      return `${uploadTitle} · Pages ${ctx.page_from}-${ctx.page_to}`;
+    }
+
+    if (ctx.page) {
+      const pageNumber = expanded?.page?.page;
+      return `${uploadTitle} · Page ${pageNumber || "?"}`;
+    }
+
+    if (ctx.upload) {
+      return uploadTitle;
+    }
+
+    return "Context item";
+  };
+
   const getContextIcon = (ctx: ChatContextsResponse) => {
     if (ctx.text) return <Type className="h-2.5 w-2.5 shrink-0" />;
     if (ctx.page_from) return <BookOpen className="h-2.5 w-2.5 shrink-0" />;
@@ -438,6 +630,55 @@ export function ReaderAiChatPanel() {
     return tab?.title || "Current document";
   }, [currentUploadId, tabs]);
 
+  const getUploadTitleById = (uploadId?: string) => {
+    if (!uploadId) return "Document";
+    if (uploadId === currentUploadId) return currentDocTitle || "Current document";
+    const tab = tabs.find((t): t is ReaderTab => t.type === "reader" && t.uploadId === uploadId);
+    return tab?.title || "Document";
+  };
+
+  const getDraftContextHoverLabel = (selection: DraftContextSelection) => {
+    if (selection.type === "text") return selection.text;
+
+    if (selection.type === "page") {
+      const title = getUploadTitleById(selection.uploadId);
+      const pageNumber = selection.pageNumber || currentPageNumber || "?";
+      return `${title} · Page ${pageNumber}`;
+    }
+
+    if (selection.type === "range") {
+      const title = selection.title || getUploadTitleById(selection.uploadId);
+      return `${title} · Pages ${selection.pageFrom}-${selection.pageTo}`;
+    }
+
+    return getUploadTitleById(selection.uploadId);
+  };
+
+  const getDraftContextLabel = (selection: DraftContextSelection) => {
+    if (selection.type === "text") {
+      return selection.text.length > 40 ? selection.text.slice(0, 40) + "…" : selection.text;
+    }
+
+    if (selection.type === "page") {
+      const title = getUploadTitleById(selection.uploadId);
+      const pageNumber = selection.pageNumber || currentPageNumber || "?";
+      return `${title} · p.${pageNumber}`;
+    }
+
+    if (selection.type === "range") {
+      const title = selection.title || getUploadTitleById(selection.uploadId);
+      return `${title} · pp.${selection.pageFrom}-${selection.pageTo}`;
+    }
+
+    return getUploadTitleById(selection.uploadId);
+  };
+
+  const getDraftContextIcon = (selection: DraftContextSelection) => {
+    if (selection.type === "text") return <Type className="h-2.5 w-2.5 shrink-0" />;
+    if (selection.type === "range") return <BookOpen className="h-2.5 w-2.5 shrink-0" />;
+    return <FileText className="h-2.5 w-2.5 shrink-0" />;
+  };
+
   const addContextDropdown = (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -447,12 +688,12 @@ export function ReaderAiChatPanel() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56">
         {!isBookUpload && (
-          <DropdownMenuItem onClick={() => currentUploadId && handleAddUpload(currentUploadId)} disabled={!currentUploadId}>
+          <DropdownMenuItem onClick={() => currentUploadId && void handleAddUpload(currentUploadId)} disabled={!currentUploadId}>
             <FileText className="h-3.5 w-3.5 mr-2" />
             Add current document
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem onClick={handleAddCurrentPage} disabled={!currentPageId}>
+        <DropdownMenuItem onClick={() => void handleAddCurrentPage()} disabled={!currentPageId}>
           <FileText className="h-3.5 w-3.5 mr-2" />
           Add current page
         </DropdownMenuItem>
@@ -475,7 +716,7 @@ export function ReaderAiChatPanel() {
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="w-52">
                 {otherReaderTabs.map((tab) => (
-                  <DropdownMenuItem key={tab.id} onClick={() => handleAddUpload(tab.uploadId)}>
+                  <DropdownMenuItem key={tab.id} onClick={() => void handleAddUpload(tab.uploadId)}>
                     <FileText className="h-3.5 w-3.5 mr-2 shrink-0" />
                     <span className="truncate">{tab.title}</span>
                   </DropdownMenuItem>
@@ -543,54 +784,127 @@ export function ReaderAiChatPanel() {
               </div>
             ))}
           </div>
-        ) : displayMessages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-32 px-4 text-center">
-            <Bot className="h-6 w-6 text-muted-foreground/40 mb-1.5" />
-            <p className="text-xs text-muted-foreground">Ask a question about your attached documents</p>
-          </div>
-        ) : (
+        ) : displayMessages.length > 0 ? (
           <div className="p-3 space-y-4">
             {displayMessages.map((message) => (
-              <MessageBubble key={message.id} message={message} mode="chat" />
+              <MessageBubble key={message.id} message={message} mode="chat" onSourceClick={handleSourceClick} />
             ))}
             <div ref={messagesEndRef} />
           </div>
-        )}
+        ) : null}
       </ScrollArea>
 
       {/* Input area — context chips live here */}
       <div className="p-2 border-t">
         <div className="rounded-lg border bg-muted/50 focus-within:border-ring focus-within:ring-1 focus-within:ring-ring transition-shadow">
           {/* Context chips inside input box */}
-          {contextCount > 0 && (
+          {displayedContextCount > 0 && (
             <div className="flex flex-wrap gap-1 items-center px-2 pt-2">
-              {chatContexts.map((ctx: ChatContextsResponse) => {
-                // The default auto-added context is a whole-document upload with no page/text/page_from
-                const isDefaultDocCtx = !!ctx.upload && !ctx.page && !ctx.text && !ctx.page_from;
-                const isDefaultBookPageCtx = !!ctx.page && !ctx.text && !ctx.page_from && ctx.page === currentPageId;
-                const isDefaultCtx = !contextConfirmed && (isBookUpload ? isDefaultBookPageCtx : isDefaultDocCtx);
-                return (
-                  <Badge
-                    key={ctx.id}
-                    variant="secondary"
-                    className={cn("text-[10px] h-5 gap-1 pl-1.5 pr-0.5 max-w-45", isDefaultCtx && "opacity-50 cursor-pointer hover:opacity-80")}
-                    onClick={isDefaultCtx ? handleConfirmContext : undefined}
-                    title={isDefaultCtx ? "Click to keep this context" : undefined}
-                  >
-                    {getContextIcon(ctx)}
-                    <span className="truncate">{getContextLabel(ctx)}</span>
-                    {!isDefaultCtx && (
+              {!activeChatId &&
+                hasExplicitDraftContexts &&
+                draftContextSelections.map((selection) => {
+                  const contextKey = getDraftContextKey(selection);
+                  return (
+                    <Badge
+                      key={contextKey}
+                      variant="secondary"
+                      className="text-[10px] h-5 gap-1 pl-1.5 pr-0.5 max-w-45"
+                      title={getDraftContextHoverLabel(selection)}
+                    >
+                      {getDraftContextIcon(selection)}
+                      <span className="truncate">{getDraftContextLabel(selection)}</span>
                       <button
-                        onClick={() => handleRemoveContext(ctx.id)}
-                        className={cn(
-                          "ml-0.5 h-3.5 w-3.5 rounded-sm flex items-center justify-center hover:bg-destructive/20",
-                          chatContexts.length <= 1 && "opacity-30 cursor-not-allowed",
-                        )}
-                        disabled={chatContexts.length <= 1}
+                        onClick={() => handleRemoveDraftContext(selection)}
+                        className="ml-0.5 h-3.5 w-3.5 rounded-sm flex items-center justify-center hover:bg-destructive/20"
                       >
                         <X className="h-2.5 w-2.5" />
                       </button>
+                    </Badge>
+                  );
+                })}
+              {!activeChatId && hasImplicitDraftContext && (
+                <Badge
+                  asChild
+                  variant="secondary"
+                  className="text-[10px] h-5 gap-1 pl-1.5 pr-0.5 max-w-45 opacity-50 cursor-pointer hover:opacity-80"
+                >
+                  <button
+                    type="button"
+                    title={
+                      isBookUpload && currentPageNumber
+                        ? `${currentDocTitle || "Current document"} · Page ${currentPageNumber}`
+                        : currentDocTitle || "Current document"
+                    }
+                    onClick={handleConfirmImplicitDraftContext}
+                  >
+                    {isBookUpload && currentPageNumber ? (
+                      <BookOpen className="h-2.5 w-2.5 shrink-0" />
+                    ) : (
+                      <FileText className="h-2.5 w-2.5 shrink-0" />
                     )}
+                    <span className="truncate">
+                      {isBookUpload && currentPageNumber
+                        ? `${currentDocTitle || "Current document"} · p.${currentPageNumber}`
+                        : currentDocTitle || "Current document"}
+                    </span>
+                  </button>
+                </Badge>
+              )}
+              {!!activeChatId && !!activeConfirmedDefaultContext && (
+                <Badge
+                  variant="secondary"
+                  className="text-[10px] h-5 gap-1 pl-1.5 pr-0.5 max-w-45"
+                  title={getDraftContextHoverLabel(activeConfirmedDefaultContext)}
+                >
+                  {getDraftContextIcon(activeConfirmedDefaultContext)}
+                  <span className="truncate">{getDraftContextLabel(activeConfirmedDefaultContext)}</span>
+                  <button
+                    onClick={handleRemoveConfirmedDefaultContext}
+                    className="ml-0.5 h-3.5 w-3.5 rounded-sm flex items-center justify-center hover:bg-destructive/20"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </Badge>
+              )}
+              {!!activeChatId && hasImplicitActiveContext && (
+                <Badge
+                  asChild
+                  variant="secondary"
+                  className="text-[10px] h-5 gap-1 pl-1.5 pr-0.5 max-w-45 opacity-50 cursor-pointer hover:opacity-80"
+                >
+                  <button
+                    type="button"
+                    title={
+                      isBookUpload && currentPageNumber
+                        ? `${currentDocTitle || "Current document"} · Page ${currentPageNumber}`
+                        : currentDocTitle || "Current document"
+                    }
+                    onClick={() => void handleConfirmImplicitActiveContext()}
+                  >
+                    {isBookUpload && currentPageNumber ? (
+                      <BookOpen className="h-2.5 w-2.5 shrink-0" />
+                    ) : (
+                      <FileText className="h-2.5 w-2.5 shrink-0" />
+                    )}
+                    <span className="truncate">
+                      {isBookUpload && currentPageNumber
+                        ? `${currentDocTitle || "Current document"} · p.${currentPageNumber}`
+                        : currentDocTitle || "Current document"}
+                    </span>
+                  </button>
+                </Badge>
+              )}
+              {activeChatContexts.map((ctx: ChatContextsResponse) => {
+                return (
+                  <Badge key={ctx.id} variant="secondary" className="text-[10px] h-5 gap-1 pl-1.5 pr-0.5 max-w-45" title={getContextHoverLabel(ctx)}>
+                    {getContextIcon(ctx)}
+                    <span className="truncate">{getContextLabel(ctx)}</span>
+                    <button
+                      onClick={() => handleRemoveContext(ctx.id)}
+                      className="ml-0.5 h-3.5 w-3.5 rounded-sm flex items-center justify-center hover:bg-destructive/20"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
                   </Badge>
                 );
               })}
@@ -598,7 +912,7 @@ export function ReaderAiChatPanel() {
             </div>
           )}
 
-          {contextCount === 0 && (
+          {displayedContextCount === 0 && (
             <div className="flex items-center gap-1 px-2 pt-2">
               <span className="text-[10px] text-destructive">Add context to start</span>
               {addContextDropdown}
@@ -614,16 +928,15 @@ export function ReaderAiChatPanel() {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
-                  handleSendMessage();
+                  void handleSendMessage();
                 }
               }}
-              placeholder={contextCount === 0 ? "Add context above..." : "Ask about your documents..."}
-              disabled={sendMessage.isPending || contextCount === 0}
+              disabled={sendMessage.isPending || !hasSendContext}
               rows={3}
               className="min-h-20 max-h-48 resize-none border-0 bg-transparent px-3 py-2 pr-10 text-sm focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
             />
             <div className="absolute right-1.5 bottom-1.5">
-              <Button type="button" size="icon" disabled={!canSend} onClick={handleSendMessage} className="h-6 w-6 rounded-md">
+              <Button type="button" size="icon" disabled={!canSend} onClick={() => void handleSendMessage()} className="h-6 w-6 rounded-md">
                 {sendMessage.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <ArrowUp className="h-3 w-3" />}
               </Button>
             </div>
@@ -641,6 +954,8 @@ export function ReaderAiChatPanel() {
         onConfirm={handleAddPageRange}
         onCancel={() => setPageRangeDialog(null)}
       />
+
+      <PreviewDialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen} type="source" item={null} source={previewSource} />
     </div>
   );
 }

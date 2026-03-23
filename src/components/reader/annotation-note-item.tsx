@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Pencil, Trash2, SquarePen } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { type NotesRecord } from "@/lib/pocketbase-types";
 import { useTagLabels } from "@/lib/hooks/use-tags-helpers";
 import { AddToProjectButton } from "./add-to-project-button";
@@ -8,11 +8,10 @@ import { AddToProjectButton } from "./add-to-project-button";
 interface AnnotationNoteItemProps {
   note: NotesRecord;
   onClick: () => void;
-  onEdit: () => void;
   onDelete: () => void;
 }
 
-export function AnnotationNoteItem({ note, onClick, onEdit, onDelete }: AnnotationNoteItemProps) {
+export function AnnotationNoteItem({ note, onClick, onDelete }: AnnotationNoteItemProps) {
   const tagTitles = useTagLabels(note.tags || []);
 
   return (
@@ -32,18 +31,6 @@ export function AnnotationNoteItem({ note, onClick, onEdit, onDelete }: Annotati
         <div className="flex items-center gap-1 shrink-0">
           <div className="flex gap-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
             <AddToProjectButton itemId={note.id} itemType="note" />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6"
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit();
-              }}
-              title="Edit note"
-            >
-              <SquarePen className="h-3 w-3" />
-            </Button>
             <Button
               variant="ghost"
               size="icon"

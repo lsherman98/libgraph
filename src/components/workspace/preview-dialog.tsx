@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Highlighter, BookMarked, ExternalLink, FileText, Pencil, StickyNote, ChevronLeft, ChevronRight, Hash } from "lucide-react";
+import { Highlighter, BookMarked, ExternalLink, FileText, Pencil, ChevronLeft, ChevronRight, Hash } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HighlightsColorOptions, type HighlightsRecord, type BookmarksRecord, type NotesRecord } from "@/lib/pocketbase-types";
 import { usePageMarkdown, usePageByNumber, usePages } from "@/lib/api/queries";
@@ -21,6 +21,52 @@ export interface PreviewDialogProps {
   uploadId?: string;
   uploadTitle?: string;
   onNavigate?: () => void;
+}
+
+function sanitizePreviewText(text: string): string {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/[\u0000\u000B\u000C\u2028\u2029]/g, "\n")
+    .replace(/\n{4,}/g, "\n\n\n");
+}
+
+function getBlockRangeFromId(markdown: string, blockId: string): { start: number; end: number } | null {
+  const match = blockId.match(/-L(\d+)$/);
+  const lineNumber = match ? Number.parseInt(match[1], 10) : NaN;
+  if (!Number.isFinite(lineNumber) || lineNumber <= 0) return null;
+
+  const lines = markdown.split("\n");
+  if (lineNumber > lines.length) return null;
+
+  const getLineOffset = (lineIndex: number) => {
+    let offset = 0;
+    for (let i = 0; i < lineIndex; i += 1) {
+      offset += lines[i].length + 1;
+    }
+    return offset;
+  };
+
+  let startLineIndex = lineNumber - 1;
+  while (startLineIndex < lines.length && lines[startLineIndex].trim() === "") {
+    startLineIndex += 1;
+  }
+  if (startLineIndex >= lines.length) return null;
+
+  let endLineIndex = startLineIndex;
+  for (let i = startLineIndex + 1; i < lines.length; i += 1) {
+    if (lines[i].trim() === "") break;
+    endLineIndex = i;
+  }
+
+  let start = getLineOffset(startLineIndex);
+  let end = getLineOffset(endLineIndex) + lines[endLineIndex].length;
+
+  while (start < end && /\s/.test(markdown[start])) start += 1;
+  while (end > start && /\s/.test(markdown[end - 1])) end -= 1;
+
+  if (end <= start) return null;
+
+  return { start, end };
 }
 
 export function PreviewDialog({
@@ -70,7 +116,7 @@ export function PreviewDialog({
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [markdown, source?.text]);
+  }, [markdown, source?.text, type, currentPageNumber, item?.id]);
 
   if (!isSource && !isUpload && !item) return null;
   if (isSource && !source) return null;
@@ -79,6 +125,7 @@ export function PreviewDialog({
   const isNote = type === "note";
   const highlight = isHighlight ? (item as HighlightsRecord) : null;
   const note = isNote ? (item as NotesRecord) : null;
+  const blockId = !isSource && !isUpload && !isHighlight ? (item as BookmarksRecord | NotesRecord | null)?.block_id : undefined;
 
   const canNavigate = !!effectiveUploadId && totalPages != null && totalPages > 1;
   const canGoPrev = canNavigate && (currentPageNumber ?? 1) > 1;
@@ -195,11 +242,11 @@ export function PreviewDialog({
         const after = markdown.slice(index + matchLen);
         return (
           <>
-            <span>{before}</span>
+            <span>{sanitizePreviewText(before)}</span>
             <mark ref={highlightRef} className={markClass}>
-              {highlighted}
+              {sanitizePreviewText(highlighted)}
             </mark>
-            <span>{after}</span>
+            <span>{sanitizePreviewText(after)}</span>
           </>
         );
       }
@@ -212,14 +259,35 @@ export function PreviewDialog({
 
       return (
         <>
-          <span>{before}</span>
-          <mark className={cn("px-0.5 rounded", HIGHLIGHT_PREVIEW_CLASSES[highlight.color || HighlightsColorOptions.yellow])}>{highlighted}</mark>
-          <span>{after}</span>
+          <span>{sanitizePreviewText(before)}</span>
+          <mark ref={highlightRef} className={cn("px-0.5 rounded", HIGHLIGHT_PREVIEW_CLASSES[highlight.color || HighlightsColorOptions.yellow])}>
+            {sanitizePreviewText(highlighted)}
+          </mark>
+          <span>{sanitizePreviewText(after)}</span>
         </>
       );
     }
 
-    return <span>{markdown}</span>;
+    if (isOnOriginalPage && blockId) {
+      const blockRange = getBlockRangeFromId(markdown, blockId);
+      if (blockRange) {
+        const before = markdown.slice(0, blockRange.start);
+        const highlighted = markdown.slice(blockRange.start, blockRange.end);
+        const after = markdown.slice(blockRange.end);
+
+        return (
+          <>
+            <span>{sanitizePreviewText(before)}</span>
+            <span ref={highlightRef} className="inline-block rounded-md border-2 border-foreground/50 px-1.5 py-1 text-foreground">
+              {sanitizePreviewText(highlighted)}
+            </span>
+            <span>{sanitizePreviewText(after)}</span>
+          </>
+        );
+      }
+    }
+
+    return <span>{sanitizePreviewText(markdown)}</span>;
   };
 
   return (
@@ -258,51 +326,34 @@ export function PreviewDialog({
               </>
             )}
           </DialogTitle>
-          <DialogDescription className="flex items-center gap-3">
-            {isSource && effectivePageNumber != null && (
-              <span className="flex items-center gap-1">
-                <Hash className="h-3.5 w-3.5" />
-                Page {effectivePageNumber}
-              </span>
-            )}
-            {isSource && source?.score != null && (
-              <Badge variant="secondary" className="text-xs tabular-nums">
-                {Math.round(source.score * 100)}% Match
-              </Badge>
-            )}
-            {isUpload && effectivePageNumber != null && (
-              <span className="flex items-center gap-1">
-                <Hash className="h-3.5 w-3.5" />
-                Page {effectivePageNumber}
-              </span>
-            )}
-            {!isSource && !isUpload && <>Page {effectivePageNumber ?? "?"}</>}
+          <DialogDescription className="space-y-2">
+            <div className="flex items-center gap-3">
+              {isSource && effectivePageNumber != null && (
+                <span className="flex items-center gap-1">
+                  <Hash className="h-3.5 w-3.5" />
+                  Page {effectivePageNumber}
+                </span>
+              )}
+              {isSource && source?.score != null && (
+                <Badge variant="secondary" className="text-xs tabular-nums">
+                  {Math.round(source.score * 100)}% Match
+                </Badge>
+              )}
+              {isUpload && effectivePageNumber != null && (
+                <span className="flex items-center gap-1">
+                  <Hash className="h-3.5 w-3.5" />
+                  Page {effectivePageNumber}
+                </span>
+              )}
+              {!isSource && !isUpload && <>Page {effectivePageNumber ?? "?"}</>}
+            </div>
+            {isNote && note?.content && <p className="text-sm text-foreground/80 whitespace-pre-wrap">{note.content}</p>}
           </DialogDescription>
         </DialogHeader>
         {isSource && source?.text && (
           <div className="shrink-0 mb-2">
             <div className="p-3 rounded-lg bg-yellow-100 dark:bg-yellow-900/30">
               <p className="text-sm font-medium italic">"{source.text.length > 300 ? source.text.slice(0, 300) + "\u2026" : source.text}"</p>
-            </div>
-          </div>
-        )}
-        {isHighlight && highlight && (
-          <div className="shrink-0 mb-2">
-            <div className={cn("p-3 rounded-lg", HIGHLIGHT_PREVIEW_CLASSES[highlight.color || HighlightsColorOptions.yellow])}>
-              <p className="text-sm font-medium">"{highlight.text}"</p>
-            </div>
-            {highlight.comment && (
-              <div className="flex items-start gap-2 mt-3 p-3 bg-muted/50 rounded-lg">
-                <StickyNote className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">{highlight.comment}</p>
-              </div>
-            )}
-          </div>
-        )}
-        {isNote && note && (
-          <div className="shrink-0 mb-2">
-            <div className="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-              <p className="text-sm text-foreground whitespace-pre-wrap">{note.content}</p>
             </div>
           </div>
         )}

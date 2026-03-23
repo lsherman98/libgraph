@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useHighlights, useBookmarks, useNotes, usePages } from "@/lib/api/queries";
-import { useDeleteNote } from "@/lib/api/mutations";
+import { useDeleteBookmark, useDeleteNote } from "@/lib/api/mutations";
+import { useQueries } from "@tanstack/react-query";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Highlighter, BookMarked, Pencil } from "lucide-react";
 import { HighlightsColorOptions, type HighlightsRecord, type BookmarksRecord, type NotesRecord } from "@/lib/pocketbase-types";
@@ -10,10 +11,32 @@ import { AnnotationHighlightItem } from "./annotation-highlight-item";
 import { AnnotationBookmarkItem } from "./annotation-bookmark-item";
 import { AnnotationNoteItem } from "./annotation-note-item";
 import { groupByPage } from "@/lib/utils/group-by-page";
+import { getPageUrl } from "@/lib/api/api";
+import { queryKeys } from "@/lib/api/queryKeys";
 
 interface AnnotationsPanelProps {
   activeTab?: "highlights" | "bookmarks" | "notes";
   onNavigateToPage?: (pageNumber: number, blockId?: string) => void;
+}
+
+function extractBlockPreview(markdown: string, blockId: string): string {
+  const match = blockId.match(/-L(\d+)$/);
+  const lineNumber = match ? Number.parseInt(match[1], 10) : NaN;
+  if (!Number.isFinite(lineNumber) || lineNumber <= 0) return "";
+
+  const lines = markdown.split(/\r?\n/);
+  const sourceLine = lines[lineNumber - 1]?.trim() || "";
+  if (!sourceLine) return "";
+
+  const normalized = sourceLine
+    .replace(/^#{1,6}\s+/, "")
+    .replace(/^[-*+]\s+/, "")
+    .replace(/^\d+\.\s+/, "")
+    .replace(/^>\s+/, "")
+    .trim();
+
+  if (normalized.length <= 160) return normalized;
+  return `${normalized.slice(0, 157).trimEnd()}...`;
 }
 
 export function AnnotationsPanel({ activeTab = "highlights", onNavigateToPage: propNavigateToPage }: AnnotationsPanelProps) {
@@ -88,37 +111,53 @@ export function AnnotationsPanel({ activeTab = "highlights", onNavigateToPage: p
     });
   };
 
-  const handleBookmarkEdit = (bookmark: BookmarksRecord) => {
-    setEditorState({
-      mode: "editing-bookmark",
-      data: {
-        id: bookmark.id,
-        blockId: bookmark.block_id || "",
-        previewText: "",
-        comment: bookmark.comment || undefined,
-        tags: bookmark.tags || undefined,
-        pageId: bookmark.page || "",
-        pageNumber: bookmark.page_number || 0,
-      },
-    });
-  };
-
-  const handleNoteEdit = (note: NotesRecord) => {
-    setEditorState({
-      mode: "editing-note",
-      data: {
-        id: note.id,
-        blockId: note.block_id || "",
-        previewText: undefined,
-        content: note.content || undefined,
-        tags: note.tags || undefined,
-        pageId: note.page || "",
-        pageNumber: note.page_number || 0,
-      },
-    });
-  };
-
   const deleteNoteMutation = useDeleteNote();
+  const deleteBookmarkMutation = useDeleteBookmark();
+
+  const bookmarkPageIds = useMemo(() => {
+    const ids = new Set<string>();
+    (allBookmarks ?? []).forEach((bookmark) => {
+      if (bookmark.page) {
+        ids.add(bookmark.page);
+      }
+    });
+    return Array.from(ids);
+  }, [allBookmarks]);
+
+  const bookmarkPageMarkdownQueries = useQueries({
+    queries: bookmarkPageIds.map((pageId) => ({
+      queryKey: queryKeys.pages.markdown(pageId),
+      queryFn: async () => {
+        const url = await getPageUrl(pageId);
+        if (!url) return null;
+        const response = await fetch(url);
+        return await response.text();
+      },
+      staleTime: 10 * 60 * 1000,
+    })),
+  });
+
+  const bookmarkPreviewById = useMemo(() => {
+    const markdownByPageId = new Map<string, string>();
+    bookmarkPageIds.forEach((pageId, index) => {
+      const markdown = bookmarkPageMarkdownQueries[index]?.data;
+      if (typeof markdown === "string" && markdown.length > 0) {
+        markdownByPageId.set(pageId, markdown);
+      }
+    });
+
+    const previewMap = new Map<string, string>();
+    (allBookmarks ?? []).forEach((bookmark) => {
+      const markdown = bookmark.page ? markdownByPageId.get(bookmark.page) : undefined;
+      if (!markdown || !bookmark.block_id) {
+        previewMap.set(bookmark.id, "");
+        return;
+      }
+      previewMap.set(bookmark.id, extractBlockPreview(markdown, bookmark.block_id));
+    });
+
+    return previewMap;
+  }, [allBookmarks, bookmarkPageIds, bookmarkPageMarkdownQueries]);
 
   const handleNavigate = () => {
     if (!previewItem) return;
@@ -163,7 +202,7 @@ export function AnnotationsPanel({ activeTab = "highlights", onNavigateToPage: p
               ) : (
                 groupedHighlights.map(({ pageNumber, items }) => (
                   <div key={pageNumber} className="space-y-1">
-                    <div className="text-xs font-semibold text-muted-foreground sticky top-0 bg-background/95 backdrop-blur py-1 z-10 px-1">
+                    <div className="text-xs font-semibold text-muted-foreground sticky top-0 py-1 z-10 px-1">
                       {pageNumber === 0 ? "Unknown Page" : `Page ${pageNumber}`}
                     </div>
                     {items.map((highlight) => (
@@ -195,15 +234,16 @@ export function AnnotationsPanel({ activeTab = "highlights", onNavigateToPage: p
               ) : (
                 groupedBookmarks.map(({ pageNumber, items }) => (
                   <div key={pageNumber} className="space-y-1">
-                    <div className="text-xs font-semibold text-muted-foreground sticky top-0 bg-background/95 backdrop-blur py-1 z-10 px-1">
+                    <div className="text-xs font-semibold text-muted-foreground sticky top-0 py-1 z-10 px-1">
                       {pageNumber === 0 ? "Unknown Page" : `Page ${pageNumber}`}
                     </div>
                     {items.map((bookmark) => (
                       <AnnotationBookmarkItem
                         key={bookmark.id}
                         bookmark={bookmark}
+                        previewText={bookmarkPreviewById.get(bookmark.id)}
                         onClick={() => handleBookmarkClick(bookmark)}
-                        onEdit={() => handleBookmarkEdit(bookmark)}
+                        onDelete={() => deleteBookmarkMutation.mutate(bookmark.id)}
                       />
                     ))}
                   </div>
@@ -226,7 +266,7 @@ export function AnnotationsPanel({ activeTab = "highlights", onNavigateToPage: p
               ) : (
                 groupedNotes.map(({ pageNumber, items }) => (
                   <div key={pageNumber} className="space-y-1">
-                    <div className="text-xs font-semibold text-muted-foreground sticky top-0 bg-background/95 backdrop-blur py-1 z-10 px-1">
+                    <div className="text-xs font-semibold text-muted-foreground sticky top-0 py-1 z-10 px-1">
                       {pageNumber === 0 ? "Unknown Page" : `Page ${pageNumber}`}
                     </div>
                     {items.map((note) => (
@@ -235,7 +275,6 @@ export function AnnotationsPanel({ activeTab = "highlights", onNavigateToPage: p
                         note={note}
                         onDelete={() => deleteNoteMutation.mutate(note.id)}
                         onClick={() => handleNoteClick(note)}
-                        onEdit={() => handleNoteEdit(note)}
                       />
                     ))}
                   </div>

@@ -275,7 +275,6 @@ export function useChatContexts(chatId?: string) {
     return useQuery({
         queryKey: queryKeys.chatContexts.byChat(chatId),
         queryFn: chatId ? () => getChatContexts(chatId) : skipToken,
-        placeholderData: keepPreviousData,
     });
 }
 

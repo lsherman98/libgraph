@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { MessageSquare, Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HighlightsColorOptions } from "@/lib/pocketbase-types";
 import { HIGHLIGHT_COLORS } from "@/lib/constants/highlight-colors";
@@ -55,8 +55,8 @@ export function ExistingHighlightPopover({ color, note, position, onUpdateColor,
               />
             ))}
             <div className="w-px h-4 bg-border mx-0.5" />
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onOpenEditor} title={note ? "Edit note & tags" : "Add note & tags"}>
-              <MessageSquare className="h-3.5 w-3.5" />
+            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onOpenEditor} title={note ? "Edit highlight" : "Edit highlight"}>
+              <Pencil className="h-3.5 w-3.5" />
             </Button>
             <Button
               variant="ghost"
@@ -74,7 +74,7 @@ export function ExistingHighlightPopover({ color, note, position, onUpdateColor,
               onClick={onOpenEditor}
               title={note}
             >
-              <MessageSquare className="h-3 w-3 inline-block mr-1 -mt-0.5" />
+              <Pencil className="h-3 w-3 inline-block mr-1 -mt-0.5" />
               {note}
             </div>
           )}

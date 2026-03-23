@@ -67,16 +67,42 @@ export function findTextOffset(
     selectedText: string,
     approximatePosition?: number
 ): { start: number; end: number } | null {
-    if (!selectedText || !markdown) return null;
+    if (!selectedText || !markdown) {
+        return null;
+    }
 
     const normalizedSelected = selectedText.trim();
 
-    let index = markdown.indexOf(normalizedSelected);
+    const findBestMatchIndex = (haystack: string, needle: string): number => {
+        if (!needle) return -1;
+
+        let bestIndex = -1;
+        let currentIndex = haystack.indexOf(needle);
+        let bestDistance = Number.POSITIVE_INFINITY;
+
+        while (currentIndex !== -1) {
+            if (approximatePosition === undefined) {
+                return currentIndex;
+            }
+
+            const distance = Math.abs(currentIndex - approximatePosition);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestIndex = currentIndex;
+            }
+
+            currentIndex = haystack.indexOf(needle, currentIndex + 1);
+        }
+
+        return bestIndex;
+    };
+
+    let index = findBestMatchIndex(markdown, normalizedSelected);
 
     if (index === -1) {
         const normalizedMarkdown = markdown.replace(/\s+/g, " ");
         const normalizedSearch = normalizedSelected.replace(/\s+/g, " ");
-        index = normalizedMarkdown.indexOf(normalizedSearch);
+        index = findBestMatchIndex(normalizedMarkdown, normalizedSearch);
 
         if (index !== -1) {
             let originalIndex = 0;
@@ -110,7 +136,9 @@ export function findTextOffset(
         }
     }
 
-    if (index === -1) return null;
+    if (index === -1) {
+        return null;
+    }
 
     return {
         start: index,

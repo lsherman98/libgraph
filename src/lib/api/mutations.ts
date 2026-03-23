@@ -129,7 +129,32 @@ export function useUpdateHighlight() {
     return useMutation({
         mutationFn: ({ id, data }: { id: string; data: Update<Collections.Highlights> }) =>
             updateHighlight(id, data),
-        onError: handleError,
+        onMutate: async ({ id, data }) => {
+            await queryClient.cancelQueries({ queryKey: queryKeys.highlights.all });
+            const previousHighlightQueries = queryClient.getQueriesData<HighlightsRecord[]>({
+                queryKey: queryKeys.highlights.all,
+            });
+
+            queryClient.setQueriesData<HighlightsRecord[]>({ queryKey: queryKeys.highlights.all }, (old) => {
+                if (!old) {
+                    return old;
+                }
+
+                return old.map((highlight) =>
+                    highlight.id === id ? { ...highlight, ...data } : highlight,
+                );
+            });
+
+            return { previousHighlightQueries };
+        },
+        onError: (error, _variables, context) => {
+            if (context?.previousHighlightQueries) {
+                context.previousHighlightQueries.forEach(([queryKey, previousData]) => {
+                    queryClient.setQueryData(queryKey, previousData);
+                });
+            }
+            handleError(error);
+        },
         onSuccess: (updatedHighlight) => {
             queryClient.invalidateQueries({ queryKey: queryKeys.highlights.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
@@ -551,6 +576,11 @@ interface SendSidebarMessageOptions {
     setInput: (value: string) => void;
 }
 
+interface SendSidebarMessagePayload {
+    message: string;
+    chatId?: string;
+}
+
 export function useSendSidebarMessage({
     activeChatId,
     setActiveChatId,
@@ -559,14 +589,16 @@ export function useSendSidebarMessage({
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async (message: string) => {
-            return sendSidebarChatMessage(message, activeChatId);
+        mutationFn: async ({ message, chatId }: SendSidebarMessagePayload) => {
+            return sendSidebarChatMessage(message, chatId ?? activeChatId);
         },
-        onMutate: async (message) => {
+        onMutate: async ({ message, chatId }) => {
             setInput("");
 
-            if (activeChatId) {
-                const messagesKey = queryKeys.messages.byChat(activeChatId);
+            const effectiveChatId = chatId ?? activeChatId;
+
+            if (effectiveChatId) {
+                const messagesKey = queryKeys.messages.byChat(effectiveChatId);
                 await queryClient.cancelQueries({ queryKey: messagesKey });
                 const previousMessages = queryClient.getQueryData(messagesKey);
                 queryClient.setQueryData(messagesKey, (old: any[] | null) => [
@@ -586,13 +618,13 @@ export function useSendSidebarMessage({
                     },
                 ]);
 
-                return { previousMessages, chatId: activeChatId };
+                return { previousMessages, chatId: effectiveChatId };
             }
 
             return { previousMessages: null, chatId: null };
         },
-        onSuccess: (data) => {
-            if (!activeChatId) {
+        onSuccess: (data, { chatId }) => {
+            if (!(chatId ?? activeChatId)) {
                 setActiveChatId(data.chat_id);
             }
 

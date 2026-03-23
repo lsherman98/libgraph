@@ -127,16 +127,17 @@ export function WorkspaceTabBar({ onSave, className }: WorkspaceTabBarProps) {
             <TooltipContent>Save (⌘S)</TooltipContent>
           </Tooltip>
         )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant={splitMode === "horizontal" ? "secondary" : "ghost"} size="icon" className="h-8 w-8" onClick={handleSplitToggle}>
-              {splitMode === "horizontal" ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{splitMode === "horizontal" ? "Close split view" : "Split view"}</TooltipContent>
-        </Tooltip>
-        <Separator orientation="vertical" className="h-4" />
-        <SidebarTrigger side="right" className="-mr-1" />
+        <div className="flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant={splitMode === "horizontal" ? "secondary" : "ghost"} size="icon" className="h-8 w-8" onClick={handleSplitToggle}>
+                {splitMode === "horizontal" ? <Columns2 className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{splitMode === "horizontal" ? "Close split view" : "Split view"}</TooltipContent>
+          </Tooltip>
+          <SidebarTrigger side="right" className="-mr-1" />
+        </div>
       </div>
       <Dialog open={splitPromptOpen} onOpenChange={setSplitPromptOpen}>
         <DialogContent className="sm:max-w-md">

@@ -77,7 +77,7 @@ interface ReaderStore {
 }
 
 export const useReaderStore = create<ReaderStore>((set) => ({
-    annotationTab: "highlights",
+    annotationTab: "ai",
     setAnnotationTab: (tab) => set({ annotationTab: tab }),
     currentUploadId: null,
     setCurrentUploadId: (uploadId) => set({ currentUploadId: uploadId }),

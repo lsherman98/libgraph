@@ -22,7 +22,7 @@ export function HighlightMark({ highlightId, className, note, tags: highlightTag
       <TooltipProvider>
         <Tooltip delayDuration={300}>
           <TooltipTrigger asChild>
-            <mark className={cn("cursor-pointer rounded-sm px-0.5", className)} data-highlight-id={highlightId} onClick={onClick}>
+            <mark className={cn("cursor-pointer rounded-sm", className)} data-highlight-id={highlightId} onClick={onClick}>
               {children}
             </mark>
           </TooltipTrigger>
@@ -54,7 +54,7 @@ export function HighlightMark({ highlightId, className, note, tags: highlightTag
   }
 
   return (
-    <mark className={cn("cursor-pointer rounded-sm px-0.5", className)} data-highlight-id={highlightId} onClick={onClick}>
+    <mark className={cn("cursor-pointer rounded-sm", className)} data-highlight-id={highlightId} onClick={onClick}>
       {children}
     </mark>
   );
