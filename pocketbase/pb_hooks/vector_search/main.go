@@ -75,40 +75,6 @@ func Init(app *pocketbase.PocketBase) error {
 	return nil
 }
 
-func getEmbeddingStats(app *pocketbase.PocketBase) map[string]any {
-	stats := map[string]any{}
-
-	var embResult dbx.NullStringMap
-	if err := app.DB().NewQuery(fmt.Sprintf("SELECT COUNT(*) as cnt FROM %s", embeddingsTable)).One(&embResult); err != nil {
-		stats["embeddings_count_error"] = err.Error()
-	} else if v, err := embResult["cnt"].Value(); err == nil && v != nil {
-		stats["embeddings_count"] = fmt.Sprint(v)
-	}
-
-	var totalResult dbx.NullStringMap
-	if err := app.DB().NewQuery("SELECT COUNT(*) as cnt FROM document_chunks").One(&totalResult); err != nil {
-		stats["total_chunks_error"] = err.Error()
-	} else if v, err := totalResult["cnt"].Value(); err == nil && v != nil {
-		stats["total_chunks"] = fmt.Sprint(v)
-	}
-
-	var linkedResult dbx.NullStringMap
-	if err := app.DB().NewQuery("SELECT COUNT(*) as cnt FROM document_chunks WHERE vector_id IS NOT NULL AND vector_id != 0").One(&linkedResult); err != nil {
-		stats["linked_chunks_error"] = err.Error()
-	} else if v, err := linkedResult["cnt"].Value(); err == nil && v != nil {
-		stats["chunks_with_embeddings"] = fmt.Sprint(v)
-	}
-
-	var missingResult dbx.NullStringMap
-	if err := app.DB().NewQuery("SELECT COUNT(*) as cnt FROM document_chunks WHERE vector_id = 0 OR vector_id IS NULL").One(&missingResult); err != nil {
-		stats["missing_chunks_error"] = err.Error()
-	} else if v, err := missingResult["cnt"].Value(); err == nil && v != nil {
-		stats["chunks_missing_embeddings"] = fmt.Sprint(v)
-	}
-
-	return stats
-}
-
 func Search(app *pocketbase.PocketBase, query string, uploadIDs []string, k int) ([]SearchResult, error) {
 	if query == "" {
 		return nil, fmt.Errorf("vector_search: query cannot be empty")
@@ -152,8 +118,9 @@ func Search(app *pocketbase.PocketBase, query string, uploadIDs []string, k int)
 		stmt.WriteString("AND dc.upload IN (" + strings.Join(placeholders, ", ") + ") ")
 		stmt.WriteString(fmt.Sprintf("ORDER BY distance ASC LIMIT %d;", k))
 	} else {
-		fmt.Fprintf(&stmt, "SELECT dc.id, sub.distance, dc.content, dc.upload, dc.page_number, dc.chunk_index, u.title FROM (SELECT id, distance FROM %s WHERE embedding MATCH {:embedding} AND k = %d) sub ",
-			embeddingsTable, k)
+		fmt.Fprintf(&stmt, "WITH sub(id, distance) AS MATERIALIZED (SELECT id, distance FROM %s WHERE embedding MATCH {:embedding} AND k = %d) ", embeddingsTable, k)
+		stmt.WriteString("SELECT dc.id, sub.distance, dc.content, dc.upload, dc.page_number, dc.chunk_index, u.title ")
+		stmt.WriteString("FROM sub ")
 		stmt.WriteString("JOIN document_chunks dc ON dc.vector_id = sub.id ")
 		stmt.WriteString("JOIN uploads u ON dc.upload = u.id ")
 		stmt.WriteString("ORDER BY sub.distance ASC;")
@@ -210,8 +177,15 @@ func ensureEmbeddingsTable(app *pocketbase.PocketBase) error {
 		"CREATE VIRTUAL TABLE IF NOT EXISTS %s USING vec0(id INTEGER PRIMARY KEY AUTOINCREMENT, embedding float[%d]);",
 		embeddingsTable, embeddingDims,
 	)
-	_, err := app.DB().NewQuery(stmt).Execute()
-	return err
+	if _, err := app.DB().NewQuery(stmt).Execute(); err != nil {
+		return err
+	}
+
+	if _, err := app.DB().NewQuery("CREATE INDEX IF NOT EXISTS idx_document_chunks_vector_id ON document_chunks(vector_id);").Execute(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func deleteEmbeddingForRecord(app *pocketbase.PocketBase, record *core.Record) error {

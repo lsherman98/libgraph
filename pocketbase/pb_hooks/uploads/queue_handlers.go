@@ -92,26 +92,9 @@ func handleUploadParseOrTranscribeJob(app *pocketbase.PocketBase, job *core.Reco
 		}
 	}
 
-	if err := enqueueSummarizeJobsForUpload(app, upload, pages); err != nil {
-		return err
-	}
-
 	upload.Set("num_pages", len(pages))
 	upload.Set("status", vars.UploadStatusProcessing)
 	return app.Save(upload)
-}
-
-func enqueueSummarizeJobsForUpload(app *pocketbase.PocketBase, upload *core.Record, pages []*core.Record) error {
-	if strings.EqualFold(upload.GetString("type"), vars.UploadTypeSummary) || len(pages) == 0 {
-		return nil
-	}
-
-	if strings.EqualFold(upload.GetString("type"), vars.UploadTypeBook) {
-		return nil
-	}
-
-	anchorPage := pages[0]
-	return enqueuePageSummarizeForPage(app, upload, anchorPage, true)
 }
 
 func parseAudioUploadIntoPages(app *pocketbase.PocketBase, upload *core.Record) ([]*core.Record, error) {
@@ -272,47 +255,6 @@ func enqueueChunkGenerateForPage(app *pocketbase.PocketBase, upload *core.Record
 		UserID:   upload.GetString("user"),
 		UploadID: upload.Id,
 		PageID:   page.Id,
-	})
-}
-
-func enqueuePageSummarizeForPage(app *pocketbase.PocketBase, upload *core.Record, page *core.Record, fullDocument bool) error {
-	if upload.GetString("type") == vars.UploadTypeSummary {
-		return nil
-	}
-
-	userID := strings.TrimSpace(page.GetString("user"))
-	if userID == "" {
-		userID = strings.TrimSpace(upload.GetString("user"))
-	}
-	if userID == "" {
-		return fmt.Errorf("upload/page user is required for page summary enqueue")
-	}
-
-	if page.Id == "" {
-		return fmt.Errorf("page id is required for page summary enqueue")
-	}
-
-	dedupeKey := fmt.Sprintf("page.summarize:%s:%s", userID, page.Id)
-	if fullDocument {
-		dedupeKey = fmt.Sprintf("upload.summarize.full:%s:%s", userID, upload.Id)
-	}
-
-	payload := map[string]any{
-		"page_id": page.Id,
-		"user_id": userID,
-	}
-	if fullDocument {
-		payload["full_document"] = true
-		payload["upload_id"] = upload.Id
-	}
-
-	return processing.Enqueue(app, processing.EnqueueRequest{
-		JobType:   processing.JobTypePageSummarize,
-		DedupeKey: dedupeKey,
-		Payload:   payload,
-		UserID:    userID,
-		UploadID:  upload.Id,
-		PageID:    page.Id,
 	})
 }
 

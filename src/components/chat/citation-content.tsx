@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { FileText } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { SharedMarkdownRenderer, sharedMarkdownComponents } from "@/components/ui/markdown-renderer";
 import type { ChatSource } from "@/lib/types";
 
 interface CitationContentProps {
@@ -20,41 +21,21 @@ export function CitationContent({ content, sources, citationMap, onSourceClick }
     return m;
   }, [sources]);
 
-  const parts = useMemo(() => {
-    const result: { type: "text" | "citation"; value: string }[] = [];
-    const regex = /\[citation:([a-z0-9]+)\]/g;
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-    while ((match = regex.exec(content)) !== null) {
-      if (match.index > lastIndex) {
-        result.push({ type: "text", value: content.slice(lastIndex, match.index) });
-      }
-      result.push({ type: "citation", value: match[1] });
-      lastIndex = regex.lastIndex;
-    }
-    if (lastIndex < content.length) {
-      result.push({ type: "text", value: content.slice(lastIndex) });
-    }
-    return result;
+  const contentWithCitationTags = useMemo(() => {
+    return content.replace(/\[citation:([a-z0-9]+)\]/g, '<citation data-node-id="$1" />');
   }, [content]);
 
-  return (
-    <span>
-      {parts.map((part, i) => {
-        if (part.type === "text") {
-          return (
-            <span key={i} className="whitespace-pre-wrap">
-              {part.value}
-            </span>
-          );
-        }
-
-        const num = citationMap.get(part.value);
-        const source = sourceByNodeId.get(part.value);
+  const markdownComponents = useMemo(
+    () => ({
+      ...sharedMarkdownComponents,
+      citation: (props: any) => {
+        const nodeId = props["data-node-id"];
+        const num = citationMap.get(nodeId);
+        const source = sourceByNodeId.get(nodeId);
         if (!num) return null;
 
         return (
-          <Popover key={i}>
+          <Popover>
             <TooltipProvider delayDuration={300}>
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -100,7 +81,10 @@ export function CitationContent({ content, sources, citationMap, onSourceClick }
             </PopoverContent>
           </Popover>
         );
-      })}
-    </span>
+      },
+    }),
+    [citationMap, sourceByNodeId, onSourceClick],
   );
+
+  return <SharedMarkdownRenderer content={contentWithCitationTags} components={markdownComponents as any} />;
 }

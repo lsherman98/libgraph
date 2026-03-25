@@ -46,11 +46,11 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
   const createTagMutation = useCreateTag();
   const createTopicMutation = useCreateTopic();
 
-  const peopleQuery = usePeople();
-  const publicationsQuery = usePublications();
-  const tagsQuery = useTags();
-  const topicsQuery = useTopics();
-  const uploadsQuery = useUploads();
+  const peopleQuery = usePeople({ enabled: isEditing });
+  const publicationsQuery = usePublications({ enabled: isEditing });
+  const tagsQuery = useTags({ enabled: isEditing });
+  const topicsQuery = useTopics({ enabled: isEditing });
+  const uploadsQuery = useUploads(undefined, { enabled: isEditing });
 
   useEffect(() => {
     if (upload) {
@@ -106,11 +106,24 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
 
   if (!upload) return null;
 
-  const getPersonName = (id: string) => peopleQuery.data?.find((p: PeopleResponse) => p.id === id)?.name || "Unknown";
-  const getPublicationName = (id: string) => publicationsQuery.data?.find((p: PublicationsResponse) => p.id === id)?.name || "Unknown";
-  const getTagTitle = (id: string) => tagsQuery.data?.find((t: TagsResponse) => t.id === id)?.title || id;
-  const getTopicTitle = (id: string) => topicsQuery.data?.find((t: TopicsResponse) => t.id === id)?.title || id;
-  const getUploadTitle = (id: string) => uploadsQuery.data?.find((u: UploadsResponse) => u.id === id)?.title || "Untitled";
+  const expandedPeople = ((upload as any).expand?.people || []) as PeopleResponse[];
+  const expandedPublication = (upload as any).expand?.publication as PublicationsResponse | undefined;
+  const expandedTags = ((upload as any).expand?.tags || []) as TagsResponse[];
+  const expandedTopics = ((upload as any).expand?.topic || []) as TopicsResponse[];
+  const expandedRelatedUploads = ((upload as any).expand?.uploads || []) as UploadsResponse[];
+
+  const getPersonName = (id: string) =>
+    expandedPeople.find((p) => p.id === id)?.name || peopleQuery.data?.find((p: PeopleResponse) => p.id === id)?.name || "Unknown";
+  const getPublicationName = (id: string) =>
+    (expandedPublication?.id === id ? expandedPublication.name : undefined) ||
+    publicationsQuery.data?.find((p: PublicationsResponse) => p.id === id)?.name ||
+    "Unknown";
+  const getTagTitle = (id: string) =>
+    expandedTags.find((t) => t.id === id)?.title || tagsQuery.data?.find((t: TagsResponse) => t.id === id)?.title || id;
+  const getTopicTitle = (id: string) =>
+    expandedTopics.find((t) => t.id === id)?.title || topicsQuery.data?.find((t: TopicsResponse) => t.id === id)?.title || id;
+  const getUploadTitle = (id: string) =>
+    expandedRelatedUploads.find((u) => u.id === id)?.title || uploadsQuery.data?.find((u: UploadsResponse) => u.id === id)?.title || "Untitled";
 
   const authorOptions = (peopleQuery.data || [])
     .filter((p: PeopleResponse) => !p.type || p.type === PeopleTypeOptions.author)

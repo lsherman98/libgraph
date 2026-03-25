@@ -3,8 +3,7 @@ import { HighlightsColorOptions } from "@/lib/pocketbase-types";
 import { useSidebar } from "@/components/ui/sidebar";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import { useReaderStore } from "@/lib/stores/reader-store";
-import Markdown from "react-markdown";
-import rehypeRaw from "rehype-raw";
+import { SharedMarkdownRenderer, sharedMarkdownComponents } from "@/components/ui/markdown-renderer";
 import { HighlightPopover, ExistingHighlightPopover, HighlightMark } from "@/components/reader/highlight-popover";
 import { HighlightEditorPopover } from "@/components/reader/highlight-editor-popover";
 import { BlockActions } from "@/components/reader/bookmark-button";
@@ -196,6 +195,24 @@ export function MarkdownContent({
     [activeHighlight, onUpdateHighlight],
   );
 
+  const handleHighlightMarkClick = useCallback(
+    (highlightId: string | undefined, element: HTMLElement) => {
+      if (!highlightId) return;
+
+      const highlight = highlights.find((h) => h.id === highlightId);
+      if (!highlight) return;
+
+      setActiveHighlight({
+        element,
+        highlight,
+      });
+      setSelection(null);
+      setTempHighlight(null);
+      window.getSelection()?.removeAllRanges();
+    },
+    [highlights],
+  );
+
   const activeHighlightData = useMemo(() => {
     if (!activeHighlight) return null;
 
@@ -259,6 +276,29 @@ export function MarkdownContent({
     }
   }, [isHighlightEditorOpen]);
 
+  useEffect(() => {
+    if (!selection && !activeHighlight && !isHighlightEditorOpen) {
+      return;
+    }
+
+    const dismissFloatingUI = () => {
+      setSelection(null);
+      setActiveHighlight(null);
+      setHighlightEditorPosition(null);
+      if (isHighlightEditorOpen) {
+        setEditorState(null);
+      }
+    };
+
+    window.addEventListener("scroll", dismissFloatingUI, true);
+    window.addEventListener("resize", dismissFloatingUI);
+
+    return () => {
+      window.removeEventListener("scroll", dismissFloatingUI, true);
+      window.removeEventListener("resize", dismissFloatingUI);
+    };
+  }, [selection, activeHighlight, isHighlightEditorOpen, setEditorState]);
+
   const handleCloseHighlightEditor = useCallback(() => {
     setEditorState(null);
     setHighlightEditorPosition(null);
@@ -321,6 +361,7 @@ export function MarkdownContent({
     getBookmarkForBlock,
     hasNoteForBlock,
     getNoteForBlock,
+    handleHighlightMarkClick,
     pageId,
     pageNumber,
     highlights,
@@ -333,6 +374,7 @@ export function MarkdownContent({
     getBookmarkForBlock,
     hasNoteForBlock,
     getNoteForBlock,
+    handleHighlightMarkClick,
     pageId,
     pageNumber,
     highlights,
@@ -340,10 +382,9 @@ export function MarkdownContent({
     activeNote,
   };
 
-  const rehypePluginsList = useMemo(() => [rehypeRaw], []);
-
   const markdownComponents = useMemo(
     () => ({
+      ...sharedMarkdownComponents,
       h1: ({ node, children }: any) => {
         const d = renderDataRef.current;
         const blockId = d.getBlockId(node);
@@ -504,7 +545,15 @@ export function MarkdownContent({
         const className = props.className || props.class || "highlight-yellow";
         const highlight = d.highlights.find((h: any) => h.id === highlightId);
         return (
-          <HighlightMark highlightId={highlightId} className={className} note={highlight?.comment} tags={highlight?.tags}>
+          <HighlightMark
+            highlightId={highlightId}
+            className={className}
+            note={highlight?.comment}
+            tags={highlight?.tags}
+            onClick={(event) => {
+              d.handleHighlightMarkClick(highlightId, event.currentTarget as HTMLElement);
+            }}
+          >
             {children}
           </HighlightMark>
         );
@@ -555,9 +604,7 @@ export function MarkdownContent({
 
   return (
     <div className="reader-content relative" ref={contentRef} onMouseUp={handleMouseUp}>
-      <Markdown rehypePlugins={rehypePluginsList} components={markdownComponents}>
-        {processedContent}
-      </Markdown>
+      <SharedMarkdownRenderer content={processedContent} components={markdownComponents} />
       <Popover open={isHighlightEditorOpen && !!highlightEditorPosition} onOpenChange={(open) => !open && handleCloseHighlightEditor()}>
         {highlightEditorPosition && (
           <PopoverAnchor asChild>

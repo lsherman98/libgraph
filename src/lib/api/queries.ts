@@ -1,45 +1,62 @@
 import { keepPreviousData, useQuery, useInfiniteQuery, skipToken } from "@tanstack/react-query";
-import { getPeople, getPublications, getFirstPage, getPageByNumber, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection, fullTextSearch, getPreferences, getReadingProgress, getSummaryBySourcePage, getSummaryBySourceUpload, getSidebarChats, getChatContexts } from "./api";
+import { getPeople, getPublications, getFirstPage, getPageByNumber, getPage, getSummary, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection, fullTextSearch, getPreferences, getReadingProgress, getSidebarChats, getChatContexts } from "./api";
 import type { UploadFilters } from "./api";
-import type { NodesTypeOptions } from "../pocketbase-types";
+import type { MessagesResponse, NodesTypeOptions } from "../pocketbase-types";
 import { queryKeys } from "./queryKeys";
 
-export function usePeople() {
+const CHAT_MESSAGE_POLL_INTERVAL_MS = 800;
+const CHAT_MESSAGE_POLL_TIMEOUT_MS = 90000;
+
+interface QueryEnableOptions {
+    enabled?: boolean;
+}
+
+export function usePeople(options?: QueryEnableOptions) {
+    const enabled = options?.enabled ?? true;
+
     return useQuery({
         queryKey: queryKeys.people.all,
-        queryFn: getPeople,
+        queryFn: enabled ? getPeople : skipToken,
         placeholderData: keepPreviousData,
     });
 }
 
-export function usePublications() {
+export function usePublications(options?: QueryEnableOptions) {
+    const enabled = options?.enabled ?? true;
+
     return useQuery({
         queryKey: queryKeys.publications.all,
-        queryFn: getPublications,
+        queryFn: enabled ? getPublications : skipToken,
         placeholderData: keepPreviousData,
     });
 }
 
-export function useTags() {
+export function useTags(options?: QueryEnableOptions) {
+    const enabled = options?.enabled ?? true;
+
     return useQuery({
         queryKey: queryKeys.tags.all,
-        queryFn: getTags,
+        queryFn: enabled ? getTags : skipToken,
         placeholderData: keepPreviousData,
     });
 }
 
-export function useTopics() {
+export function useTopics(options?: QueryEnableOptions) {
+    const enabled = options?.enabled ?? true;
+
     return useQuery({
         queryKey: queryKeys.topics.all,
-        queryFn: getTopics,
+        queryFn: enabled ? getTopics : skipToken,
         placeholderData: keepPreviousData,
     });
 }
 
-export function useUploads(filters?: UploadFilters) {
+export function useUploads(filters?: UploadFilters, options?: QueryEnableOptions) {
+    const enabled = options?.enabled ?? true;
+
     return useQuery({
         queryKey: queryKeys.uploads.list(filters),
-        queryFn: () => getUploads(filters),
+        queryFn: enabled ? () => getUploads(filters) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
@@ -68,6 +85,30 @@ export function usePageByNumber(uploadId?: string, pageNumber?: number) {
     });
 }
 
+export function usePage(pageId?: string, options?: { pollUntilSummary?: boolean }) {
+    return useQuery({
+        queryKey: queryKeys.pages.detail(pageId),
+        queryFn: pageId ? () => getPage(pageId) : skipToken,
+        refetchInterval: (query) => {
+            if (!options?.pollUntilSummary) return false;
+            const page = query.state.data as { summary?: string | null } | undefined;
+            return page?.summary ? false : 2000;
+        },
+    });
+}
+
+export function useSummary(summaryId?: string, options?: { pollUntilUpload?: boolean }) {
+    return useQuery({
+        queryKey: queryKeys.summaries.detail(summaryId),
+        queryFn: summaryId ? () => getSummary(summaryId) : skipToken,
+        refetchInterval: (query) => {
+            if (!options?.pollUntilUpload) return false;
+            const summary = query.state.data as { summary_upload?: string | null } | undefined;
+            return summary?.summary_upload ? false : 2000;
+        },
+    });
+}
+
 export function usePageMarkdown(pageId?: string) {
     return useQuery({
         queryKey: queryKeys.pages.markdown(pageId),
@@ -87,30 +128,6 @@ export function usePages(uploadId?: string, page: number = 1, perPage: number = 
     return useQuery({
         queryKey: queryKeys.pages.list(uploadId, page, perPage),
         queryFn: uploadId ? () => getPages(uploadId, page, perPage) : skipToken,
-        placeholderData: keepPreviousData,
-    });
-}
-
-export function useSummaryBySourcePage(pageId?: string, options?: { pollUntilFound?: boolean }) {
-    return useQuery({
-        queryKey: queryKeys.summaries.bySourcePage(pageId),
-        queryFn: pageId ? () => getSummaryBySourcePage(pageId) : skipToken,
-        refetchInterval: (query) => {
-            if (!options?.pollUntilFound) return false;
-            return query.state.data ? false : 2000;
-        },
-        placeholderData: keepPreviousData,
-    });
-}
-
-export function useSummaryBySourceUpload(uploadId?: string, options?: { pollUntilFound?: boolean }) {
-    return useQuery({
-        queryKey: queryKeys.summaries.bySourceUpload(uploadId),
-        queryFn: uploadId ? () => getSummaryBySourceUpload(uploadId) : skipToken,
-        refetchInterval: (query) => {
-            if (!options?.pollUntilFound) return false;
-            return query.state.data ? false : 2000;
-        },
         placeholderData: keepPreviousData,
     });
 }
@@ -199,10 +216,12 @@ export function useGraphData() {
     });
 }
 
-export function useWritingProjects() {
+export function useWritingProjects(options?: QueryEnableOptions) {
+    const enabled = options?.enabled ?? true;
+
     return useQuery({
         queryKey: queryKeys.writingProjects.list(),
-        queryFn: getWritingProjects,
+        queryFn: enabled ? getWritingProjects : skipToken,
         placeholderData: keepPreviousData,
     });
 }
@@ -223,10 +242,12 @@ export function useWorkspaceMaterials() {
     });
 }
 
-export function useCollections() {
+export function useCollections(options?: QueryEnableOptions) {
+    const enabled = options?.enabled ?? true;
+
     return useQuery({
         queryKey: queryKeys.collections.list(),
-        queryFn: getCollections,
+        queryFn: enabled ? getCollections : skipToken,
         placeholderData: keepPreviousData,
     });
 }
@@ -260,6 +281,21 @@ export function useMessages(chatId?: string) {
         queryKey: queryKeys.messages.byChat(chatId),
         queryFn: chatId ? () => getMessages(chatId) : skipToken,
         placeholderData: keepPreviousData,
+        refetchInterval: (query) => {
+            const messages = query.state.data as MessagesResponse[] | undefined;
+            if (!messages || messages.length === 0) return false;
+
+            const lastMessage = messages[messages.length - 1];
+            if (!lastMessage || lastMessage.role !== "user") return false;
+
+            const createdAt = Date.parse(lastMessage.created);
+            if (Number.isNaN(createdAt)) {
+                return CHAT_MESSAGE_POLL_INTERVAL_MS;
+            }
+
+            const elapsedMs = Date.now() - createdAt;
+            return elapsedMs < CHAT_MESSAGE_POLL_TIMEOUT_MS ? CHAT_MESSAGE_POLL_INTERVAL_MS : false;
+        },
     });
 }
 

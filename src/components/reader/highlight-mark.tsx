@@ -9,7 +9,7 @@ interface HighlightMarkProps {
   note?: string;
   tags?: string[];
   children: React.ReactNode;
-  onClick?: () => void;
+  onClick?: React.MouseEventHandler<HTMLElement>;
 }
 
 export function HighlightMark({ highlightId, className, note, tags: highlightTags = [], children, onClick }: HighlightMarkProps) {

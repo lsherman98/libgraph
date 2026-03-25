@@ -102,7 +102,6 @@ export function ReaderAiChatPanel() {
         role: m.role as "user" | "assistant",
         content: m.content || "",
         sources: m.sources || undefined,
-        isLoading: (m as any).isLoading,
       }));
     }
     return pendingMessages;
@@ -133,7 +132,7 @@ export function ReaderAiChatPanel() {
       }
 
       const existingContexts = [...activeChatContexts];
-      await Promise.all(existingContexts.map((ctx: ChatContextsResponse) => removeContext.mutateAsync(ctx.id)));
+      await Promise.all(existingContexts.map((ctx: ChatContextsResponse) => removeContext.mutateAsync({ id: ctx.id, chatId: ctx.chat })));
 
       await addContext.mutateAsync({
         chat: activeChatId,
@@ -252,7 +251,6 @@ export function ReaderAiChatPanel() {
     setActiveChatId(chatId);
     setPendingMessages([]);
     setInput("");
-    setShowChatList(false);
     setDraftContextSelections([]);
   };
 
@@ -274,6 +272,36 @@ export function ReaderAiChatPanel() {
   const handleSendMessage = async () => {
     if (!canSend) return;
     const message = input.trim();
+
+    const activePageContexts = activeChatContexts.filter((ctx: ChatContextsResponse) => !!ctx.page && !ctx.text && !ctx.page_from);
+    const activeRangeContexts = activeChatContexts.filter((ctx: ChatContextsResponse) => !!ctx.page_from && !!ctx.page_to);
+
+    console.info("[ReaderAI] handleSendMessage:start", {
+      activeChatId: activeChatId ?? null,
+      currentUploadId: currentUploadId ?? null,
+      currentPageId: currentPageId ?? null,
+      currentPageNumber: currentPageNumber ?? null,
+      isBookUpload,
+      draftContextCount: draftContextSelections.length,
+      activeContextCount: activeChatContexts.length,
+      activePageContextIds: activePageContexts.map((ctx) => ctx.page).filter(Boolean),
+      activeRangeContexts: activeRangeContexts.map((ctx) => ({ from: ctx.page_from, to: ctx.page_to, upload: ctx.upload })),
+      hasImplicitActiveContext,
+      hasImplicitDraftContext,
+    });
+
+    if (isBookUpload && currentPageId && activePageContexts.length === 1) {
+      const persistedPageId = activePageContexts[0].page;
+      if (persistedPageId && persistedPageId !== currentPageId) {
+        console.warn("[ReaderAI] page context mismatch before send", {
+          activeChatId: activeChatId ?? null,
+          persistedContextPageId: persistedPageId,
+          visibleCurrentPageId: currentPageId,
+          visibleCurrentPageNumber: currentPageNumber ?? null,
+          persistedContextUploadId: activePageContexts[0].upload,
+        });
+      }
+    }
 
     if (!activeChatId) {
       if (!currentUploadId) return;
@@ -302,8 +330,14 @@ export function ReaderAiChatPanel() {
         (ctx, idx, arr) => arr.findIndex((other) => getDraftContextKey(other) === getDraftContextKey(ctx)) === idx,
       );
 
+      console.info("[ReaderAI] create-chat context persistence plan", {
+        newChatId,
+        contextsToPersist: uniqueContexts,
+      });
+
       for (const draftContextSelection of uniqueContexts) {
         if (draftContextSelection.type === "text") {
+          console.info("[ReaderAI] addContext:text", { chatId: newChatId });
           await addContext.mutateAsync({
             chat: newChatId,
             text: draftContextSelection.text,
@@ -313,6 +347,12 @@ export function ReaderAiChatPanel() {
         }
 
         if (draftContextSelection.type === "page") {
+          console.info("[ReaderAI] addContext:page", {
+            chatId: newChatId,
+            uploadId: draftContextSelection.uploadId || currentUploadId,
+            pageId: draftContextSelection.pageId,
+            pageNumber: draftContextSelection.pageNumber,
+          });
           await addContext.mutateAsync({
             chat: newChatId,
             upload: draftContextSelection.uploadId || currentUploadId,
@@ -323,6 +363,12 @@ export function ReaderAiChatPanel() {
         }
 
         if (draftContextSelection.type === "range") {
+          console.info("[ReaderAI] addContext:range", {
+            chatId: newChatId,
+            uploadId: draftContextSelection.uploadId,
+            pageFrom: draftContextSelection.pageFrom,
+            pageTo: draftContextSelection.pageTo,
+          });
           await addContext.mutateAsync({
             chat: newChatId,
             upload: draftContextSelection.uploadId,
@@ -337,6 +383,11 @@ export function ReaderAiChatPanel() {
           chat: newChatId,
           upload: draftContextSelection.uploadId,
           user: userId,
+        });
+
+        console.info("[ReaderAI] addContext:upload", {
+          chatId: newChatId,
+          uploadId: draftContextSelection.uploadId,
         });
       }
 
@@ -366,6 +417,13 @@ export function ReaderAiChatPanel() {
         return next;
       });
     } else if (hasImplicitActiveContext && activeChatId && currentUploadId) {
+      console.info("[ReaderAI] addContext:implicit", {
+        chatId: activeChatId,
+        uploadId: currentUploadId,
+        pageId: isBookUpload ? currentPageId : null,
+        pageNumber: isBookUpload ? currentPageNumber : null,
+        mode: isBookUpload ? "page" : "upload",
+      });
       await addContext.mutateAsync(
         isBookUpload && currentPageId
           ? {
@@ -413,6 +471,13 @@ export function ReaderAiChatPanel() {
   const handleAddCurrentPage = async () => {
     if (!currentPageId) return;
 
+    console.info("[ReaderAI] handleAddCurrentPage", {
+      activeChatId: activeChatId ?? null,
+      currentUploadId: currentUploadId ?? null,
+      currentPageId,
+      currentPageNumber: currentPageNumber ?? null,
+    });
+
     if (!activeChatId) {
       addDraftContext({
         type: "page",
@@ -442,7 +507,7 @@ export function ReaderAiChatPanel() {
       );
 
       if (defaultDocContexts.length > 0) {
-        await Promise.all(defaultDocContexts.map((ctx: ChatContextsResponse) => removeContext.mutateAsync(ctx.id)));
+        await Promise.all(defaultDocContexts.map((ctx: ChatContextsResponse) => removeContext.mutateAsync({ id: ctx.id, chatId: ctx.chat })));
       }
 
       await addContext.mutateAsync({
@@ -468,6 +533,13 @@ export function ReaderAiChatPanel() {
     const from = parseInt(pageFrom, 10);
     const to = parseInt(pageTo, 10);
     if (isNaN(from) || isNaN(to) || from < 1 || to < from) return;
+
+    console.info("[ReaderAI] handleAddPageRange", {
+      activeChatId: activeChatId ?? null,
+      uploadId: pageRangeDialog.uploadId,
+      pageFrom: from,
+      pageTo: to,
+    });
 
     if (!activeChatId) {
       addDraftContext({
@@ -502,7 +574,8 @@ export function ReaderAiChatPanel() {
   };
 
   const handleRemoveContext = (contextId: string) => {
-    removeContext.mutate(contextId);
+    if (!activeChatId) return;
+    removeContext.mutate({ id: contextId, chatId: activeChatId });
   };
 
   const handleConfirmImplicitActiveContext = async () => {
@@ -732,9 +805,8 @@ export function ReaderAiChatPanel() {
   // Chat view
   return (
     <div className="flex flex-col h-full min-h-0">
-      {/* Chat selector header */}
-      <div className="p-2 border-b">
-        <div className="flex items-center gap-1">
+      <div className="border-b px-2 py-2.5">
+        <div className="flex w-full items-center gap-1 h-8.5">
           <Button
             variant="ghost"
             size="sm"
@@ -748,7 +820,6 @@ export function ReaderAiChatPanel() {
             <Plus className="h-3.5 w-3.5" />
           </Button>
         </div>
-
         {showChatList && (
           <div className="border rounded-md bg-popover max-h-40 overflow-y-auto mt-1">
             {sidebarChats.map((chat) => (

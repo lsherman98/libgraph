@@ -42,11 +42,11 @@ export function EditUploadDialog({ upload, open, onOpenChange }: EditUploadDialo
   const createTagMutation = useCreateTag();
   const createTopicMutation = useCreateTopic();
 
-  const peopleQuery = usePeople();
-  const publicationsQuery = usePublications();
-  const tagsQuery = useTags();
-  const topicsQuery = useTopics();
-  const uploadsQuery = useUploads();
+  const peopleQuery = usePeople({ enabled: open });
+  const publicationsQuery = usePublications({ enabled: open });
+  const tagsQuery = useTags({ enabled: open });
+  const topicsQuery = useTopics({ enabled: open });
+  const uploadsQuery = useUploads(undefined, { enabled: open });
 
   useEffect(() => {
     if (upload) {

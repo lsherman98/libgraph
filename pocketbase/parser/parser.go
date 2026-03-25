@@ -110,26 +110,25 @@ func (p *Parser) parsePDF(fileBytes []byte, filename string, onPage func(Page) e
 
 	result := &ParseResult{}
 	var emptyCount int
-	for i, parsedPage := range liteparseOutput.Pages {
-		pageNumber := parsedPage.Page
-		if pageNumber <= 0 {
-			pageNumber = i + 1
+	for _, parsedPage := range liteparseOutput.Pages {
+		trimmedMarkdown := strings.TrimSpace(parsedPage.Text)
+		if trimmedMarkdown == "" {
+			emptyCount++
+			continue
 		}
+
+		pageNumber := len(result.Pages) + 1
 
 		page := Page{
 			PageNumber: pageNumber,
 			Markdown:   parsedPage.Text,
 		}
 
-		if strings.TrimSpace(page.Markdown) != "" {
-			result.Pages = append(result.Pages, page)
-			if onPage != nil {
-				if err := onPage(page); err != nil {
-					p.App.Logger().Error("parsePDF callback error", "page", page.PageNumber, "error", err)
-				}
+		result.Pages = append(result.Pages, page)
+		if onPage != nil {
+			if err := onPage(page); err != nil {
+				p.App.Logger().Error("parsePDF callback error", "page", page.PageNumber, "error", err)
 			}
-		} else {
-			emptyCount++
 		}
 	}
 

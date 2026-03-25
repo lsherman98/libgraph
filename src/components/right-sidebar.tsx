@@ -59,9 +59,9 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
   if (isWriterTab && writerTab) {
     return (
       <Sidebar collapsible="offcanvas" {...props}>
-        <SidebarHeader className="border-b">
-          <SidebarMenu>
-            <SidebarMenuItem className="flex items-center gap-2 px-2 py-1.5">
+        <SidebarHeader className="border-b p-0 gap-0">
+          <SidebarMenu className="gap-0">
+            <SidebarMenuItem className="flex h-11.75 items-center gap-2 px-3">
               <Layers className="h-4 w-4" />
               <span className="font-semibold text-sm">Workspace</span>
             </SidebarMenuItem>
@@ -116,7 +116,7 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
   const getHeaderContent = () => {
     return (
       <Tabs value={annotationTab} onValueChange={(v) => setAnnotationTab(v as "highlights" | "bookmarks" | "notes" | "ai")} className="w-full gap-0">
-        <TabsList className="h-10 w-full rounded-none border-b border-border bg-transparent p-0">
+        <TabsList className="h-12 w-full rounded-none border-b border-border bg-transparent p-0">
           <TabsTrigger
             value="ai"
             className="h-full flex-1 gap-1 rounded-none border-0 border-r border-border px-2 text-xs shadow-none data-[state=active]:border-b data-[state=active]:border-b-background data-[state=active]:bg-background data-[state=active]:shadow-none"
@@ -174,7 +174,7 @@ export function RightSidebar({ currentPageId, currentPageNumber, onNavigateToPag
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader className="p-0">
-        <SidebarMenu>
+        <SidebarMenu className="gap-0">
           <SidebarMenuItem className="flex items-center gap-2 px-0">{getHeaderContent()}</SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>

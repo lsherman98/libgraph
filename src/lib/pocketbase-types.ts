@@ -297,6 +297,7 @@ export type PagesRecord = {
 	id: string
 	markdown: FileNameString
 	page: number
+	summary?: RecordIdString
 	updated: IsoAutoDateString
 	upload: RecordIdString
 	user: RecordIdString
@@ -401,7 +402,6 @@ export type SummariesRecord = {
 	error?: string
 	id: string
 	scope?: SummariesScopeOptions
-	source_page: RecordIdString
 	source_upload: RecordIdString
 	status: SummariesStatusOptions
 	summary_page: RecordIdString

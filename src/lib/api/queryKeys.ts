@@ -21,6 +21,8 @@ export const queryKeys = {
     },
     pages: {
         all: ["pages"] as const,
+        detail: (pageId?: string) =>
+            [...queryKeys.pages.all, "detail", pageId] as const,
         list: (uploadId?: string, page?: number, perPage?: number) =>
             [...queryKeys.pages.all, "list", uploadId, page, perPage] as const,
         infinite: (uploadId?: string, perPage?: number, initialPage?: number) =>
@@ -34,10 +36,8 @@ export const queryKeys = {
     },
     summaries: {
         all: ["summaries"] as const,
-        bySourcePage: (pageId?: string) =>
-            [...queryKeys.summaries.all, "sourcePage", pageId] as const,
-        bySourceUpload: (uploadId?: string) =>
-            [...queryKeys.summaries.all, "sourceUpload", uploadId] as const,
+        detail: (summaryId?: string) =>
+            [...queryKeys.summaries.all, "detail", summaryId] as const,
     },
     highlights: {
         all: ["highlights"] as const,

@@ -43,6 +43,7 @@ var (
 
 const (
 	maxTranscriptionAudioDurationSeconds = 60 * 60
+	maxDocumentChunkSizeChars            = 2000
 )
 
 func Init(app *pocketbase.PocketBase) error {
@@ -386,8 +387,6 @@ func probeAudioDurationSeconds(filePath string) (float64, error) {
 }
 
 func chunkMarkdown(markdown string) []string {
-	const maxChunkSize = 4500
-
 	parts := strings.Split(markdown, "\n\n")
 	chunks := []string{}
 	for _, part := range parts {
@@ -396,7 +395,7 @@ func chunkMarkdown(markdown string) []string {
 			continue
 		}
 
-		if len(trimmed) <= maxChunkSize {
+		if len(trimmed) <= maxDocumentChunkSizeChars {
 			chunks = append(chunks, trimmed)
 			continue
 		}
@@ -406,7 +405,7 @@ func chunkMarkdown(markdown string) []string {
 		for _, s := range sentences {
 			if current == "" {
 				current = s
-			} else if len(current)+1+len(s) <= maxChunkSize {
+			} else if len(current)+1+len(s) <= maxDocumentChunkSizeChars {
 				current += " " + s
 			} else {
 				chunks = append(chunks, current)
@@ -415,9 +414,9 @@ func chunkMarkdown(markdown string) []string {
 		}
 
 		if current != "" {
-			for len(current) > maxChunkSize {
-				chunks = append(chunks, current[:maxChunkSize])
-				current = current[maxChunkSize:]
+			for len(current) > maxDocumentChunkSizeChars {
+				chunks = append(chunks, current[:maxDocumentChunkSizeChars])
+				current = current[maxDocumentChunkSizeChars:]
 			}
 			if current != "" {
 				chunks = append(chunks, current)

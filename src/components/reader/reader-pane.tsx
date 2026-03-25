@@ -1,19 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { usePages, useBookmarks, useNotes, useUploadById, useSummaryBySourcePage, useSummaryBySourceUpload } from "@/lib/api/queries";
-import { useCreateHighlight, useUpdateHighlight, useDeleteHighlight, useSummarizePage, useSummarizePages } from "@/lib/api/mutations";
+import { usePages, usePageByNumber, usePage, useSummary, useBookmarks, useNotes, useUploadById } from "@/lib/api/queries";
+import { useCreateHighlight, useUpdateHighlight, useDeleteHighlight, useSummarizeUpload, useSummarizePages } from "@/lib/api/mutations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { ChevronLeft, ChevronRight, ChevronDown, Maximize2, Minimize2, Sparkles, Volume2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Maximize2, Minimize2, Sparkles, Volume2, Loader2 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { pb } from "@/lib/pocketbase";
-import { HighlightsColorOptions } from "@/lib/pocketbase-types";
+import { Collections, HighlightsColorOptions } from "@/lib/pocketbase-types";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useReaderSettings, usePageSettings, FONT_FAMILIES } from "@/lib/hooks/use-reader-settings";
 import { ReaderSettingsPanel } from "@/components/reader/reader-settings-panel";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 import { cn, getUserId } from "@/lib/utils";
 import { useReaderStore } from "@/lib/stores/reader-store";
 import { useWorkspaceTabsStore } from "@/lib/stores/workspace-tabs-store";
@@ -23,8 +25,6 @@ import { PageSlider } from "./page-slider";
 import { PaginatedReader } from "./paginated-reader";
 import { ScrollReader } from "./scroll-reader";
 import { toast } from "sonner";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { getPageByNumber } from "@/lib/api/api";
 
 const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac", ".wma", ".webm", ".mp4"]);
 
@@ -49,10 +49,12 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
   const [isAudioOpen, setIsAudioOpen] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [queuedSummaryPageId, setQueuedSummaryPageId] = useState<string | null>(null);
-  const [isSummarizePopoverOpen, setIsSummarizePopoverOpen] = useState(false);
-  const [rangeStartPage, setRangeStartPage] = useState<string>("");
-  const [rangeEndPage, setRangeEndPage] = useState<string>("");
-  const [isRangeSummaryPending, setIsRangeSummaryPending] = useState(false);
+  const [queuedBookSummaryPageId, setQueuedBookSummaryPageId] = useState<string | null>(null);
+  const [queuedRangePageIds, setQueuedRangePageIds] = useState<Set<string>>(new Set());
+  const [isRangeSubmitting, setIsRangeSubmitting] = useState(false);
+  const [isSummarizeRangeDialogOpen, setIsSummarizeRangeDialogOpen] = useState(false);
+  const [summaryRangeStart, setSummaryRangeStart] = useState("");
+  const [summaryRangeEnd, setSummaryRangeEnd] = useState("");
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const { setCurrentPageState, setCurrentUploadId, setNavigateToPage } = useReaderStore();
@@ -73,21 +75,43 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
   const totalPages = firstPageData?.totalItems || 0;
   const firstPageId = firstPageData?.items[0]?.id ?? null;
 
-  const { data: currentPageData } = usePages(uploadId, pageSettings.currentPage, 1);
-  const currentPageId = currentPageData?.items[0]?.id;
+  const { data: currentPageData } = usePageByNumber(uploadId, pageSettings.currentPage);
+  const currentPageId = currentPageData?.id;
+  const resolvedCurrentPageId = currentPageData?.page === pageSettings.currentPage ? currentPageData.id : undefined;
 
   const isSummaryUpload = upload?.type === "summary";
   const isBookUpload = upload?.type === "book";
+  const isScrollMode = !isBookUpload && settings.viewMode === "scroll";
   const summarySourcePageId = isBookUpload ? currentPageId : firstPageId;
-  const shouldPollForSummary = !isSummaryUpload && !!queuedSummaryPageId && queuedSummaryPageId === (isBookUpload ? currentPageId : uploadId);
-  const { data: pageSummaryRecord } = useSummaryBySourcePage(currentPageId, {
-    pollUntilFound: shouldPollForSummary && isBookUpload,
+  const shouldPollForBookSummary = !isSummaryUpload && isBookUpload && !!queuedBookSummaryPageId;
+  const shouldPollCurrentQueuedRangePage =
+    !isSummaryUpload && isBookUpload && !!currentPageId && queuedRangePageIds.has(currentPageId) && !currentPageData?.summary;
+  const { data: currentQueuedRangePage } = usePage(shouldPollCurrentQueuedRangePage ? currentPageId : undefined, {
+    pollUntilSummary: shouldPollCurrentQueuedRangePage,
   });
-  const { data: uploadSummaryRecord } = useSummaryBySourceUpload(uploadId, {
-    pollUntilFound: shouldPollForSummary && !isBookUpload,
+  const currentBookSummaryRecordId = currentQueuedRangePage?.summary || currentPageData?.summary;
+  const shouldPollForUploadSummary = !isSummaryUpload && !isBookUpload && !!queuedSummaryPageId && queuedSummaryPageId === uploadId;
+  const { data: queuedBookSummaryPage } = usePage(queuedBookSummaryPageId || undefined, {
+    pollUntilSummary: shouldPollForBookSummary,
   });
-  const activeSummaryRecord = isBookUpload ? pageSummaryRecord : uploadSummaryRecord;
-  const hasExistingSummary = !!activeSummaryRecord?.summary_upload;
+  const queuedBookSummaryRecordId = queuedBookSummaryPage?.summary;
+  const { data: queuedBookSummaryRecord } = useSummary(queuedBookSummaryRecordId, {
+    pollUntilUpload: shouldPollForBookSummary,
+  });
+  const queuedUploadSummaryPageId = shouldPollForUploadSummary ? firstPageId : undefined;
+  const { data: queuedUploadSummaryPage } = usePage(queuedUploadSummaryPageId || undefined, {
+    pollUntilSummary: shouldPollForUploadSummary,
+  });
+  const queuedUploadSummaryRecordId = queuedUploadSummaryPage?.summary;
+  const activeSummaryRecordId = isBookUpload ? currentBookSummaryRecordId : queuedUploadSummaryRecordId || firstPageData?.items[0]?.summary;
+  const { data: activeSummaryRecord } = useSummary(activeSummaryRecordId, {
+    pollUntilUpload: !!activeSummaryRecordId,
+  });
+  const activeSummaryUploadId = activeSummaryRecord?.summary_upload;
+  const { data: queuedUploadSummaryRecord } = useSummary(queuedUploadSummaryRecordId, {
+    pollUntilUpload: shouldPollForUploadSummary,
+  });
+  const hasExistingSummary = !!activeSummaryRecordId;
 
   const linkedSummaryTab = tabId ? tabs.find((tab) => tab.type === "reader" && !!tab.isSummary && tab.summarySourceTabId === tabId) : undefined;
   const isSummaryVisible = !!linkedSummaryTab && splitMode === "horizontal" && splitTabId === linkedSummaryTab.id;
@@ -109,30 +133,44 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
   useEffect(() => {
     if (!tabId || !isSummaryVisible || !summarySourcePageId) return;
 
-    if (!activeSummaryRecord?.summary_upload) {
-      closeSummarySplitTab(tabId);
-      return;
-    }
+    if (!activeSummaryUploadId) return;
 
-    openSummarySplit(activeSummaryRecord.summary_upload, summarySourcePageId);
-  }, [tabId, isSummaryVisible, summarySourcePageId, activeSummaryRecord?.summary_upload, closeSummarySplitTab, openSummarySplit]);
+    openSummarySplit(activeSummaryUploadId, summarySourcePageId);
+  }, [tabId, isSummaryVisible, summarySourcePageId, activeSummaryUploadId, openSummarySplit]);
 
   useEffect(() => {
-    const queuedTarget = isBookUpload ? currentPageId : uploadId;
-    if (!summarySourcePageId || queuedSummaryPageId !== queuedTarget || !activeSummaryRecord?.summary_upload) return;
-
-    openSummarySplit(activeSummaryRecord.summary_upload, summarySourcePageId);
-    setQueuedSummaryPageId(null);
+    if (isBookUpload) {
+      if (!queuedBookSummaryPageId || !queuedBookSummaryRecord?.summary_upload) return;
+      openSummarySplit(queuedBookSummaryRecord.summary_upload, queuedBookSummaryPageId);
+      setQueuedBookSummaryPageId(null);
+    } else {
+      if (!firstPageId || !queuedUploadSummaryRecord?.summary_upload) return;
+      if (!queuedSummaryPageId || queuedSummaryPageId !== uploadId) return;
+      openSummarySplit(queuedUploadSummaryRecord.summary_upload, firstPageId);
+      setQueuedSummaryPageId(null);
+    }
   }, [
-    queuedSummaryPageId,
-    currentPageId,
-    uploadId,
-    summarySourcePageId,
-    activeSummaryRecord?.summary_upload,
     isBookUpload,
-    pageSettings.currentPage,
+    uploadId,
+    queuedSummaryPageId,
+    queuedBookSummaryPageId,
+    firstPageId,
+    queuedBookSummaryRecord?.summary_upload,
+    queuedUploadSummaryRecord?.summary_upload,
     openSummarySplit,
   ]);
+
+  useEffect(() => {
+    if (!isBookUpload || !currentPageId) return;
+    if (!queuedRangePageIds.has(currentPageId)) return;
+    if (!currentBookSummaryRecordId) return;
+
+    setQueuedRangePageIds((prev) => {
+      const next = new Set(prev);
+      next.delete(currentPageId);
+      return next;
+    });
+  }, [isBookUpload, currentPageId, currentBookSummaryRecordId, queuedRangePageIds]);
 
   const setCurrentPageRef = useRef(setCurrentPage);
   const viewModeRef = useRef(settings.viewMode);
@@ -142,9 +180,19 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
   useEffect(() => {
     if (isActive) {
       setCurrentUploadId(uploadId ?? null);
-      setCurrentPageState(currentPageId, pageSettings.currentPage);
+      setCurrentPageState(resolvedCurrentPageId, pageSettings.currentPage);
+
+      if (upload?.type === "book") {
+        console.info("[ReaderPane] setCurrentPageState", {
+          uploadId,
+          requestedPageNumber: pageSettings.currentPage,
+          fetchedPageNumber: currentPageData?.page,
+          pageId: resolvedCurrentPageId ?? null,
+          hadStalePageData: !!currentPageData && currentPageData?.page !== pageSettings.currentPage,
+        });
+      }
     }
-  }, [uploadId, currentPageId, pageSettings.currentPage, setCurrentUploadId, setCurrentPageState, isActive]);
+  }, [uploadId, resolvedCurrentPageId, pageSettings.currentPage, setCurrentUploadId, setCurrentPageState, isActive, upload?.type, currentPageData]);
 
   const navigateToPageFromAnnotation = useCallback((pageNumber: number, _blockId?: string) => {
     setCurrentPageRef.current(pageNumber);
@@ -170,8 +218,17 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
   const createHighlightMutation = useCreateHighlight();
   const updateHighlightMutation = useUpdateHighlight();
   const deleteHighlightMutation = useDeleteHighlight();
-  const summarizePageMutation = useSummarizePage();
+  const summarizeUploadMutation = useSummarizeUpload();
   const summarizePagesMutation = useSummarizePages();
+  const isSummaryLoading = summarizeUploadMutation.isPending || shouldPollForUploadSummary || (!!activeSummaryRecordId && !activeSummaryUploadId);
+  const isCurrentQueuedRangePagePending = !!currentPageId && queuedRangePageIds.has(currentPageId) && !currentBookSummaryRecordId;
+  const isBookSummaryLoading =
+    summarizePagesMutation.isPending ||
+    isRangeSubmitting ||
+    shouldPollForBookSummary ||
+    shouldPollCurrentQueuedRangePage ||
+    isCurrentQueuedRangePagePending ||
+    (!!activeSummaryRecordId && !activeSummaryUploadId);
 
   const bookmarks = bookmarksData?.map((b) => ({
     id: b.id,
@@ -229,62 +286,6 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
     [deleteHighlightMutation],
   );
 
-  const queueRangeSummary = useCallback(async () => {
-    if (!isBookUpload || !uploadId || totalPages < 1) return;
-
-    const parsedStart = Number.parseInt(rangeStartPage, 10);
-    const parsedEnd = Number.parseInt(rangeEndPage, 10);
-
-    if (!Number.isFinite(parsedStart) || !Number.isFinite(parsedEnd)) {
-      toast.error("Enter valid page numbers.");
-      return;
-    }
-
-    const boundedStart = Math.max(1, Math.min(totalPages, parsedStart));
-    const boundedEnd = Math.max(1, Math.min(totalPages, parsedEnd));
-    const start = Math.min(boundedStart, boundedEnd);
-    const end = Math.max(boundedStart, boundedEnd);
-
-    const pageNumbers = Array.from({ length: end - start + 1 }, (_, index) => start + index);
-    if (pageNumbers.length === 0) {
-      toast.error("No pages selected.");
-      return;
-    }
-
-    setIsRangeSummaryPending(true);
-
-    try {
-      const pageRecords = await Promise.all(
-        pageNumbers.map(async (pageNumber) => {
-          try {
-            const page = await getPageByNumber(uploadId, pageNumber);
-            return { pageNumber, pageId: page.id, ok: true };
-          } catch {
-            return { pageNumber, pageId: "", ok: false };
-          }
-        }),
-      );
-
-      const validPageRecords = pageRecords.filter((record) => record.ok && record.pageId);
-      if (validPageRecords.length === 0) {
-        toast.error("No valid pages found for that range.");
-        return;
-      }
-
-      const selectedPageIDs = validPageRecords.map((record) => record.pageId);
-      await summarizePagesMutation.mutateAsync(selectedPageIDs);
-      const queuedCount = selectedPageIDs.length;
-
-      if (currentPageId && selectedPageIDs.includes(currentPageId) && queuedCount > 0) {
-        setQueuedSummaryPageId(currentPageId);
-      }
-
-      setIsSummarizePopoverOpen(false);
-    } finally {
-      setIsRangeSummaryPending(false);
-    }
-  }, [isBookUpload, uploadId, totalPages, rangeStartPage, rangeEndPage, summarizePagesMutation, currentPageId]);
-
   const onTitleLoadRef = useRef(onTitleLoad);
   onTitleLoadRef.current = onTitleLoad;
 
@@ -319,8 +320,15 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
   );
 
   const toggleScrollMode = (enabled: boolean) => {
+    if (isBookUpload) return;
     setSettings({ viewMode: enabled ? "scroll" : "paginate" });
   };
+
+  useEffect(() => {
+    if (isBookUpload && settings.viewMode === "scroll") {
+      setSettings({ viewMode: "paginate" });
+    }
+  }, [isBookUpload, settings.viewMode, setSettings]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -347,7 +355,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
 
     if (target !== pageSettings.currentPage) {
       handlePageChange(target);
-      if (settings.viewMode === "scroll") {
+      if (isScrollMode) {
         const el = document.getElementById(`page-${target}`);
         if (el) {
           el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -355,6 +363,62 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
       }
     }
   };
+
+  const handleSummarizePageRange = useCallback(async () => {
+    if (!uploadId) return;
+
+    const start = Number.parseInt(summaryRangeStart, 10);
+    const end = Number.parseInt(summaryRangeEnd, 10);
+
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      toast.error("Enter a valid page range.");
+      return;
+    }
+
+    const minPage = 1;
+    const maxPage = Math.max(1, totalPages);
+    const normalizedStart = Math.max(minPage, Math.min(start, maxPage));
+    const normalizedEnd = Math.max(minPage, Math.min(end, maxPage));
+
+    if (normalizedEnd < normalizedStart) {
+      toast.error("End page must be greater than or equal to start page.");
+      return;
+    }
+
+    setIsRangeSubmitting(true);
+
+    try {
+      const pagesInRange = await pb.collection(Collections.Pages).getFullList({
+        filter: `upload = "${uploadId}" && page >= ${normalizedStart} && page <= ${normalizedEnd}`,
+        sort: "page",
+      });
+
+      const pageIds = pagesInRange.map((page) => page.id);
+      if (pageIds.length === 0) {
+        toast.error("No pages found in that range.");
+        return;
+      }
+
+      const response = await summarizePagesMutation.mutateAsync(pageIds);
+
+      const anchorPageId = response.page_ids?.[0] || pageIds[0];
+      if (anchorPageId) {
+        setQueuedBookSummaryPageId(anchorPageId);
+      }
+      setQueuedRangePageIds(new Set(pageIds));
+
+      setIsSummarizeRangeDialogOpen(false);
+      toast.success(
+        normalizedStart === normalizedEnd
+          ? `Summary queued for page ${normalizedStart}.`
+          : `Summary queued for pages ${normalizedStart}-${normalizedEnd}.`,
+      );
+    } catch {
+      toast.error("Failed to summarize selected page range.");
+    } finally {
+      setIsRangeSubmitting(false);
+    }
+  }, [uploadId, summaryRangeStart, summaryRangeEnd, totalPages, summarizePagesMutation]);
 
   if (!upload) {
     return (
@@ -413,7 +477,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                         const page = parseInt(e.target.value, 10);
                         if (page >= 1 && page <= totalPages) {
                           handlePageChange(page);
-                          if (settings.viewMode === "scroll") {
+                          if (isScrollMode) {
                             setTimeout(() => {
                               const el = document.getElementById(`page-${page}`);
                               if (el) {
@@ -443,21 +507,25 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
               )}
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              <div className="hidden xl:flex items-center gap-2 px-2 border-r">
-                <Label htmlFor={`scroll-mode-${tabId}`} className="text-xs cursor-pointer whitespace-nowrap">
-                  Scroll
-                </Label>
-                <Switch id={`scroll-mode-${tabId}`} checked={settings.viewMode === "scroll"} onCheckedChange={toggleScrollMode} />
-              </div>
-              <div className="hidden xl:flex items-center gap-1 px-2 border-r">
+              {!isBookUpload && (
+                <div className="hidden xl:flex items-center gap-2 px-2">
+                  <Label htmlFor={`scroll-mode-${tabId}`} className="text-xs cursor-pointer whitespace-nowrap">
+                    Scroll
+                  </Label>
+                  <Switch id={`scroll-mode-${tabId}`} checked={settings.viewMode === "scroll"} onCheckedChange={toggleScrollMode} />
+                </div>
+              )}
+              {!isBookUpload && <Separator orientation="vertical" className="hidden xl:block data-[orientation=vertical]:h-5" />}
+              <div className="hidden xl:flex items-center gap-1 px-2">
                 <QuickFontSizeControl fontSize={settings.fontSize} onChange={(fontSize) => setSettings({ fontSize })} />
               </div>
+              <Separator orientation="vertical" className="hidden xl:block data-[orientation=vertical]:h-5" />
               {!isSummaryUpload && (
                 <DocumentSearchBar
                   uploadId={uploadId}
                   onNavigateToPage={(pageNumber) => {
                     handlePageChange(pageNumber);
-                    if (settings.viewMode === "scroll") {
+                    if (isScrollMode) {
                       setTimeout(() => {
                         const el = document.getElementById(`page-${pageNumber}`);
                         if (el) {
@@ -469,134 +537,143 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                 />
               )}
               {!isSummaryUpload &&
-                !hasExistingSummary &&
                 (isBookUpload ? (
-                  <Popover
-                    open={isSummarizePopoverOpen}
-                    onOpenChange={(open) => {
-                      setIsSummarizePopoverOpen(open);
-                      if (open) {
-                        setRangeStartPage(String(pageSettings.currentPage));
-                        setRangeEndPage(String(pageSettings.currentPage));
-                      }
-                    }}
-                  >
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8"
-                        disabled={totalPages < 1 || isRangeSummaryPending || summarizePageMutation.isPending || summarizePagesMutation.isPending}
-                      >
-                        <Sparkles className="h-4 w-4 mr-1" />
-                        {summarizePageMutation.isPending || summarizePagesMutation.isPending || shouldPollForSummary || isRangeSummaryPending
-                          ? "Summarizing..."
-                          : "Summarize"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="end" className="w-80 space-y-3 p-3">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium">Summarize page range</p>
-                        <p className="text-xs text-muted-foreground">Defaults to the current page.</p>
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex items-end gap-2">
-                          <div className="flex-1 space-y-1">
-                            <Label htmlFor="summary-range-start" className="text-xs">
+                  hasExistingSummary ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant={isSummaryVisible ? "secondary" : "ghost"}
+                          size="icon"
+                          className="h-8 w-8"
+                          disabled={!currentPageId || isBookSummaryLoading}
+                          onClick={() => {
+                            if (!summarySourcePageId || !activeSummaryUploadId) return;
+                            if (!tabId) {
+                              toast.info("Open this document from a workspace tab to view summary pane.");
+                              return;
+                            }
+                            if (isSummaryVisible) {
+                              closeSummarySplitTab(tabId);
+                              return;
+                            }
+                            openSummarySplit(activeSummaryUploadId, summarySourcePageId);
+                          }}
+                        >
+                          {isBookSummaryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{isBookSummaryLoading ? "Summarizing..." : isSummaryVisible ? "Close summary" : "Open summary"}</TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <Popover
+                      open={isSummarizeRangeDialogOpen}
+                      onOpenChange={(open) => {
+                        setIsSummarizeRangeDialogOpen(open);
+                        if (open) {
+                          const currentPage = pageSettings.currentPage || 1;
+                          setSummaryRangeStart(String(currentPage));
+                          setSummaryRangeEnd(String(currentPage));
+                        }
+                      }}
+                    >
+                      <PopoverTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" disabled={!currentPageId || isBookSummaryLoading}>
+                          {isBookSummaryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="w-80 space-y-3 p-3">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">Summarize Page Range</p>
+                          <p className="text-xs text-muted-foreground">Select a start and end page to summarize.</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 py-1">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="summary-range-start" className="text-xs text-muted-foreground">
                               Start page
                             </Label>
                             <Input
                               id="summary-range-start"
                               type="number"
                               min={1}
-                              max={totalPages}
-                              value={rangeStartPage}
-                              onChange={(event) => setRangeStartPage(event.target.value)}
-                              className="h-8"
+                              max={totalPages || 1}
+                              value={summaryRangeStart}
+                              onChange={(event) => setSummaryRangeStart(event.target.value)}
                             />
                           </div>
-                          <div className="flex-1 space-y-1">
-                            <Label htmlFor="summary-range-end" className="text-xs">
+                          <div className="space-y-1.5">
+                            <Label htmlFor="summary-range-end" className="text-xs text-muted-foreground">
                               End page
                             </Label>
                             <Input
                               id="summary-range-end"
                               type="number"
                               min={1}
-                              max={totalPages}
-                              value={rangeEndPage}
-                              onChange={(event) => setRangeEndPage(event.target.value)}
-                              className="h-8"
+                              max={totalPages || 1}
+                              value={summaryRangeEnd}
+                              onChange={(event) => setSummaryRangeEnd(event.target.value)}
                             />
                           </div>
-                          <Button
-                            variant={"outline"}
-                            className="h-8 px-3"
-                            onClick={queueRangeSummary}
-                            disabled={isRangeSummaryPending || summarizePageMutation.isPending || summarizePagesMutation.isPending || !currentPageId}
-                          >
-                            {isRangeSummaryPending || summarizePageMutation.isPending || summarizePagesMutation.isPending
-                              ? "Summarizing..."
-                              : "Summarize"}
+                        </div>
+                        <div className="flex justify-end gap-2 pt-1">
+                          <Button variant="outline" onClick={() => setIsSummarizeRangeDialogOpen(false)}>
+                            Cancel
+                          </Button>
+                          <Button onClick={handleSummarizePageRange} disabled={isBookSummaryLoading}>
+                            {isBookSummaryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Summarize"}
                           </Button>
                         </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                      </PopoverContent>
+                    </Popover>
+                  )
                 ) : (
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8"
-                        disabled={!currentPageId || summarizePageMutation.isPending || shouldPollForSummary}
+                        variant={isSummaryVisible ? "secondary" : "ghost"}
+                        size="icon"
+                        className="h-8 w-8"
+                        disabled={!currentPageId || isSummaryLoading}
                         onClick={() => {
                           if (!currentPageId) return;
-                          summarizePageMutation.mutate(currentPageId, {
+
+                          if (hasExistingSummary) {
+                            if (!summarySourcePageId || !activeSummaryUploadId) return;
+                            if (!tabId) {
+                              toast.info("Open this document from a workspace tab to view summary pane.");
+                              return;
+                            }
+                            if (isSummaryVisible) {
+                              closeSummarySplitTab(tabId);
+                              return;
+                            }
+                            openSummarySplit(activeSummaryUploadId, summarySourcePageId);
+                            return;
+                          }
+
+                          summarizeUploadMutation.mutate(uploadId, {
                             onSuccess: () => {
                               setQueuedSummaryPageId(uploadId);
+                            },
+                            onError: () => {
+                              toast.error("Failed to summarize document.");
                             },
                           });
                         }}
                       >
-                        <Sparkles className="h-4 w-4 mr-1" />
-                        {summarizePageMutation.isPending || shouldPollForSummary ? "Summarizing..." : "Summarize"}
+                        {isSummaryLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>Generate summary for this document</TooltipContent>
+                    <TooltipContent>
+                      {isSummaryLoading
+                        ? "Summarizing..."
+                        : hasExistingSummary
+                          ? isSummaryVisible
+                            ? "Close summary"
+                            : "Open summary"
+                          : "Summarize document"}
+                    </TooltipContent>
                   </Tooltip>
                 ))}
-              {!isSummaryUpload && (!isBookUpload || hasExistingSummary) && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant={isSummaryVisible ? "secondary" : "ghost"}
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={() => {
-                        if (!tabId) return;
-                        if (isSummaryVisible) {
-                          closeSummarySplitTab(tabId);
-                          return;
-                        }
-                        if (!summarySourcePageId || !activeSummaryRecord?.summary_upload) {
-                          toast.info(isBookUpload ? "No summary for this page yet" : "No summary for this document yet", {
-                            description: isBookUpload
-                              ? "Use Summarize first, then toggle summary view."
-                              : "Use Summarize first, then toggle summary view.",
-                          });
-                          return;
-                        }
-                        openSummarySplit(activeSummaryRecord.summary_upload, summarySourcePageId);
-                      }}
-                    >
-                      <Sparkles className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>{isSummaryVisible ? "Hide summary pane" : "Show summary pane"}</TooltipContent>
-                </Tooltip>
-              )}
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-8 w-8" onClick={toggleFullscreen}>
@@ -696,7 +773,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                   border-top-color: color-mix(in srgb, currentColor 10%, transparent);
                 }
               `}</style>
-              {settings.viewMode === "scroll" ? (
+              {isScrollMode ? (
                 <ScrollReader
                   uploadId={uploadId}
                   startPage={pageSettings.currentPage}
@@ -738,7 +815,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
               totalPages={totalPages}
               onPageChange={(page) => {
                 handlePageChange(page);
-                if (settings.viewMode === "scroll") {
+                if (isScrollMode) {
                   setTimeout(() => {
                     const el = document.getElementById(`page-${page}`);
                     if (el) {

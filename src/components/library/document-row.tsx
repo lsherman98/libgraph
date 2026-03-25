@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TableRow, TableCell } from "@/components/ui/table";
-import { FileText, Pencil, Trash2, Link2 } from "lucide-react";
+import { FileText, Pencil, Trash2, Link2, Library } from "lucide-react";
 import type { UploadsResponse } from "@/lib/pocketbase-types";
 import { typeIcons, statusConfig } from "./constants";
 
@@ -11,12 +11,20 @@ export function DocumentRow({
   upload,
   onEdit,
   onDelete,
+  onAddToCollection,
+  personNamesById,
+  publicationNamesById,
+  tagTitlesById,
   selected,
   onSelect,
 }: {
   upload: UploadsResponse;
   onEdit: () => void;
   onDelete: () => void;
+  onAddToCollection?: () => void;
+  personNamesById: Map<string, string>;
+  publicationNamesById: Map<string, string>;
+  tagTitlesById: Map<string, string>;
   selected?: boolean;
   onSelect?: (checked: boolean) => void;
 }) {
@@ -27,16 +35,19 @@ export function DocumentRow({
 
   const isClickable = upload.status === "success";
   const linkedCount = upload.uploads?.length || 0;
+  const formatNames = (ids?: string[], lookup?: Map<string, string>) => {
+    if (!ids?.length || !lookup) return "—";
+
+    const names = ids.map((id) => lookup.get(id) || id);
+    const visibleNames = names.slice(0, 2).join(", ");
+    const remainingCount = names.length - 2;
+
+    return remainingCount > 0 ? `${visibleNames} +${remainingCount}` : visibleNames;
+  };
+  const publicationName = upload.publication ? publicationNamesById.get(upload.publication) || upload.publication : "—";
 
   return (
-    <TableRow
-      className={isClickable ? "cursor-pointer hover:bg-muted/50" : "opacity-75"}
-      onClick={() => {
-        if (isClickable) {
-          navigate({ to: "/workspace", search: { id: upload.id, type: "upload" } });
-        }
-      }}
-    >
+    <TableRow className={isClickable ? "hover:bg-muted/50" : "opacity-75"}>
       {onSelect !== undefined && (
         <TableCell className="w-10 pr-0">
           <Checkbox
@@ -66,16 +77,25 @@ export function DocumentRow({
           </div>
         </div>
       </TableCell>
+      <TableCell className="hidden lg:table-cell">
+        <span className="block text-sm truncate text-muted-foreground">{formatNames(upload.people, personNamesById)}</span>
+      </TableCell>
+      <TableCell className="hidden lg:table-cell">
+        <span className="block text-sm truncate text-muted-foreground">{publicationName}</span>
+      </TableCell>
+      <TableCell className="hidden xl:table-cell">
+        <span className="block text-sm truncate text-muted-foreground">{formatNames(upload.tags, tagTitlesById)}</span>
+      </TableCell>
       {upload.status !== "success" && (
-        <TableCell>
+        <TableCell className="hidden md:table-cell">
           <div className="flex items-center gap-2">
             <StatusIcon className={`h-4 w-4 ${status.className}`} />
             <Badge variant={status.variant}>{status.label}</Badge>
           </div>
         </TableCell>
       )}
-      {upload.status === "success" && <TableCell />}
-      <TableCell className="text-muted-foreground">
+      {upload.status === "success" && <TableCell className="hidden md:table-cell" />}
+      <TableCell className="text-muted-foreground hidden md:table-cell">
         {new Date(upload.created).toLocaleDateString(undefined, {
           year: "numeric",
           month: "short",
@@ -83,7 +103,33 @@ export function DocumentRow({
         })}
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5 justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 px-2"
+            onClick={() => {
+              onSelect?.(true);
+              if (isClickable) {
+                navigate({ to: "/workspace", search: { id: upload.id, type: "upload" } });
+              }
+            }}
+            disabled={!isClickable}
+          >
+            Open
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddToCollection?.();
+            }}
+            disabled={!isClickable}
+          >
+            <Library className="h-4 w-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"

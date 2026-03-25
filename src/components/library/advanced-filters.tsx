@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, X, ArrowUpDown } from "lucide-react";
-import { UploadsTypeOptions, UploadsStatusOptions } from "@/lib/pocketbase-types";
-import { statusConfig } from "./constants";
+import { UploadsTypeOptions } from "@/lib/pocketbase-types";
 import { CreatableCombobox } from "@/components/creatable-combobox";
 
 const USER_UPLOAD_TYPES = Object.values(UploadsTypeOptions).filter((type) => type !== UploadsTypeOptions.summary);
@@ -47,7 +46,6 @@ export function AdvancedFilters({
 }) {
   const activeFilterCount = [
     (filters.type?.length || 0) > 0,
-    (filters.status?.length || 0) > 0,
     (filters.tags?.length || 0) > 0,
     (filters.topics?.length || 0) > 0,
     (filters.people?.length || 0) > 0,
@@ -75,11 +73,6 @@ export function AdvancedFilters({
   const filterTypeOptions = USER_UPLOAD_TYPES.map((type) => ({
     value: type,
     label: type.charAt(0).toUpperCase() + type.slice(1),
-  }));
-
-  const filterStatusOptions = Object.values(UploadsStatusOptions).map((status) => ({
-    value: status,
-    label: statusConfig[status]?.label || status,
   }));
 
   const filterTagOptions = tags.map((tag) => ({
@@ -131,7 +124,6 @@ export function AdvancedFilters({
             <SelectItem value="title_asc">Title A–Z</SelectItem>
             <SelectItem value="title_desc">Title Z–A</SelectItem>
             <SelectItem value="type_asc">Type A–Z</SelectItem>
-            <SelectItem value="updated_desc">Recently updated</SelectItem>
           </SelectContent>
         </Select>
         <FilterDropdown
@@ -142,15 +134,6 @@ export function AdvancedFilters({
           options={filterTypeOptions}
           onToggle={(value) => toggleArrayFilter("type", value)}
           className="w-30"
-        />
-        <FilterDropdown
-          label="Status"
-          values={filters.status}
-          placeholder="Status"
-          searchable={false}
-          options={filterStatusOptions}
-          onToggle={(value) => toggleArrayFilter("status", value)}
-          className="w-32"
         />
         <FilterDropdown
           label="Tags"
@@ -196,13 +179,6 @@ export function AdvancedFilters({
           <span className="text-xs text-muted-foreground mr-1">Active filters:</span>
           {filters.type?.map((t) => (
             <FilterBadge key={`type-${t}`} label={t} onRemove={() => toggleArrayFilter("type", t)} />
-          ))}
-          {filters.status?.map((s) => (
-            <FilterBadge
-              key={`status-${s}`}
-              label={statusConfig[s as keyof typeof statusConfig]?.label || s}
-              onRemove={() => toggleArrayFilter("status", s)}
-            />
           ))}
           {filters.tags?.map((t) => (
             <FilterBadge key={`tag-${t}`} label={getTagName(t)} onRemove={() => toggleArrayFilter("tags", t)} />

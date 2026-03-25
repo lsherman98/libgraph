@@ -24,7 +24,7 @@ interface AddToProjectButtonProps {
 
 export function AddToProjectButton({ itemId, itemType, variant = "icon", className }: AddToProjectButtonProps) {
   const [open, setOpen] = useState(false);
-  const { data: projects = [], isLoading } = useWritingProjects();
+  const { data: projects = [], isLoading } = useWritingProjects({ enabled: open });
   const updateProject = useUpdateWritingProject();
 
   const getFieldName = (): "uploads" | "highlights" | "bookmarks" | "notes" => {

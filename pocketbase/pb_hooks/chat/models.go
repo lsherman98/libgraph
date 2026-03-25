@@ -25,10 +25,22 @@ type ChatMessage struct {
 
 type ChatResponse struct {
 	ChatID             string       `json:"chat_id"`
+	Status             string       `json:"status,omitempty"`
 	Message            string       `json:"message,omitempty"`
 	Sources            []ChatSource `json:"sources,omitempty"`
 	UserMessageID      string       `json:"user_message_id"`
 	AssistantMessageID string       `json:"assistant_message_id"`
+}
+
+type chatRespondPayload struct {
+	ChatID             string           `json:"chat_id"`
+	Mode               string           `json:"mode"`
+	Message            string           `json:"message"`
+	UploadIDs          []string         `json:"upload_ids,omitempty"`
+	UserID             string           `json:"user_id"`
+	UserMessageID      string           `json:"user_message_id"`
+	AssistantMessageID string           `json:"assistant_message_id"`
+	Filters            *MetadataFilters `json:"filters,omitempty"`
 }
 
 type ChatSource struct {
@@ -50,15 +62,6 @@ type Citation struct {
 	Quote      string `json:"quote"`
 	PageNumber int    `json:"page_number"`
 	UploadID   string `json:"upload_id"`
-}
-
-type PageSummaryResponse struct {
-	SummaryID      string `json:"summary_id"`
-	SourcePageID   string `json:"source_page_id"`
-	SourceUploadID string `json:"source_upload_id"`
-	SummaryUpload  string `json:"summary_upload_id"`
-	SummaryPage    string `json:"summary_page_id"`
-	UpdatedAt      string `json:"updated_at"`
 }
 
 type PageSummaryQueuedResponse struct {

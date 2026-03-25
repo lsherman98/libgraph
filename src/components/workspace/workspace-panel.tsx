@@ -42,8 +42,10 @@ export function WorkspacePanel({
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["uploads", "highlights", "bookmarks", "notes"]));
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewType, setPreviewType] = useState<"highlight" | "bookmark" | "note">("highlight");
+  const [previewType, setPreviewType] = useState<"highlight" | "bookmark" | "note" | "upload">("highlight");
   const [previewItem, setPreviewItem] = useState<HighlightsRecord | BookmarksRecord | NotesRecord | null>(null);
+  const [previewUploadId, setPreviewUploadId] = useState<string | undefined>();
+  const [previewUploadTitle, setPreviewUploadTitle] = useState<string | undefined>();
   const [previewPageNumber, setPreviewPageNumber] = useState<number | undefined>();
 
   const { data: materials, isLoading } = useWorkspaceMaterials();
@@ -97,16 +99,29 @@ export function WorkspacePanel({
     navigate({ to: "/workspace", search: { id: uploadId, type: "upload" } });
   };
 
+  const openUploadPreview = (upload: UploadsResponse) => {
+    setPreviewType("upload");
+    setPreviewItem(null);
+    setPreviewUploadId(upload.id);
+    setPreviewUploadTitle(upload.title || "Document");
+    setPreviewPageNumber(1);
+    setPreviewOpen(true);
+  };
+
   const openPreview = (type: "highlight" | "bookmark" | "note", item: HighlightsResponse | NotesResponse | any, pageNumber?: number) => {
     setPreviewType(type);
     setPreviewItem(item as HighlightsRecord | BookmarksRecord | NotesRecord);
+    setPreviewUploadId((item as any)?.upload);
+    setPreviewUploadTitle(undefined);
     setPreviewPageNumber(pageNumber);
     setPreviewOpen(true);
   };
 
   const handleNavigateFromPreview = () => {
-    if (!previewItem) return;
-    const upload = materials?.uploads?.find((u) => u.id === (previewItem as any).upload);
+    const targetUploadId = previewType === "upload" ? previewUploadId : (previewItem as any)?.upload;
+    if (!targetUploadId) return;
+
+    const upload = materials?.uploads?.find((u) => u.id === targetUploadId);
     if (upload) {
       handleOpenDocument(upload.id, upload.title || "Document");
     }
@@ -129,9 +144,6 @@ export function WorkspacePanel({
   if (linkedCount === 0) {
     return (
       <div className={cn("flex flex-col h-full border-l bg-background", className)}>
-        <div className="p-3 border-b">
-          <h3 className="font-semibold text-sm">Research Sources</h3>
-        </div>
         <div className="flex flex-col items-center justify-center flex-1 p-6 text-center">
           <FileText className="h-12 w-12 text-muted-foreground/30 mb-3" />
           <p className="text-sm text-muted-foreground mb-2">No sources linked yet</p>
@@ -169,12 +181,7 @@ export function WorkspacePanel({
               onToggle={toggleSection}
             >
               {filteredUploads.map((upload) => (
-                <UploadItem
-                  key={upload.id}
-                  upload={upload}
-                  onUnlink={() => onUnlinkUpload?.(upload.id)}
-                  onOpen={() => handleOpenDocument(upload.id, upload.title || "Document")}
-                />
+                <UploadItem key={upload.id} upload={upload} onUnlink={() => onUnlinkUpload?.(upload.id)} onOpen={() => openUploadPreview(upload)} />
               ))}
             </CollapsibleSection>
           )}
@@ -243,7 +250,8 @@ export function WorkspacePanel({
         type={previewType}
         item={previewItem}
         pageNumber={previewPageNumber}
-        uploadId={(previewItem as any)?.upload}
+        uploadId={previewType === "upload" ? previewUploadId : (previewItem as any)?.upload}
+        uploadTitle={previewType === "upload" ? previewUploadTitle : undefined}
         onNavigate={handleNavigateFromPreview}
       />
     </div>

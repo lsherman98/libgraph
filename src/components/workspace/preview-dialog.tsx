@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Highlighter, BookMarked, ExternalLink, FileText, Pencil, ChevronLeft, ChevronRight, Hash } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HighlightsColorOptions, type HighlightsRecord, type BookmarksRecord, type NotesRecord } from "@/lib/pocketbase-types";
-import { usePageMarkdown, usePageByNumber, usePages } from "@/lib/api/queries";
+import { usePage, usePageMarkdown, usePageByNumber, usePages } from "@/lib/api/queries";
 import { HIGHLIGHT_PREVIEW_CLASSES } from "@/lib/constants/highlight-colors";
 import { Link } from "@tanstack/react-router";
 import type { ChatSource } from "@/lib/types";
@@ -83,11 +83,20 @@ export function PreviewDialog({
 }: PreviewDialogProps) {
   const isSource = type === "source";
   const isUpload = type === "upload";
+  const isAnnotation = type === "highlight" || type === "bookmark" || type === "note";
+  const originalPageId = isSource || isUpload ? undefined : item?.page;
+
+  const { data: originalPageRecord } = usePage(isAnnotation && pageNumber == null ? originalPageId : undefined);
+
+  const fallbackAnnotationPageNumber = isAnnotation ? (originalPageRecord?.page as number | undefined) : undefined;
   const effectiveUploadId = isSource ? source?.upload_id : uploadId;
-  const effectivePageNumber = isSource ? source?.page_number : isUpload ? (pageNumber ?? 1) : pageNumber;
+  const effectivePageNumber = isSource ? source?.page_number : isUpload ? (pageNumber ?? 1) : (pageNumber ?? fallbackAnnotationPageNumber);
 
   const [currentPageNumber, setCurrentPageNumber] = useState<number | undefined>(effectivePageNumber);
-  const isOnOriginalPage = currentPageNumber != null && currentPageNumber === effectivePageNumber;
+  const isOnOriginalPage =
+    isAnnotation && currentPageNumber == null && effectivePageNumber == null
+      ? true
+      : currentPageNumber != null && currentPageNumber === effectivePageNumber;
 
   useEffect(() => {
     setCurrentPageNumber(effectivePageNumber);
@@ -96,7 +105,6 @@ export function PreviewDialog({
   const { data: pagesData } = usePages(effectiveUploadId, 1, 1);
   const totalPages = totalPagesProp ?? pagesData?.totalItems;
 
-  const originalPageId = isSource || isUpload ? undefined : item?.page;
   const needsPageByNumber = isSource || isUpload || !isOnOriginalPage;
   const validPageNumber = currentPageNumber != null && currentPageNumber > 0;
   const { data: fetchedPage } = usePageByNumber(
@@ -350,13 +358,6 @@ export function PreviewDialog({
             {isNote && note?.content && <p className="text-sm text-foreground/80 whitespace-pre-wrap">{note.content}</p>}
           </DialogDescription>
         </DialogHeader>
-        {isSource && source?.text && (
-          <div className="shrink-0 mb-2">
-            <div className="p-3 rounded-lg bg-yellow-100 dark:bg-yellow-900/30">
-              <p className="text-sm font-medium italic">"{source.text.length > 300 ? source.text.slice(0, 300) + "\u2026" : source.text}"</p>
-            </div>
-          </div>
-        )}
         <div className="flex-1 min-h-0 border rounded-lg bg-card flex flex-col overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-2 border-b text-xs text-muted-foreground shrink-0">
             <FileText className="h-3.5 w-3.5" />

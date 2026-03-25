@@ -125,6 +125,10 @@ export function ScrollReader({
   const observerTarget = useRef<HTMLDivElement>(null);
   const currentVisiblePageRef = useRef(startPage);
 
+  useEffect(() => {
+    currentVisiblePageRef.current = startPage;
+  }, [startPage]);
+
   const allPages = data?.pages.flatMap((p) => p?.items) || [];
 
   const debouncedPageChange = useDebouncedCallback((page: number) => {
@@ -195,7 +199,7 @@ export function ScrollReader({
         <ScrollPageRenderer
           key={page?.id}
           page={page}
-          onInView={debouncedPageChange}
+          onInView={initialLoadDone ? debouncedPageChange : undefined}
           bookmarks={bookmarks}
           notes={notes}
           onCreateHighlight={onCreateHighlight}

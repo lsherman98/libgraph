@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createWritingProject, updateWritingProject, deleteWritingProject, createChat, updateChat, deleteChat, createMessage, updateUpload, deleteUpload, createCollection, updateCollection, deleteCollection, sendChatMessage, summarizePage, summarizePages, upsertPreferences, upsertReadingProgress, addChatContext, removeChatContext, sendSidebarChatMessage } from "./api";
+import { upload, createPerson, createPublication, createTag, createTopic, createHighlight, updateHighlight, deleteHighlight, createBookmark, updateBookmark, deleteBookmark, createNote, updateNote, deleteNote, createWritingProject, updateWritingProject, deleteWritingProject, createChat, updateChat, deleteChat, createMessage, updateUpload, deleteUpload, createCollection, updateCollection, deleteCollection, sendChatMessage, summarizeUpload, summarizePages, upsertPreferences, upsertReadingProgress, addChatContext, removeChatContext, sendSidebarChatMessage } from "./api";
 import { handleError } from "../utils";
 import { Collections, type Create, type HighlightsRecord, type Update } from "../pocketbase-types";
 import type { ChatFilters } from "../types";
@@ -104,21 +104,24 @@ export function useCreateHighlight() {
         onMutate: async (newHighlight) => {
             const pageKey = queryKeys.highlights.byPage(newHighlight.page as string);
             await queryClient.cancelQueries({ queryKey: pageKey });
-            const previousHighlights = queryClient.getQueryData(pageKey);
+            const previousHighlights = queryClient.getQueryData<HighlightsRecord[]>(pageKey);
 
-            queryClient.setQueryData(pageKey, (old: HighlightsRecord[]) => {
-                return [...old, newHighlight];
+            queryClient.setQueryData(pageKey, (old: HighlightsRecord[] | undefined) => {
+                const previous = Array.isArray(old) ? old : [];
+                return [...previous, newHighlight as HighlightsRecord];
             });
 
             return { previousHighlights, pageKey };
         },
-        onError: handleError,
-        onSuccess: (_data, newHighlight) => {
+        onError: (error, _variables, context) => {
+            if (context?.pageKey) {
+                queryClient.setQueryData(context.pageKey, context.previousHighlights ?? []);
+            }
+            handleError(error);
+        },
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.highlights.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
-            if (newHighlight.upload) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.highlights.byUpload(newHighlight.upload as string) });
-            }
         },
     });
 }
@@ -155,12 +158,9 @@ export function useUpdateHighlight() {
             }
             handleError(error);
         },
-        onSuccess: (updatedHighlight) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.highlights.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
-            if (updatedHighlight?.upload) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.highlights.byUpload(updatedHighlight.upload) });
-            }
         },
     });
 }
@@ -184,12 +184,9 @@ export function useCreateBookmark() {
     return useMutation({
         mutationFn: createBookmark,
         onError: handleError,
-        onSuccess: (bookmark) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.bookmarks.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
-            if (bookmark.upload) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.bookmarks.byUpload(bookmark.upload) });
-            }
         },
     });
 }
@@ -201,12 +198,9 @@ export function useUpdateBookmark() {
         mutationFn: ({ id, data }: { id: string; data: Update<Collections.Bookmarks> }) =>
             updateBookmark(id, data),
         onError: handleError,
-        onSuccess: (bookmark) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.bookmarks.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
-            if (bookmark.upload) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.bookmarks.byUpload(bookmark.upload) });
-            }
         },
     });
 }
@@ -230,12 +224,9 @@ export function useCreateNote() {
     return useMutation({
         mutationFn: createNote,
         onError: handleError,
-        onSuccess: (newNote) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.notes.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
-            if (newNote.upload) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.notes.byUpload(newNote.upload) });
-            }
         },
     });
 }
@@ -247,12 +238,9 @@ export function useUpdateNote() {
         mutationFn: ({ id, data }: { id: string; data: Update<Collections.Notes> }) =>
             updateNote(id, data),
         onError: handleError,
-        onSuccess: (note) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMaterials.all });
             queryClient.invalidateQueries({ queryKey: queryKeys.notes.all });
-            if (note.upload) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.notes.byUpload(note.upload) });
-            }
         },
     });
 }
@@ -434,13 +422,6 @@ export function useSendChatMessage({
                         content: message,
                         created: new Date().toISOString(),
                     },
-                    {
-                        id: "optimistic-loading-" + Date.now(),
-                        role: "assistant",
-                        content: "",
-                        isLoading: true,
-                        created: new Date().toISOString(),
-                    },
                 ]);
 
                 return { previousMessages, chatId: activeChatId };
@@ -492,16 +473,14 @@ export function useUpdateReadingProgress() {
     });
 }
 
-export function useSummarizePage() {
+export function useSummarizeUpload() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: summarizePage,
+        mutationFn: summarizeUpload,
         onError: handleError,
-        onSuccess: (_data, pageId) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.pages.all });
-            queryClient.invalidateQueries({ queryKey: queryKeys.summaries.bySourcePage(pageId) });
-            queryClient.invalidateQueries({ queryKey: queryKeys.summaries.all });
         },
     });
 }
@@ -512,12 +491,8 @@ export function useSummarizePages() {
     return useMutation({
         mutationFn: summarizePages,
         onError: handleError,
-        onSuccess: (_data, pageIds) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: queryKeys.pages.all });
-            for (const pageId of pageIds) {
-                queryClient.invalidateQueries({ queryKey: queryKeys.summaries.bySourcePage(pageId) });
-            }
-            queryClient.invalidateQueries({ queryKey: queryKeys.summaries.all });
         },
     });
 }
@@ -538,10 +513,10 @@ export function useRemoveChatContext() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: removeChatContext,
+        mutationFn: ({ id }: { id: string; chatId: string }) => removeChatContext(id),
         onError: handleError,
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: queryKeys.chatContexts.all });
+        onSuccess: (_data, variables) => {
+            queryClient.invalidateQueries({ queryKey: queryKeys.chatContexts.byChat(variables.chatId) });
         },
     });
 }
@@ -607,13 +582,6 @@ export function useSendSidebarMessage({
                         id: "optimistic-user-" + Date.now(),
                         role: "user",
                         content: message,
-                        created: new Date().toISOString(),
-                    },
-                    {
-                        id: "optimistic-loading-" + Date.now(),
-                        role: "assistant",
-                        content: "",
-                        isLoading: true,
                         created: new Date().toISOString(),
                     },
                 ]);

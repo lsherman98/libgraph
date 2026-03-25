@@ -1,10 +1,10 @@
 import { useState, useMemo } from "react";
 import { Link } from "@tanstack/react-router";
-import { useUploads, useTags, useTopics, usePeople, usePublications } from "@/lib/api/queries";
-import { useDeleteUpload } from "@/lib/api/mutations";
+import { useUploads, useTags, useTopics, usePeople, usePublications, useCollections } from "@/lib/api/queries";
+import { useDeleteUpload, useUpdateCollection } from "@/lib/api/mutations";
 import { useCreateCollection } from "@/lib/api/mutations";
 import type { UploadFilters } from "@/lib/api/api";
-import type { UploadsResponse } from "@/lib/pocketbase-types";
+import type { CollectionsResponse, UploadsResponse } from "@/lib/pocketbase-types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { FileText, Upload, Search, Library, X } from "lucide-react";
@@ -63,6 +64,7 @@ function DocumentsEmptyState() {
 
 export function DocumentsTab() {
   const [filters, setFilters] = useState<UploadFilters>({});
+  const [addingToCollectionUpload, setAddingToCollectionUpload] = useState<UploadsResponse | null>(null);
   const debouncedSearch = useDebounce(filters.search, 300);
 
   const queryFilters = useMemo<UploadFilters>(() => ({ ...filters, search: debouncedSearch }), [filters, debouncedSearch]);
@@ -72,20 +74,39 @@ export function DocumentsTab() {
   const { data: topics } = useTopics();
   const { data: people } = usePeople();
   const { data: publications } = usePublications();
+  const { data: collections } = useCollections({ enabled: !!addingToCollectionUpload });
   const deleteUploadMutation = useDeleteUpload();
   const createCollectionMutation = useCreateCollection();
+  const updateCollectionMutation = useUpdateCollection();
 
   const [editingUpload, setEditingUpload] = useState<UploadsResponse | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [createCollectionOpen, setCreateCollectionOpen] = useState(false);
   const [collectionName, setCollectionName] = useState("");
   const [collectionDescription, setCollectionDescription] = useState("");
+  const [collectionSearch, setCollectionSearch] = useState("");
 
   const hasActiveFilters = Object.keys(filters).filter((k) => k !== "sortBy" && k !== "sortOrder" && filters[k as keyof UploadFilters]).length > 0;
 
   const successUploads = uploads?.filter((u) => u.status === "success") || [];
   const allSelected = successUploads.length > 0 && successUploads.every((u) => selectedIds.has(u.id));
   const someSelected = successUploads.some((u) => selectedIds.has(u.id));
+  const filteredCollections = useMemo(() => {
+    const term = collectionSearch.trim().toLowerCase();
+    if (!term) return collections || [];
+    return (collections || []).filter((collection) => (collection.name || "").toLowerCase().includes(term));
+  }, [collections, collectionSearch]);
+  const personNamesById = useMemo(() => new Map((people || []).map((person) => [person.id, person.name || "Unknown"])), [people]);
+  const publicationNamesById = useMemo(
+    () => new Map((publications || []).map((publication) => [publication.id, publication.name || "Unknown"])),
+    [publications],
+  );
+  const tagTitlesById = useMemo(() => new Map((tags || []).map((tag) => [tag.id, tag.title || "Untitled"])), [tags]);
+
+  const getCollectionUploadIds = (collection: CollectionsResponse) =>
+    Array.isArray(collection.uploads) ? collection.uploads : collection.uploads ? [collection.uploads] : [];
+
+  const isUploadInCollection = (collection: CollectionsResponse, uploadId: string) => getCollectionUploadIds(collection).includes(uploadId);
 
   const toggleSelect = (id: string, checked: boolean) => {
     setSelectedIds((prev) => {
@@ -105,6 +126,24 @@ export function DocumentsTab() {
   };
 
   const clearSelection = () => setSelectedIds(new Set());
+
+  const toggleCollectionMembership = (collection: CollectionsResponse, checked: boolean) => {
+    if (!addingToCollectionUpload) return;
+
+    const currentUploadIds = getCollectionUploadIds(collection);
+    const nextUploadIds = checked
+      ? currentUploadIds.includes(addingToCollectionUpload.id)
+        ? currentUploadIds
+        : [...currentUploadIds, addingToCollectionUpload.id]
+      : currentUploadIds.filter((id) => id !== addingToCollectionUpload.id);
+
+    updateCollectionMutation.mutate({
+      id: collection.id,
+      data: {
+        uploads: nextUploadIds.length > 0 ? (nextUploadIds as any) : undefined,
+      },
+    });
+  };
 
   const handleCreateCollection = () => {
     createCollectionMutation.mutate(
@@ -184,7 +223,7 @@ export function DocumentsTab() {
       ) : (
         <Card className="overflow-hidden flex flex-col min-h-0 flex-1">
           <div className="overflow-y-auto flex-1 min-h-0">
-            <Table className="table-fixed w-full">
+            <Table className="w-full">
               <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>
                   <TableHead className="w-10 pr-0">
@@ -195,9 +234,12 @@ export function DocumentsTab() {
                     />
                   </TableHead>
                   <TableHead>Document</TableHead>
-                  <TableHead className="w-28">Status</TableHead>
-                  <TableHead className="w-32">Created</TableHead>
-                  <TableHead className="w-20"></TableHead>
+                  <TableHead className="w-36 hidden lg:table-cell">Author</TableHead>
+                  <TableHead className="w-32 hidden lg:table-cell">Publication</TableHead>
+                  <TableHead className="w-36 hidden xl:table-cell">Tags</TableHead>
+                  <TableHead className="w-24 hidden md:table-cell">Status</TableHead>
+                  <TableHead className="w-28 hidden md:table-cell">Created</TableHead>
+                  <TableHead className="w-36"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -205,6 +247,9 @@ export function DocumentsTab() {
                   <DocumentRow
                     key={upload.id}
                     upload={upload}
+                    personNamesById={personNamesById}
+                    publicationNamesById={publicationNamesById}
+                    tagTitlesById={tagTitlesById}
                     selected={selectedIds.has(upload.id)}
                     onSelect={(checked) => toggleSelect(upload.id, checked)}
                     onEdit={() => setEditingUpload(upload)}
@@ -212,6 +257,10 @@ export function DocumentsTab() {
                       if (confirm("Are you sure you want to delete this document? This will also remove its graph data and indexed content.")) {
                         deleteUploadMutation.mutate(upload.id);
                       }
+                    }}
+                    onAddToCollection={() => {
+                      setAddingToCollectionUpload(upload);
+                      setCollectionSearch("");
                     }}
                   />
                 ))}
@@ -272,6 +321,59 @@ export function DocumentsTab() {
             </Button>
             <Button onClick={handleCreateCollection} disabled={!collectionName.trim()}>
               Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={!!addingToCollectionUpload}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAddingToCollectionUpload(null);
+            setCollectionSearch("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add to Collection</DialogTitle>
+            <DialogDescription>Add {addingToCollectionUpload?.title || "this document"} to one or more collections.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search collections..."
+                value={collectionSearch}
+                onChange={(e) => setCollectionSearch(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+            <ScrollArea className="h-64 rounded-md border">
+              <div className="p-2 space-y-1">
+                {filteredCollections.map((collection) => (
+                  <label key={collection.id} className="flex items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-accent cursor-pointer">
+                    <Checkbox
+                      checked={addingToCollectionUpload ? isUploadInCollection(collection, addingToCollectionUpload.id) : false}
+                      onCheckedChange={(checked) => toggleCollectionMembership(collection, !!checked)}
+                      disabled={updateCollectionMutation.isPending}
+                    />
+                    <span className="truncate">{collection.name || "Untitled"}</span>
+                  </label>
+                ))}
+                {filteredCollections.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No collections found</p>}
+              </div>
+            </ScrollArea>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAddingToCollectionUpload(null);
+                setCollectionSearch("");
+              }}
+            >
+              Done
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -69,12 +69,7 @@ export function ExistingHighlightPopover({ color, note, position, onUpdateColor,
             </Button>
           </div>
           {note && (
-            <div
-              className="text-xs text-muted-foreground pt-1.5 border-t border-border cursor-pointer hover:text-foreground transition-colors max-w-55 truncate"
-              onClick={onOpenEditor}
-              title={note}
-            >
-              <Pencil className="h-3 w-3 inline-block mr-1 -mt-0.5" />
+            <div className="text-xs text-muted-foreground pt-1.5 border-t border-border max-w-55 truncate" title={note}>
               {note}
             </div>
           )}

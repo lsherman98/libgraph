@@ -15,18 +15,6 @@ export interface PageSummaryBatchResponse {
     dedupe_key: string;
 }
 
-export interface PageSummaryData {
-    status: string;
-    pageId: string;
-    dedupeKey: string;
-}
-
-export interface PageSummaryBatchData {
-    status: string;
-    pageIds: string[];
-    dedupeKey: string;
-}
-
 export async function getPageUrl(id: string) {
     const [record, token] = await Promise.all([
         pb.collection(Collections.Pages).getOne(id),
@@ -164,6 +152,14 @@ export const getPageByNumber = async (uploadId: string, pageNumber: number) => {
     return await pb.collection(Collections.Pages).getFirstListItem(`upload = "${uploadId}" && page = ${pageNumber}`);
 }
 
+export const getPage = async (pageId: string) => {
+    return await pb.collection(Collections.Pages).getOne(pageId);
+}
+
+export const getSummary = async (summaryId: string) => {
+    return await pb.collection(Collections.Summaries).getOne(summaryId);
+}
+
 export const getPages = async (uploadId: string, page = 1, perPage = 10) => {
     return await pb.collection(Collections.Pages).getList(page, perPage, {
         filter: `upload = "${uploadId}"`,
@@ -171,8 +167,8 @@ export const getPages = async (uploadId: string, page = 1, perPage = 10) => {
     });
 }
 
-export const summarizePage = async (pageId: string) => {
-    return await pb.send<PageSummaryResponse>(`/api/pages/${pageId}/summarize`, {
+export const summarizeUpload = async (uploadId: string) => {
+    return await pb.send<PageSummaryResponse>(`/api/uploads/${uploadId}/summarize`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -187,18 +183,6 @@ export const summarizePages = async (pageIds: string[]) => {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({ page_ids: pageIds }),
-    });
-}
-
-export const getSummaryBySourcePage = async (pageId: string) => {
-    return await pb.collection(Collections.Summaries).getFirstListItem(`source_page = "${pageId}"`, {
-        sort: '-updated',
-    });
-}
-
-export const getSummaryBySourceUpload = async (uploadId: string) => {
-    return await pb.collection(Collections.Summaries).getFirstListItem(`source_upload = "${uploadId}"`, {
-        sort: '-updated',
     });
 }
 

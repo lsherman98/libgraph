@@ -342,16 +342,23 @@ func ensureUploadNode(app *pocketbase.PocketBase, uploadRecordId string, userId 
 func resolveSummaryFields(app *pocketbase.PocketBase, summaryRecord *core.Record) (string, string, string, error) {
 	userId := summaryRecord.GetString("user")
 	sourceUploadID := summaryRecord.GetString("source_upload")
-	sourcePageID := summaryRecord.GetString("source_page")
 	summaryUploadID := summaryRecord.GetString("summary_upload")
 
-	if sourceUploadID == "" && sourcePageID != "" {
-		sourcePageRecord, err := app.FindRecordById(collections.Pages, sourcePageID)
+	if sourceUploadID == "" {
+		linkedPages, err := app.FindRecordsByFilter(
+			collections.Pages,
+			"summary = {:summaryId}",
+			"+page",
+			1,
+			0,
+			dbx.Params{"summaryId": summaryRecord.Id},
+		)
 		if err != nil {
 			return userId, "", summaryUploadID, err
 		}
-
-		sourceUploadID = sourcePageRecord.GetString("upload")
+		if len(linkedPages) > 0 {
+			sourceUploadID = linkedPages[0].GetString("upload")
+		}
 	}
 
 	return userId, sourceUploadID, summaryUploadID, nil
@@ -553,7 +560,7 @@ func registerSimpleNodeHooks(app *pocketbase.PocketBase) {
 		userId := record.GetString("user")
 
 		label, data := collectionLabelData[collName](record)
-		createNode(app, record.Id, collectionNodeType[collName], userId, label, data);
+		createNode(app, record.Id, collectionNodeType[collName], userId, label, data)
 	}
 
 	app.OnRecordAfterCreateSuccess(collections.People).BindFunc(func(e *core.RecordEvent) error {
@@ -614,7 +621,7 @@ func registerSimpleNodeHooks(app *pocketbase.PocketBase) {
 		userId := record.GetString("user")
 
 		label, data := collectionLabelData[collName](record)
-		updateNodeData(app, record.Id, userId, collectionNodeType[collName], label, data);
+		updateNodeData(app, record.Id, userId, collectionNodeType[collName], label, data)
 	}
 
 	app.OnRecordAfterUpdateSuccess(collections.People).BindFunc(func(e *core.RecordEvent) error {

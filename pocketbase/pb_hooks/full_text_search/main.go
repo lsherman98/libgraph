@@ -63,6 +63,7 @@ func Init(app *pocketbase.PocketBase, collections ...string) error {
 
 		se.Router.GET("/api/collections/{collectionIdOrName}/records/full-text-search", func(e *core.RequestEvent) error {
 			target := e.Request.PathValue("collectionIdOrName")
+
 			if _, err := app.FindCollectionByNameOrId(target); err != nil {
 				return e.BadRequestError("collection not found", err)
 			}

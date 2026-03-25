@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, ExternalLink, X } from "lucide-react";
+import { FileText, Eye, X } from "lucide-react";
 import type { UploadsResponse } from "@/lib/pocketbase-types";
 
 interface UploadItemProps {
@@ -22,8 +22,8 @@ export function UploadItem({ upload, onUnlink, onOpen }: UploadItemProps) {
             </Badge>
           </div>
         </div>
-        <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={onOpen} title="Open document">
-          <ExternalLink className="h-3 w-3" />
+        <Button variant="outline" size="icon" className="h-7 w-7 shrink-0" onClick={onOpen} title="Preview document">
+          <Eye className="h-3 w-3" />
         </Button>
         <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onUnlink} title="Remove from project">
           <X className="h-3 w-3" />

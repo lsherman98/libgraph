@@ -13,15 +13,66 @@ import { PreviewDialog } from "@/components/workspace/preview-dialog";
 import type { MessagesResponse } from "@/lib/pocketbase-types";
 import type { ChatFilters, ChatSource } from "@/lib/types";
 
+const CHAT_POLL_TIMEOUT_MS = 90_000;
+const CHAT_MODE_STORAGE_KEY = "libgraph.chat.mode";
+const CHAT_ACTIVE_IDS_STORAGE_KEY = "libgraph.chat.activeByMode";
+
+type ChatMode = "chat" | "search";
+type ActiveChatByMode = Partial<Record<ChatMode, string>>;
+
+function readStoredMode(): ChatMode {
+  if (typeof window === "undefined") return "chat";
+
+  const raw = window.localStorage.getItem(CHAT_MODE_STORAGE_KEY);
+  return raw === "search" ? "search" : "chat";
+}
+
+function readStoredActiveChats(): ActiveChatByMode {
+  if (typeof window === "undefined") return {};
+
+  const raw = window.localStorage.getItem(CHAT_ACTIVE_IDS_STORAGE_KEY);
+  if (!raw) return {};
+
+  try {
+    const parsed = JSON.parse(raw) as ActiveChatByMode;
+    return parsed ?? {};
+  } catch {
+    return {};
+  }
+}
+
+function getStoredActiveChatId(mode: ChatMode): string | undefined {
+  const stored = readStoredActiveChats();
+  return stored[mode] || undefined;
+}
+
+function setStoredMode(mode: ChatMode) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(CHAT_MODE_STORAGE_KEY, mode);
+}
+
+function setStoredActiveChatId(mode: ChatMode, chatId: string | undefined) {
+  if (typeof window === "undefined") return;
+
+  const stored = readStoredActiveChats();
+  if (chatId) {
+    stored[mode] = chatId;
+  } else {
+    delete stored[mode];
+  }
+
+  window.localStorage.setItem(CHAT_ACTIVE_IDS_STORAGE_KEY, JSON.stringify(stored));
+}
+
 export const Route = createFileRoute("/_app/chat/")({
   component: ChatPage,
 });
 
 function ChatPage() {
-  const [activeChatId, setActiveChatId] = useState<string>();
+  const [mode, setMode] = useState<ChatMode>(() => readStoredMode());
+  const [activeChatId, setActiveChatId] = useState<string | undefined>(() => getStoredActiveChatId(readStoredMode()));
   const [pendingMessages, setPendingMessages] = useState<LocalMessage[]>([]);
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState<"chat" | "search">("chat");
 
   const [filters, setFilters] = useState<ChatFilters>({});
   const [isFiltersPanelOpen, setIsFiltersPanelOpen] = useState(false);
@@ -40,11 +91,23 @@ function ChatPage() {
         role: m.role as "user" | "assistant",
         content: m.content || "",
         sources: m.sources || undefined,
-        isLoading: (m as any).isLoading,
       }));
     }
     return pendingMessages;
   }, [activeChatId, dbMessages, pendingMessages]);
+
+  const showAssistantLoadingIndicator = useMemo(() => {
+    if (!activeChatId || !dbMessages || dbMessages.length === 0) return false;
+
+    const messages = dbMessages as MessagesResponse<ChatSource[]>[];
+    const lastMessage = messages[messages.length - 1];
+    if (!lastMessage || lastMessage.role !== "user") return false;
+
+    const createdAt = Date.parse(lastMessage.created);
+    if (Number.isNaN(createdAt)) return true;
+
+    return Date.now() - createdAt < CHAT_POLL_TIMEOUT_MS;
+  }, [activeChatId, dbMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -53,6 +116,14 @@ function ChatPage() {
   useEffect(() => {
     if (activeChatId) setPendingMessages([]);
   }, [activeChatId]);
+
+  useEffect(() => {
+    setStoredMode(mode);
+  }, [mode]);
+
+  useEffect(() => {
+    setStoredActiveChatId(mode, activeChatId);
+  }, [mode, activeChatId]);
 
   const chatMutation = useSendChatMessage({
     mode,
@@ -97,7 +168,7 @@ function ChatPage() {
 
   const handleModeChange = (newMode: "chat" | "search") => {
     setMode(newMode);
-    setActiveChatId(undefined);
+    setActiveChatId(getStoredActiveChatId(newMode));
     setPendingMessages([]);
   };
 
@@ -150,6 +221,13 @@ function ChatPage() {
                 {displayMessages.map((message) => (
                   <MessageBubble key={message.id} message={message} mode={mode} onSourceClick={handleSourceClick} />
                 ))}
+                {showAssistantLoadingIndicator && (
+                  <MessageBubble
+                    message={{ id: "assistant-loading-indicator", role: "assistant", content: "", isLoading: true }}
+                    mode={mode}
+                    onSourceClick={handleSourceClick}
+                  />
+                )}
                 <div ref={messagesEndRef} />
               </div>
             </div>

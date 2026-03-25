@@ -30,4 +30,9 @@ const (
 
 	MessageRoleUser      = "user"
 	MessageRoleAssistant = "assistant"
+
+	MessageStatusQueued    = "queued"
+	MessageStatusRunning   = "running"
+	MessageStatusCompleted = "completed"
+	MessageStatusFailed    = "failed"
 )

@@ -14,8 +14,8 @@ interface NewTabDialogProps {
 
 export function NewTabDialog({ open, onOpenChange, initialTab = "documents" }: NewTabDialogProps) {
   const navigate = useNavigate();
-  const { data: uploads } = useUploads();
-  const { data: projects } = useWritingProjects();
+  const { data: uploads } = useUploads(undefined, { enabled: open });
+  const { data: projects } = useWritingProjects({ enabled: open });
 
   const handleSelectUpload = (upload: UploadsResponse) => {
     onOpenChange(false);

@@ -108,7 +108,8 @@ export interface FTSSearchResult {
 
 export interface ChatResponseData {
     chat_id: string;
-    message: string;
+    status?: string;
+    message?: string;
     sources?: ChatSource[];
     user_message_id: string;
     assistant_message_id: string;

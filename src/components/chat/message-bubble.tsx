@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { CitationContent } from "@/components/chat/citation-content";
 import { buildCitationMap } from "@/components/chat/citation-utils";
 import { SearchResultSources } from "@/components/chat/search-result-sources";
+import { SharedMarkdownRenderer } from "@/components/ui/markdown-renderer";
 import type { ChatSource, ChatMessage } from "@/lib/types";
 
 export interface LocalMessage extends ChatMessage {
@@ -52,6 +53,8 @@ export function MessageBubble({ message, mode = "chat", onSourceClick }: Message
         <div className="text-sm leading-relaxed">
           {hasCitations && message.sources ? (
             <CitationContent content={message.content} sources={message.sources} citationMap={citationMap} onSourceClick={onSourceClick} />
+          ) : !isUser ? (
+            <SharedMarkdownRenderer content={message.content} />
           ) : (
             <span className="whitespace-pre-wrap">{message.content}</span>
           )}
