@@ -39,7 +39,7 @@ func RecoverStuckUploads(app *pocketbase.PocketBase) {
 	}
 }
 
-func readPageMarkdown(app *pocketbase.PocketBase, page *core.Record) (string, error) {
+func readPageMarkdown(app core.App, page *core.Record) (string, error) {
 	filename := page.GetString("markdown")
 	if filename == "" {
 		return "", fmt.Errorf("page has no markdown file")

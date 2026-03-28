@@ -1,6 +1,6 @@
 package parser
 
-import "github.com/pocketbase/pocketbase"
+import "github.com/pocketbase/pocketbase/core"
 
 type Page struct {
 	PageNumber int
@@ -12,7 +12,7 @@ type ParseResult struct {
 }
 
 type Parser struct {
-	App        *pocketbase.PocketBase
+	App        core.App
 	WorkerPool int
 }
 

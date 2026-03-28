@@ -55,7 +55,7 @@ func (o *embedContentBatchOutput) getInlinedResponses() []inlinedEmbedContentRes
 	return nil
 }
 
-func collectChunkRecords(app *pocketbase.PocketBase, records []*core.Record) []chunkRecord {
+func collectChunkRecords(app core.App, records []*core.Record) []chunkRecord {
 	chunks := make([]chunkRecord, 0, len(records))
 	uploadTitleCache := make(map[string]string)
 	uploadLookupDone := make(map[string]bool)
@@ -575,7 +575,7 @@ func resolveBatchResult(op *batchOperation, rawBody []byte) (*embedContentBatchR
 	return &result, nil
 }
 
-func storeChunkEmbedding(app *pocketbase.PocketBase, record *core.Record, values []float32) error {
+func storeChunkEmbedding(app core.App, record *core.Record, values []float32) error {
 	if len(values) != embeddingDims {
 		return fmt.Errorf("embedding dimension mismatch for chunk %s: got %d, expected %d", record.Id, len(values), embeddingDims)
 	}

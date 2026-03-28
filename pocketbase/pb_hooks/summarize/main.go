@@ -303,7 +303,7 @@ func registerQueueHandlers() {
 	processing.RegisterHandler(processing.JobTypePageSummarize, handlePageSummarizeJob)
 }
 
-func handlePageSummarizeJob(app *pocketbase.PocketBase, job *core.Record) error {
+func handlePageSummarizeJob(app core.App, job *core.Record) error {
 	payload := pageSummarizePayload{}
 	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
 		app.Logger().Error("page summarize job failed: payload unmarshal failed", "job_id", job.Id, "job_type", job.GetString("job_type"), "error", err)
@@ -426,7 +426,7 @@ func handlePageSummarizeJob(app *pocketbase.PocketBase, job *core.Record) error 
 	return err
 }
 
-func handlePageRangeSummarizeJob(app *pocketbase.PocketBase, payload pageSummarizePayload) error {
+func handlePageRangeSummarizeJob(app core.App, payload pageSummarizePayload) error {
 	cleanIDs := make([]string, 0, len(payload.PageIDs))
 	seenIDs := map[string]struct{}{}
 	for _, rawID := range payload.PageIDs {
@@ -553,7 +553,7 @@ func handlePageRangeSummarizeJob(app *pocketbase.PocketBase, payload pageSummari
 	return nil
 }
 
-func linkPageToSummaryRecord(app *pocketbase.PocketBase, sourcePageRecord *core.Record, summaryRecordID string) error {
+func linkPageToSummaryRecord(app core.App, sourcePageRecord *core.Record, summaryRecordID string) error {
 	if strings.TrimSpace(summaryRecordID) == "" {
 		return fmt.Errorf("summary record id is required")
 	}
@@ -635,7 +635,7 @@ func GenerateDocumentSummary(allMarkdown string) (string, error) {
 	return summary, nil
 }
 
-func UpsertPageSummaryArtifact(app *pocketbase.PocketBase, sourcePageRecord *core.Record, userID, summaryMarkdown string, fullDocument bool) (*core.Record, *core.Record, *core.Record, error) {
+func UpsertPageSummaryArtifact(app core.App, sourcePageRecord *core.Record, userID, summaryMarkdown string, fullDocument bool) (*core.Record, *core.Record, *core.Record, error) {
 	sourceUploadID := sourcePageRecord.GetString("upload")
 	if strings.TrimSpace(sourceUploadID) == "" {
 		return nil, nil, nil, fmt.Errorf("source page missing upload relation")
@@ -645,7 +645,7 @@ func UpsertPageSummaryArtifact(app *pocketbase.PocketBase, sourcePageRecord *cor
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to load source upload: %w", err)
 	}
-	
+
 	uploadsCollection, _ := app.FindCollectionByNameOrId(collections.Uploads)
 	pagesCollection, _ := app.FindCollectionByNameOrId(collections.Pages)
 	summariesCollection, _ := app.FindCollectionByNameOrId(collections.Summaries)

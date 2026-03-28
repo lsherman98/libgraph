@@ -46,7 +46,7 @@ func registerQueueHandlers() {
 	processing.RegisterHandler(processing.JobTypeChunkEmbedPoll, handleChunkEmbedPollJob)
 }
 
-func handleChunkEmbedSubmitJob(app *pocketbase.PocketBase, job *core.Record) error {
+func handleChunkEmbedSubmitJob(app core.App, job *core.Record) error {
 	payload := chunkEmbedPayload{}
 	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
 		return err
@@ -86,7 +86,7 @@ func handleChunkEmbedSubmitJob(app *pocketbase.PocketBase, job *core.Record) err
 	return submitEmbeddingOperationAndProcessSync(app, job, chunks)
 }
 
-func handleChunkEmbedPollJob(app *pocketbase.PocketBase, job *core.Record) error {
+func handleChunkEmbedPollJob(app core.App, job *core.Record) error {
 	payload := chunkEmbedPayload{}
 	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
 		return err
@@ -200,7 +200,7 @@ func handleChunkEmbedPollJob(app *pocketbase.PocketBase, job *core.Record) error
 	return app.Save(operationRecord)
 }
 
-func submitEmbeddingOperationAndEnqueuePoll(app *pocketbase.PocketBase, job *core.Record, chunkRecords []*core.Record) error {
+func submitEmbeddingOperationAndEnqueuePoll(app core.App, job *core.Record, chunkRecords []*core.Record) error {
 	chunks := collectChunkRecords(app, chunkRecords)
 	if len(chunks) == 0 {
 		return nil
@@ -241,7 +241,7 @@ func submitEmbeddingOperationAndEnqueuePoll(app *pocketbase.PocketBase, job *cor
 	return enqueueEmbeddingPollJob(app, operationRecord, time.Now().UTC().Add(embeddingPollInterval()))
 }
 
-func submitEmbeddingOperationAndProcessSync(app *pocketbase.PocketBase, job *core.Record, chunkRecords []*core.Record) error {
+func submitEmbeddingOperationAndProcessSync(app core.App, job *core.Record, chunkRecords []*core.Record) error {
 	chunks := collectChunkRecords(app, chunkRecords)
 	if len(chunks) == 0 {
 		return nil
@@ -290,7 +290,7 @@ func submitEmbeddingOperationAndProcessSync(app *pocketbase.PocketBase, job *cor
 	return nil
 }
 
-func processChunkEmbeddingsSyncBulk(app *pocketbase.PocketBase, chunks []chunkRecord, modelName string) (processed int, failed int, firstErr error) {
+func processChunkEmbeddingsSyncBulk(app core.App, chunks []chunkRecord, modelName string) (processed int, failed int, firstErr error) {
 	if len(chunks) == 0 {
 		return 0, 0, nil
 	}
@@ -341,7 +341,7 @@ func processChunkEmbeddingsSyncBulk(app *pocketbase.PocketBase, chunks []chunkRe
 	return processed, failed, firstErr
 }
 
-func createEmbeddingOperationRecord(app *pocketbase.PocketBase, job *core.Record, chunkIDs []string, providerOperationID string, modelName string, totalChunks int, maxAttempts int) (*core.Record, error) {
+func createEmbeddingOperationRecord(app core.App, job *core.Record, chunkIDs []string, providerOperationID string, modelName string, totalChunks int, maxAttempts int) (*core.Record, error) {
 	collection, _ := app.FindCollectionByNameOrId(collections.EmbeddingJobs)
 
 	if maxAttempts <= 0 {
@@ -366,7 +366,7 @@ func createEmbeddingOperationRecord(app *pocketbase.PocketBase, job *core.Record
 	return operationRecord, nil
 }
 
-func handleEmbeddingOperationPollError(app *pocketbase.PocketBase, job *core.Record, operationRecord *core.Record, pollErr error) error {
+func handleEmbeddingOperationPollError(app core.App, job *core.Record, operationRecord *core.Record, pollErr error) error {
 	now := time.Now().UTC()
 	attempts := operationRecord.GetInt("attempts") + 1
 	maxAttempts := operationRecord.GetInt("max_attempts")
@@ -394,7 +394,7 @@ func handleEmbeddingOperationPollError(app *pocketbase.PocketBase, job *core.Rec
 	return rescheduleEmbeddingPollJob(app, job, operationRecord, nextPollAt)
 }
 
-func enqueueEmbeddingPollJob(app *pocketbase.PocketBase, operationRecord *core.Record, scheduledAt time.Time) error {
+func enqueueEmbeddingPollJob(app core.App, operationRecord *core.Record, scheduledAt time.Time) error {
 	operationID := operationRecord.Id
 	dedupeKey := fmt.Sprintf("chunk.embed.poll:%s", operationID)
 	userID := operationRecord.GetString("user")
@@ -413,7 +413,7 @@ func enqueueEmbeddingPollJob(app *pocketbase.PocketBase, operationRecord *core.R
 	})
 }
 
-func rescheduleEmbeddingPollJob(app *pocketbase.PocketBase, job *core.Record, operationRecord *core.Record, scheduledAt time.Time) error {
+func rescheduleEmbeddingPollJob(app core.App, job *core.Record, operationRecord *core.Record, scheduledAt time.Time) error {
 	if job == nil {
 		return enqueueEmbeddingPollJob(app, operationRecord, scheduledAt)
 	}
@@ -506,7 +506,7 @@ func EnqueuePendingEmbeddingPollJobs(app *pocketbase.PocketBase, limit int) erro
 	return nil
 }
 
-func loadEmbeddableChunkRecords(app *pocketbase.PocketBase, chunkIDs []string) ([]*core.Record, error) {
+func loadEmbeddableChunkRecords(app core.App, chunkIDs []string) ([]*core.Record, error) {
 	records := make([]*core.Record, 0, len(chunkIDs))
 	for _, chunkID := range chunkIDs {
 		record, err := app.FindRecordById(collections.DocumentChunks, chunkID)
@@ -549,7 +549,7 @@ func embeddingOperationChunkIDs(operationRecord *core.Record) ([]string, error) 
 	return chunkIDs, nil
 }
 
-func persistEmbeddingBatchResult(app *pocketbase.PocketBase, chunkRecords []*core.Record, result *embedContentBatchResult) (processed int, failed int, err error) {
+func persistEmbeddingBatchResult(app core.App, chunkRecords []*core.Record, result *embedContentBatchResult) (processed int, failed int, err error) {
 	responses := result.Output.getInlinedResponses()
 	if len(responses) == 0 {
 		return 0, len(chunkRecords), fmt.Errorf("batch result has no inline responses")

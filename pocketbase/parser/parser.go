@@ -10,13 +10,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 )
 
 const tmpBaseDir = "tmp"
 
-func New(app *pocketbase.PocketBase) *Parser {
+func New(app core.App) *Parser {
 	return &Parser{
 		App:        app,
 		WorkerPool: 5,

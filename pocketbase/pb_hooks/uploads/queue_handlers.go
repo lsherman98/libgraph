@@ -14,7 +14,6 @@ import (
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/processing"
 	"github.com/lsherman98/libgraph/pocketbase/vars"
 	"github.com/pocketbase/dbx"
-	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/filesystem"
 )
@@ -37,7 +36,7 @@ func registerQueueHandlers() {
 	processing.RegisterHandler(processing.JobTypeChunkGenerate, handleChunkGenerateJob)
 }
 
-func handleUploadParseOrTranscribeJob(app *pocketbase.PocketBase, job *core.Record) error {
+func handleUploadParseOrTranscribeJob(app core.App, job *core.Record) error {
 	payload := uploadJobPayload{}
 	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
 		return err
@@ -97,7 +96,7 @@ func handleUploadParseOrTranscribeJob(app *pocketbase.PocketBase, job *core.Reco
 	return app.Save(upload)
 }
 
-func parseAudioUploadIntoPages(app *pocketbase.PocketBase, upload *core.Record) ([]*core.Record, error) {
+func parseAudioUploadIntoPages(app core.App, upload *core.Record) ([]*core.Record, error) {
 	title := upload.GetString("title")
 	if err := validateAudioDurationLimit(upload); err != nil {
 		return nil, err
@@ -143,7 +142,7 @@ func parseAudioUploadIntoPages(app *pocketbase.PocketBase, upload *core.Record) 
 	return []*core.Record{page}, nil
 }
 
-func readTranscriptMarkdown(app *pocketbase.PocketBase, upload *core.Record) (string, error) {
+func readTranscriptMarkdown(app core.App, upload *core.Record) (string, error) {
 	transcriptFile := strings.TrimSpace(upload.GetString("transcript_file"))
 	if transcriptFile == "" {
 		return "", nil
@@ -180,7 +179,7 @@ func readTranscriptMarkdown(app *pocketbase.PocketBase, upload *core.Record) (st
 	return mistral.FormatPlainTranscriptMarkdown(transcriptText), nil
 }
 
-func parseDocumentUploadIntoPages(app *pocketbase.PocketBase, upload *core.Record) ([]*core.Record, error) {
+func parseDocumentUploadIntoPages(app core.App, upload *core.Record) ([]*core.Record, error) {
 	title := upload.GetString("title")
 	docParser := parser.New(app)
 	pagesCollection, _ := app.FindCollectionByNameOrId(collections.Pages)
@@ -214,7 +213,7 @@ func parseDocumentUploadIntoPages(app *pocketbase.PocketBase, upload *core.Recor
 	return persistedPages, nil
 }
 
-func createPageRecord(app *pocketbase.PocketBase, upload *core.Record, pageNumber int, filename string, markdown string) (*core.Record, error) {
+func createPageRecord(app core.App, upload *core.Record, pageNumber int, filename string, markdown string) (*core.Record, error) {
 	pagesCollection, _ := app.FindCollectionByNameOrId(collections.Pages)
 
 	newPage := core.NewRecord(pagesCollection)
@@ -235,7 +234,7 @@ func createPageRecord(app *pocketbase.PocketBase, upload *core.Record, pageNumbe
 	return newPage, nil
 }
 
-func enqueueChunkGenerateForPage(app *pocketbase.PocketBase, upload *core.Record, page *core.Record) error {
+func enqueueChunkGenerateForPage(app core.App, upload *core.Record, page *core.Record) error {
 	pageNumber := page.GetInt("page")
 	return processing.Enqueue(app, processing.EnqueueRequest{
 		JobType:   processing.JobTypeChunkGenerate,
@@ -252,7 +251,7 @@ func enqueueChunkGenerateForPage(app *pocketbase.PocketBase, upload *core.Record
 	})
 }
 
-func handleChunkGenerateJob(app *pocketbase.PocketBase, job *core.Record) error {
+func handleChunkGenerateJob(app core.App, job *core.Record) error {
 	payload := chunkGeneratePayload{}
 	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
 		return fmt.Errorf("invalid payload: %w", err)
@@ -337,7 +336,7 @@ func handleChunkGenerateJob(app *pocketbase.PocketBase, job *core.Record) error 
 	return enqueueUploadChunkEmbeds(app, payload.UploadID, payload.UserID)
 }
 
-func hasPendingChunkGenerateJobs(app *pocketbase.PocketBase, uploadID string, currentJobID string) bool {
+func hasPendingChunkGenerateJobs(app core.App, uploadID string, currentJobID string) bool {
 	records, err := app.FindRecordsByFilter(
 		collections.Queue,
 		"upload = {:uploadId} && job_type = {:jobType} && (status = 'queued' || status = 'running') && id != {:jobId}",
@@ -353,7 +352,7 @@ func hasPendingChunkGenerateJobs(app *pocketbase.PocketBase, uploadID string, cu
 	return len(records) > 0
 }
 
-func enqueueUploadChunkEmbeds(app *pocketbase.PocketBase, uploadID string, userID string) error {
+func enqueueUploadChunkEmbeds(app core.App, uploadID string, userID string) error {
 	chunkRecords, err := app.FindRecordsByFilter(
 		collections.DocumentChunks,
 		"upload = {:uploadId} && (vector_id = 0 || vector_id = null)",

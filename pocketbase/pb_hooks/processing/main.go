@@ -1,8 +1,6 @@
 package processing
 
 import (
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -14,48 +12,6 @@ import (
 	"github.com/pocketbase/pocketbase/tools/routine"
 )
 
-const (
-	JobTypeUploadParseOrTranscribe = "upload.parse"
-	JobTypeChunkGenerate           = "chunk.generate"
-	JobTypePageSummarize           = "page.summarize"
-	JobTypeChunkEmbedSubmit        = "chunk.embed"
-	JobTypeChunkEmbedPoll          = "chunk.embed.poll"
-)
-
-const (
-	queuePollInterval = 10 * time.Second
-	embedPollInterval = 120 * time.Second
-
-	defaultParseWorkers       = 12
-	defaultChunkWorkers       = 100
-	defaultSummarizeWorkers   = 8
-	defaultEmbedSubmitWorkers = 24
-	defaultEmbedPollWorkers   = 24
-)
-
-type Worker struct {
-	name     string
-	jobType  string
-	limit    int
-	interval time.Duration
-}
-
-type JobHandler func(app *pocketbase.PocketBase, job *core.Record) error
-
-type EnqueueRequest struct {
-	JobType               string
-	DedupeKey             string
-	Payload               map[string]any
-	UserID                string
-	UploadID              string
-	PageID                string
-	AllowRequeueOnSuccess bool
-}
-
-var (
-	handlers = map[string]JobHandler{}
-)
-
 func RegisterHandler(jobType string, handler JobHandler) {
 	handlers[jobType] = handler
 }
@@ -63,11 +19,11 @@ func RegisterHandler(jobType string, handler JobHandler) {
 func Init(app *pocketbase.PocketBase) error {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		workers := []Worker{
-			{name: "parse", jobType: JobTypeUploadParseOrTranscribe, limit: envIntOrDefault("PROCESSING_PARSE_WORKERS", defaultParseWorkers), interval: queuePollInterval},
-			{name: "chunk", jobType: JobTypeChunkGenerate, limit: envIntOrDefault("PROCESSING_CHUNK_WORKERS", defaultChunkWorkers), interval: queuePollInterval},
-			{name: "summarize", jobType: JobTypePageSummarize, limit: envIntOrDefault("PROCESSING_SUMMARIZE_WORKERS", defaultSummarizeWorkers), interval: queuePollInterval},
-			{name: "embed-submit", jobType: JobTypeChunkEmbedSubmit, limit: envIntOrDefault("PROCESSING_EMBED_SUBMIT_WORKERS", defaultEmbedSubmitWorkers), interval: queuePollInterval},
-			{name: "embed-poll", jobType: JobTypeChunkEmbedPoll, limit: envIntOrDefault("PROCESSING_EMBED_POLL_WORKERS", defaultEmbedPollWorkers), interval: embedPollInterval},
+			{name: "parse", jobType: JobTypeUploadParseOrTranscribe, limit: getWorkerCount("PROCESSING_PARSE_WORKERS"), interval: queuePollInterval},
+			{name: "chunk", jobType: JobTypeChunkGenerate, limit: getWorkerCount("PROCESSING_CHUNK_WORKERS"), interval: queuePollInterval},
+			{name: "summarize", jobType: JobTypePageSummarize, limit: getWorkerCount("PROCESSING_SUMMARIZE_WORKERS"), interval: queuePollInterval},
+			{name: "embed-submit", jobType: JobTypeChunkEmbedSubmit, limit: getWorkerCount("PROCESSING_EMBED_SUBMIT_WORKERS"), interval: queuePollInterval},
+			{name: "embed-poll", jobType: JobTypeChunkEmbedPoll, limit: getWorkerCount("PROCESSING_EMBED_POLL_WORKERS"), interval: embedPollInterval},
 		}
 
 		for _, spec := range workers {
@@ -87,21 +43,7 @@ func Init(app *pocketbase.PocketBase) error {
 	return nil
 }
 
-func envIntOrDefault(name string, fallback int) int {
-	raw := strings.TrimSpace(os.Getenv(name))
-	if raw == "" {
-		return fallback
-	}
-
-	parsed, err := strconv.Atoi(raw)
-	if err != nil || parsed <= 0 {
-		return fallback
-	}
-
-	return parsed
-}
-
-func Enqueue(app *pocketbase.PocketBase, req EnqueueRequest) error {
+func Enqueue(app core.App, req EnqueueRequest) error {
 	existing, err := app.FindFirstRecordByFilter(
 		collections.Queue,
 		"dedupe_key = {:dedupeKey}",
@@ -155,7 +97,7 @@ func Enqueue(app *pocketbase.PocketBase, req EnqueueRequest) error {
 	return nil
 }
 
-func processDueJobs(app *pocketbase.PocketBase, worker Worker) error {
+func processDueJobs(app core.App, worker Worker) error {
 	records, err := app.FindRecordsByFilter(
 		collections.Queue,
 		"status = 'queued' && job_type = {:jobType}",
@@ -191,7 +133,7 @@ func processDueJobs(app *pocketbase.PocketBase, worker Worker) error {
 	return nil
 }
 
-func claimJob(app *pocketbase.PocketBase, job *core.Record, workerName string) error {
+func claimJob(app core.App, job *core.Record, workerName string) error {
 	now := time.Now().UTC()
 	job.Set("status", vars.QueueStatusRunning)
 	job.Set("started_at", now)
@@ -199,24 +141,24 @@ func claimJob(app *pocketbase.PocketBase, job *core.Record, workerName string) e
 	return app.Save(job)
 }
 
-func executeJob(app *pocketbase.PocketBase, job *core.Record) error {
+func executeJob(app core.App, job *core.Record) error {
 	jobType := job.GetString("job_type")
 	handler := handlers[jobType]
 
 	return handler(app, job)
 }
 
-func handleJobFailure(app *pocketbase.PocketBase, job *core.Record, err error) {
+func handleJobFailure(app core.App, job *core.Record, err error) {
 	now := time.Now().UTC()
 	job.Set("status", vars.QueueStatusFailed)
 	job.Set("finished_at", now)
-	job.Set("error_message", err)
+	job.Set("error_message", err.Error())
 	if err := app.Save(job); err != nil {
 		return
 	}
 }
 
-func markUploadSuccessfulIfComplete(app *pocketbase.PocketBase, job *core.Record) {
+func markUploadSuccessfulIfComplete(app core.App, job *core.Record) {
 	uploadID := job.GetString("upload")
 	if uploadID == "" {
 		return
@@ -230,7 +172,7 @@ func markUploadSuccessfulIfComplete(app *pocketbase.PocketBase, job *core.Record
 	reconcileUploadStatusFromQueue(app, uploadRecord)
 }
 
-func RecoverHangingProcessingUploads(app *pocketbase.PocketBase) {
+func RecoverHangingProcessingUploads(app core.App) {
 	uploads, err := app.FindRecordsByFilter(
 		collections.Uploads,
 		"status = {:status}",
@@ -248,7 +190,7 @@ func RecoverHangingProcessingUploads(app *pocketbase.PocketBase) {
 	}
 }
 
-func reconcileUploadStatusFromQueue(app *pocketbase.PocketBase, uploadRecord *core.Record) {
+func reconcileUploadStatusFromQueue(app core.App, uploadRecord *core.Record) {
 	if uploadRecord == nil {
 		return
 	}

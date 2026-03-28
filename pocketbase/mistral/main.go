@@ -15,7 +15,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -52,10 +51,10 @@ func IsAudioFile(filename string) bool {
 type Client struct {
 	HTTPClient *http.Client
 	APIKey     string
-	App        *pocketbase.PocketBase
+	App        core.App
 }
 
-func New(app *pocketbase.PocketBase) (*Client, error) {
+func New(app core.App) (*Client, error) {
 	apiKey := os.Getenv("MISTRAL_API_KEY")
 	if apiKey == "" {
 		return nil, errors.New("MISTRAL_API_KEY environment variable is required")
