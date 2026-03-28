@@ -11,7 +11,6 @@ import { usePeople, usePublications, useTags, useTopics, useUploads } from "@/li
 import { getUserId } from "@/lib/utils";
 import {
   UploadsTypeOptions,
-  PeopleTypeOptions,
   type UploadsResponse,
   type PeopleResponse,
   type PublicationsResponse,
@@ -30,7 +29,8 @@ interface EditUploadDialogProps {
 export function EditUploadDialog({ upload, open, onOpenChange }: EditUploadDialogProps) {
   const [title, setTitle] = useState("");
   const [type, setType] = useState<UploadsTypeOptions>(UploadsTypeOptions.book);
-  const [subjects, setSubjects] = useState<string[]>([]);
+  const [author, setAuthor] = useState("");
+  const [people, setPeople] = useState<string[]>([]);
   const [publication, setPublication] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [topics, setTopics] = useState<string[]>([]);
@@ -52,10 +52,11 @@ export function EditUploadDialog({ upload, open, onOpenChange }: EditUploadDialo
     if (upload) {
       setTitle(upload.title || "");
       setType(upload.type || UploadsTypeOptions.book);
-      setSubjects(upload.people || []);
+      setAuthor(upload.author || "");
+      setPeople(upload.people || []);
       setPublication(upload.publication || "");
       setTags(upload.tags || []);
-      setTopics(upload.topic || []);
+      setTopics(upload.topics || []);
       setRelatedUploads(upload.uploads || []);
     }
   }, [upload]);
@@ -68,23 +69,22 @@ export function EditUploadDialog({ upload, open, onOpenChange }: EditUploadDialo
       data: {
         title,
         type,
-        people: subjects.length > 0 ? subjects : undefined,
-        publication: publication || undefined,
-        tags: tags.length > 0 ? tags : undefined,
-        topic: topics.length > 0 ? topics : undefined,
-        uploads: relatedUploads.length > 0 ? relatedUploads : undefined,
+        author: author || "",
+        people,
+        publication: publication || "",
+        tags,
+        topics,
+        uploads: relatedUploads,
       },
     });
 
     onOpenChange(false);
   };
 
-  const authorOptions = (peopleQuery.data || [])
-    .filter((p: PeopleResponse) => !p.type || p.type === PeopleTypeOptions.author)
-    .map((p: PeopleResponse) => ({
-      label: p.name || "Unknown",
-      value: p.id,
-    }));
+  const authorOptions = (peopleQuery.data || []).map((p: PeopleResponse) => ({
+    label: p.name || "Unknown",
+    value: p.id,
+  }));
 
   const publicationOptions = (publicationsQuery.data || []).map((p: PublicationsResponse) => ({
     label: p.name || "Unknown",
@@ -138,21 +138,33 @@ export function EditUploadDialog({ upload, open, onOpenChange }: EditUploadDialo
             </Select>
           </div>
           <div className="grid gap-2">
-            <Label>Authors</Label>
+            <Label>Author</Label>
             <CreatableCombobox
               options={authorOptions}
-              value={subjects}
+              value={author}
+              onSelect={(val) => setAuthor(val)}
+              allowClear
+              onCreate={(name) => {
+                createPersonMutation.mutateAsync({ name, user: getUserId() }).then((record) => setAuthor(record.id));
+              }}
+              placeholder="Select author..."
+              emptyText="No people found."
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label>People</Label>
+            <CreatableCombobox
+              options={authorOptions}
+              value={people}
               isMulti
               onSelect={(val) => {
-                setSubjects((prev) => (prev.includes(val) ? prev.filter((s) => s !== val) : [...prev, val]));
+                setPeople((prev) => (prev.includes(val) ? prev.filter((p) => p !== val) : [...prev, val]));
               }}
               onCreate={(name) => {
-                createPersonMutation
-                  .mutateAsync({ name, type: PeopleTypeOptions.author, user: getUserId() })
-                  .then((record) => setSubjects((prev) => [...prev, record.id]));
+                createPersonMutation.mutateAsync({ name, user: getUserId() }).then((record) => setPeople((prev) => [...prev, record.id]));
               }}
-              placeholder="Select authors..."
-              emptyText="No authors found."
+              placeholder="Select people..."
+              emptyText="No people found."
             />
           </div>
           <div className="grid gap-2">
@@ -161,6 +173,7 @@ export function EditUploadDialog({ upload, open, onOpenChange }: EditUploadDialo
               options={publicationOptions}
               value={publication}
               onSelect={(val) => setPublication(val)}
+              allowClear
               onCreate={(name) => {
                 createPublicationMutation.mutateAsync({ name, user: getUserId() }).then((record) => setPublication(record.id));
               }}

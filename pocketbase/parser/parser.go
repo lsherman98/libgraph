@@ -251,15 +251,6 @@ func splitTextIntoPages(text string, maxPageSize int) []string {
 	return pages
 }
 
-type liteParseJSONOutput struct {
-	Pages []liteParsePage `json:"pages"`
-}
-
-type liteParsePage struct {
-	Page int    `json:"page"`
-	Text string `json:"text"`
-}
-
 func runLiteParseJSON(filePath string) (*liteParseJSONOutput, error) {
 	liteparseCmd, err := findLiteParseCommand()
 	if err != nil {
@@ -313,14 +304,4 @@ func sanitizeFilename(name string) string {
 	}
 
 	return safe + ext
-}
-
-func IsDocumentFile(filename string) bool {
-	ext := strings.ToLower(filepath.Ext(filename))
-	switch ext {
-	case ".pdf", ".epub", ".txt", ".md", ".markdown":
-		return true
-	default:
-		return false
-	}
 }

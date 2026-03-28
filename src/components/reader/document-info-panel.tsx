@@ -12,7 +12,6 @@ import { usePeople, usePublications, useTags, useTopics, useUploads, useUploadBy
 import { getUserId } from "@/lib/utils";
 import {
   UploadsTypeOptions,
-  PeopleTypeOptions,
   type PeopleResponse,
   type PublicationsResponse,
   type TagsResponse,
@@ -59,7 +58,7 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
       setSubjects(upload.people || []);
       setPublication(upload.publication || "");
       setTags(upload.tags || []);
-      setTopics(upload.topic || []);
+      setTopics(upload.topics || []);
       setRelatedUploads(upload.uploads || []);
     }
   }, [upload]);
@@ -73,9 +72,9 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
         title,
         type,
         people: subjects.length > 0 ? subjects : [],
-        publication: publication || undefined,
+        publication: publication || "",
         tags: tags.length > 0 ? tags : [],
-        topic: topics.length > 0 ? topics : [],
+        topics: topics.length > 0 ? topics : [],
         uploads: relatedUploads.length > 0 ? relatedUploads : [],
       },
     });
@@ -90,7 +89,7 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
       setSubjects(upload.people || []);
       setPublication(upload.publication || "");
       setTags(upload.tags || []);
-      setTopics(upload.topic || []);
+      setTopics(upload.topics || []);
       setRelatedUploads(upload.uploads || []);
     }
     setIsEditing(false);
@@ -109,7 +108,7 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
   const expandedPeople = ((upload as any).expand?.people || []) as PeopleResponse[];
   const expandedPublication = (upload as any).expand?.publication as PublicationsResponse | undefined;
   const expandedTags = ((upload as any).expand?.tags || []) as TagsResponse[];
-  const expandedTopics = ((upload as any).expand?.topic || []) as TopicsResponse[];
+  const expandedTopics = ((upload as any).expand?.topics || []) as TopicsResponse[];
   const expandedRelatedUploads = ((upload as any).expand?.uploads || []) as UploadsResponse[];
 
   const getPersonName = (id: string) =>
@@ -125,9 +124,7 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
   const getUploadTitle = (id: string) =>
     expandedRelatedUploads.find((u) => u.id === id)?.title || uploadsQuery.data?.find((u: UploadsResponse) => u.id === id)?.title || "Untitled";
 
-  const authorOptions = (peopleQuery.data || [])
-    .filter((p: PeopleResponse) => !p.type || p.type === PeopleTypeOptions.author)
-    .map((p: PeopleResponse) => ({ label: p.name || "Unknown", value: p.id }));
+  const authorOptions = (peopleQuery.data || []).map((p: PeopleResponse) => ({ label: p.name || "Unknown", value: p.id }));
 
   const publicationOptions = (publicationsQuery.data || []).map((p: PublicationsResponse) => ({
     label: p.name || "Unknown",
@@ -195,9 +192,7 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
                 className="text-sm"
                 onSelect={(val) => setSubjects((prev) => (prev.includes(val) ? prev.filter((s) => s !== val) : [...prev, val]))}
                 onCreate={(name) => {
-                  createPersonMutation
-                    .mutateAsync({ name, type: PeopleTypeOptions.author, user: getUserId() })
-                    .then((record) => setSubjects((prev) => [...prev, record.id]));
+                  createPersonMutation.mutateAsync({ name, user: getUserId() }).then((record) => setSubjects((prev) => [...prev, record.id]));
                 }}
                 placeholder="Select authors..."
                 emptyText="No authors found."
@@ -324,11 +319,11 @@ export function DocumentInfoPanel({ uploadId }: DocumentInfoPanelProps) {
               </div>
             </div>
           )}
-          {upload.topic?.length > 0 && (
+          {upload.topics?.length > 0 && (
             <div>
               <span className="text-xs text-muted-foreground">Topics</span>
               <div className="flex flex-wrap gap-1 mt-1">
-                {upload.topic.map((id: string) => (
+                {upload.topics.map((id: string) => (
                   <Badge key={id} variant="outline" className="text-xs">
                     {getTopicTitle(id)}
                   </Badge>

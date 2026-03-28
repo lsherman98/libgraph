@@ -230,7 +230,7 @@ export function ReaderAiChatPanel() {
     const userId = getUserId();
     const record = await createChat.mutateAsync({
       title: "New chat",
-      type: ChatsTypeOptions.reader_sidebar,
+      type: ChatsTypeOptions.context_chat,
       user: userId,
     });
     setActiveChatId(record.id);

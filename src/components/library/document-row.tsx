@@ -44,6 +44,7 @@ export function DocumentRow({
 
     return remainingCount > 0 ? `${visibleNames} +${remainingCount}` : visibleNames;
   };
+  const authorName = upload.author ? personNamesById.get(upload.author) || upload.author : "—";
   const publicationName = upload.publication ? publicationNamesById.get(upload.publication) || upload.publication : "—";
 
   return (
@@ -74,10 +75,19 @@ export function DocumentRow({
                 </span>
               )}
             </div>
+            {upload.status !== "success" && (
+              <div className="mt-1 flex items-center gap-2">
+                <StatusIcon className={`h-4 w-4 ${status.className}`} />
+                <Badge variant={status.variant}>{status.label}</Badge>
+              </div>
+            )}
           </div>
         </div>
       </TableCell>
       <TableCell className="hidden lg:table-cell">
+        <span className="block text-sm truncate text-muted-foreground">{authorName}</span>
+      </TableCell>
+      <TableCell className="hidden xl:table-cell">
         <span className="block text-sm truncate text-muted-foreground">{formatNames(upload.people, personNamesById)}</span>
       </TableCell>
       <TableCell className="hidden lg:table-cell">
@@ -86,15 +96,6 @@ export function DocumentRow({
       <TableCell className="hidden xl:table-cell">
         <span className="block text-sm truncate text-muted-foreground">{formatNames(upload.tags, tagTitlesById)}</span>
       </TableCell>
-      {upload.status !== "success" && (
-        <TableCell className="hidden md:table-cell">
-          <div className="flex items-center gap-2">
-            <StatusIcon className={`h-4 w-4 ${status.className}`} />
-            <Badge variant={status.variant}>{status.label}</Badge>
-          </div>
-        </TableCell>
-      )}
-      {upload.status === "success" && <TableCell className="hidden md:table-cell" />}
       <TableCell className="text-muted-foreground hidden md:table-cell">
         {new Date(upload.created).toLocaleDateString(undefined, {
           year: "numeric",

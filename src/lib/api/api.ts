@@ -30,7 +30,7 @@ export const upload = async (upload: Create<Collections.Uploads>) => {
 
 export const getUpload = async (id: string) => {
     return await pb.collection(Collections.Uploads).getOne(id, {
-        expand: 'people,publication,topic,tags,uploads'
+        expand: 'people,publication,topics,tags,uploads'
     })
 }
 
@@ -105,7 +105,7 @@ export const getUploads = async (filters?: UploadFilters) => {
     }
 
     if (filters?.topics && filters.topics.length > 0) {
-        const topicFilters = filters.topics.map(t => `topic ?~ "${t}"`).join(' || ');
+        const topicFilters = filters.topics.map(t => `topics ?~ "${t}"`).join(' || ');
         filterParts.push(`(${topicFilters})`);
     }
 
@@ -129,7 +129,7 @@ export const getUploads = async (filters?: UploadFilters) => {
     return await pb.collection(Collections.Uploads).getFullList({
         sort,
         filter: filterParts.length > 0 ? filterParts.join(' && ') : undefined,
-        expand: 'people,publication,topic,tags,uploads'
+        expand: 'people,publication,topics,tags,uploads'
     })
 }
 
@@ -509,7 +509,7 @@ export const upsertReadingProgress = async (
 export const getSidebarChats = async () => {
     return await pb.collection(Collections.Chats).getFullList({
         sort: '-updated',
-        filter: 'type = "reader_sidebar"',
+        filter: 'type = "context_chat"',
     });
 }
 
@@ -542,7 +542,7 @@ export const sendSidebarChatMessage = async (
         },
         body: JSON.stringify({
             message,
-            mode: 'reader_sidebar',
+            mode: 'context_chat',
             chat_id: chatId,
         }),
     });

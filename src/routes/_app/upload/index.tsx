@@ -17,7 +17,6 @@ import { getUserId } from "@/lib/utils";
 import {
   UploadsStatusOptions,
   UploadsTypeOptions,
-  PeopleTypeOptions,
   type PeopleResponse,
   type PublicationsResponse,
   type TagsResponse,
@@ -36,7 +35,8 @@ interface FileMetadata {
   transcriptFile?: File;
   name: string;
   type: UploadsTypeOptions;
-  subjects: string[];
+  author: string;
+  people: string[];
   publication: string;
   tags: string[];
   topics: string[];
@@ -109,7 +109,8 @@ function RouteComponent() {
       transcriptFile,
       name: getBaseName(file.name),
       type: detectedType,
-      subjects: [],
+      author: "",
+      people: [],
       publication: "",
       tags: [],
       topics: [],
@@ -286,10 +287,11 @@ function RouteComponent() {
           file: fileData.file,
           title: fileData.name,
           type: fileData.type,
-          people: fileData.subjects.length > 0 ? fileData.subjects : undefined,
+          author: fileData.author || undefined,
+          people: fileData.people.length > 0 ? fileData.people : undefined,
           publication: fileData.publication || undefined,
           tags: fileData.tags.length > 0 ? fileData.tags : undefined,
-          topic: fileData.topics.length > 0 ? fileData.topics : undefined,
+          topics: fileData.topics.length > 0 ? fileData.topics : undefined,
           user: getUserId(),
           status: UploadsStatusOptions.pending,
         });
@@ -461,23 +463,39 @@ function RouteComponent() {
                         </div>
                         <div className={`flex items-center gap-2 ${file.status === "PENDING" ? "pl-14" : "pl-9"}`}>
                           <div className="flex items-center gap-2 flex-1">
-                            <span className="text-xs text-muted-foreground shrink-0">Authors</span>
+                            <span className="text-xs text-muted-foreground shrink-0">Author</span>
                             <CreatableCombobox
                               options={authorOptions || []}
-                              value={file.subjects}
+                              value={file.author}
+                              className="h-8 text-sm flex-1"
+                              onSelect={(val) => updateFile(file.id, { author: val })}
+                              onCreate={(name) => {
+                                createPersonMutation.mutateAsync({ name, user: getUserId() }).then((record) => {
+                                  updateFile(file.id, { author: record.id });
+                                });
+                              }}
+                              placeholder="Author..."
+                              emptyText="No people found."
+                            />
+                          </div>
+                          <div className="flex items-center gap-2 flex-1">
+                            <span className="text-xs text-muted-foreground shrink-0">People</span>
+                            <CreatableCombobox
+                              options={authorOptions || []}
+                              value={file.people}
                               className="h-8 text-sm flex-1"
                               isMulti
                               onSelect={(val) => {
-                                const newSubjects = file.subjects.includes(val) ? file.subjects.filter((s) => s !== val) : [...file.subjects, val];
-                                updateFile(file.id, { subjects: newSubjects });
+                                const newPeople = file.people.includes(val) ? file.people.filter((p) => p !== val) : [...file.people, val];
+                                updateFile(file.id, { people: newPeople });
                               }}
                               onCreate={(name) => {
-                                createPersonMutation.mutateAsync({ name, type: PeopleTypeOptions.author, user: getUserId() }).then((record) => {
-                                  updateFile(file.id, { subjects: [...file.subjects, record.id] });
+                                createPersonMutation.mutateAsync({ name, user: getUserId() }).then((record) => {
+                                  updateFile(file.id, { people: [...file.people, record.id] });
                                 });
                               }}
-                              placeholder="Authors..."
-                              emptyText="No authors found."
+                              placeholder="People..."
+                              emptyText="No people found."
                             />
                           </div>
                           <div className="flex items-center gap-2 flex-1">

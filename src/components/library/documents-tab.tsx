@@ -235,9 +235,9 @@ export function DocumentsTab() {
                   </TableHead>
                   <TableHead>Document</TableHead>
                   <TableHead className="w-36 hidden lg:table-cell">Author</TableHead>
+                  <TableHead className="w-40 hidden xl:table-cell">People</TableHead>
                   <TableHead className="w-32 hidden lg:table-cell">Publication</TableHead>
                   <TableHead className="w-36 hidden xl:table-cell">Tags</TableHead>
-                  <TableHead className="w-24 hidden md:table-cell">Status</TableHead>
                   <TableHead className="w-28 hidden md:table-cell">Created</TableHead>
                   <TableHead className="w-36"></TableHead>
                 </TableRow>

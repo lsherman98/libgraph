@@ -136,10 +136,7 @@ func Enqueue(app *pocketbase.PocketBase, req EnqueueRequest) error {
 		}
 	}
 
-	jobsCollection, err := app.FindCollectionByNameOrId(collections.Queue)
-	if err != nil {
-		return err
-	}
+	jobsCollection, _ := app.FindCollectionByNameOrId(collections.Queue)
 
 	record := core.NewRecord(jobsCollection)
 	record.Set("job_type", req.JobType)
@@ -233,7 +230,7 @@ func markUploadSuccessfulIfComplete(app *pocketbase.PocketBase, job *core.Record
 	reconcileUploadStatusFromQueue(app, uploadRecord)
 }
 
-func recoverHangingProcessingUploads(app *pocketbase.PocketBase) {
+func RecoverHangingProcessingUploads(app *pocketbase.PocketBase) {
 	uploads, err := app.FindRecordsByFilter(
 		collections.Uploads,
 		"status = {:status}",
@@ -249,10 +246,6 @@ func recoverHangingProcessingUploads(app *pocketbase.PocketBase) {
 	for _, uploadRecord := range uploads {
 		reconcileUploadStatusFromQueue(app, uploadRecord)
 	}
-}
-
-func RecoverHangingProcessingUploads(app *pocketbase.PocketBase) {
-	recoverHangingProcessingUploads(app)
 }
 
 func reconcileUploadStatusFromQueue(app *pocketbase.PocketBase, uploadRecord *core.Record) {

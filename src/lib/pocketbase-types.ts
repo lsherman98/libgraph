@@ -143,7 +143,7 @@ export type ChatContextsRecord = {
 export enum ChatsTypeOptions {
 	"search" = "search",
 	"chat" = "chat",
-	"reader_sidebar" = "reader_sidebar",
+	"context_chat" = "context_chat",
 }
 export type ChatsRecord = {
 	created: IsoAutoDateString
@@ -260,13 +260,13 @@ export type MessagesRecord<Tsources = unknown> = {
 }
 
 export enum NodesTypeOptions {
-	"author" = "author",
 	"tag" = "tag",
 	"topic" = "topic",
 	"upload" = "upload",
 	"highlight" = "highlight",
 	"bookmark" = "bookmark",
 	"note" = "note",
+	"person" = "person",
 }
 export type NodesRecord<Tdata = unknown> = {
 	created: IsoAutoDateString
@@ -303,18 +303,10 @@ export type PagesRecord = {
 	user: RecordIdString
 }
 
-export enum PeopleTypeOptions {
-	"youtube_channel" = "youtube_channel",
-	"author" = "author",
-	"publication" = "publication",
-	"podcast" = "podcast",
-}
 export type PeopleRecord = {
 	created: IsoAutoDateString
 	id: string
 	name?: string
-	source?: string
-	type: PeopleTypeOptions
 	updated: IsoAutoDateString
 	user: RecordIdString
 }
@@ -443,6 +435,7 @@ export enum UploadsStatusOptions {
 	"failed" = "failed",
 }
 export type UploadsRecord = {
+	author?: RecordIdString
 	created: IsoAutoDateString
 	file: FileNameString
 	id: string
@@ -452,7 +445,7 @@ export type UploadsRecord = {
 	status?: UploadsStatusOptions
 	tags?: RecordIdString[]
 	title?: string
-	topic?: RecordIdString[]
+	topics?: RecordIdString[]
 	type: UploadsTypeOptions
 	updated: IsoAutoDateString
 	uploads?: RecordIdString[]

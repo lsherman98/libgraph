@@ -14,7 +14,7 @@ type LucideIcon = ComponentType<SVGProps<SVGSVGElement>>;
 
 export const nodeTypeConfig: Record<NodesTypeOptions, { icon: LucideIcon; color: string; darkColor: string; label: string }> = {
     [NodesTypeOptions.upload]: { icon: FileText, color: "#3b82f6", darkColor: "#60a5fa", label: "Uploads" },
-    [NodesTypeOptions.author]: { icon: User, color: "#9333ea", darkColor: "#a855f7", label: "Authors" },
+    [NodesTypeOptions.person]: { icon: User, color: "#9333ea", darkColor: "#a855f7", label: "People" },
     [NodesTypeOptions.tag]: { icon: Tag, color: "#22c55e", darkColor: "#4ade80", label: "Tags" },
     [NodesTypeOptions.topic]: { icon: FolderOpen, color: "#f97316", darkColor: "#fb923c", label: "Topics" },
     [NodesTypeOptions.highlight]: { icon: Highlighter, color: "#eab308", darkColor: "#facc15", label: "Highlights" },

@@ -183,10 +183,7 @@ func readTranscriptMarkdown(app *pocketbase.PocketBase, upload *core.Record) (st
 func parseDocumentUploadIntoPages(app *pocketbase.PocketBase, upload *core.Record) ([]*core.Record, error) {
 	title := upload.GetString("title")
 	docParser := parser.New(app)
-	pagesCollection, err := app.FindCollectionByNameOrId(collections.Pages)
-	if err != nil {
-		return nil, err
-	}
+	pagesCollection, _ := app.FindCollectionByNameOrId(collections.Pages)
 
 	persistedPages := make([]*core.Record, 0)
 
@@ -218,10 +215,7 @@ func parseDocumentUploadIntoPages(app *pocketbase.PocketBase, upload *core.Recor
 }
 
 func createPageRecord(app *pocketbase.PocketBase, upload *core.Record, pageNumber int, filename string, markdown string) (*core.Record, error) {
-	pagesCollection, err := app.FindCollectionByNameOrId(collections.Pages)
-	if err != nil {
-		return nil, err
-	}
+	pagesCollection, _ := app.FindCollectionByNameOrId(collections.Pages)
 
 	newPage := core.NewRecord(pagesCollection)
 	newPage.Set("upload", upload.Id)
@@ -286,10 +280,7 @@ func handleChunkGenerateJob(app *pocketbase.PocketBase, job *core.Record) error 
 		return err
 	}
 
-	chunksCollection, err := app.FindCollectionByNameOrId(collections.DocumentChunks)
-	if err != nil {
-		return err
-	}
+	chunksCollection, _ := app.FindCollectionByNameOrId(collections.DocumentChunks)
 
 	chunks := chunkMarkdown(markdown)
 	chunkIndex := 1

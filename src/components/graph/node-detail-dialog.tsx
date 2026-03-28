@@ -26,7 +26,7 @@ const typeConfig: Record<NodesTypeOptions, { icon: React.ElementType; color: str
     bgColor: "bg-blue-100 dark:bg-blue-900/30",
     label: "Upload",
   },
-  [NodesTypeOptions.author]: {
+  [NodesTypeOptions.person]: {
     icon: User,
     color: "text-purple-600 dark:text-purple-400",
     bgColor: "bg-purple-100 dark:bg-purple-900/30",
@@ -210,18 +210,7 @@ function PersonDetail({ data }: { data: PeopleResponse }) {
     <div className="space-y-4">
       <div>
         <h3 className="text-lg font-semibold">{data.name || "Unknown Person"}</h3>
-        <Badge variant="secondary" className="mt-1 capitalize">
-          {data.type?.replace("_", " ")}
-        </Badge>
       </div>
-      {data.source && (
-        <div>
-          <span className="text-sm text-muted-foreground">Source: </span>
-          <a href={data.source} target="_blank" rel="noopener noreferrer" className="text-sm text-primary hover:underline">
-            {data.source}
-          </a>
-        </div>
-      )}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <Calendar className="h-4 w-4" />
         <span>Added {formatDate(data.created)}</span>
@@ -274,7 +263,7 @@ function renderRecordDetail(type: NodesTypeOptions, recordData: NodeRecordData) 
       return <HighlightDetail data={recordData as HighlightsResponse} />;
     case NodesTypeOptions.bookmark:
       return <BookmarkDetail data={recordData as BookmarksResponse} />;
-    case NodesTypeOptions.author:
+    case NodesTypeOptions.person:
       return <PersonDetail data={recordData as PeopleResponse} />;
     case NodesTypeOptions.tag:
       return <TagDetail data={recordData as TagsResponse} />;

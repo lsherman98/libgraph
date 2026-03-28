@@ -15,3 +15,12 @@ type Parser struct {
 	App        *pocketbase.PocketBase
 	WorkerPool int
 }
+
+type liteParseJSONOutput struct {
+	Pages []liteParsePage `json:"pages"`
+}
+
+type liteParsePage struct {
+	Page int    `json:"page"`
+	Text string `json:"text"`
+}

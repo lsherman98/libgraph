@@ -2,7 +2,7 @@ package chat
 
 type ChatRequest struct {
 	Message string           `json:"message"`
-	Mode    string           `json:"mode,omitempty"` // "chat", "search", or "reader_sidebar"
+	Mode    string           `json:"mode,omitempty"` // "chat", "search", or "context_chat"
 	ChatID  string           `json:"chat_id,omitempty"`
 	Filters *MetadataFilters `json:"filters,omitempty"`
 }
@@ -24,23 +24,20 @@ type ChatMessage struct {
 }
 
 type ChatResponse struct {
-	ChatID             string       `json:"chat_id"`
-	Status             string       `json:"status,omitempty"`
-	Message            string       `json:"message,omitempty"`
-	Sources            []ChatSource `json:"sources,omitempty"`
-	UserMessageID      string       `json:"user_message_id"`
-	AssistantMessageID string       `json:"assistant_message_id"`
+	ChatID    string       `json:"chat_id"`
+	Message   string       `json:"message,omitempty"`
+	Sources   []ChatSource `json:"sources,omitempty"`
+	MessageID string       `json:"message_id"`
 }
 
-type chatRespondPayload struct {
-	ChatID             string           `json:"chat_id"`
-	Mode               string           `json:"mode"`
-	Message            string           `json:"message"`
-	UploadIDs          []string         `json:"upload_ids,omitempty"`
-	UserID             string           `json:"user_id"`
-	UserMessageID      string           `json:"user_message_id"`
-	AssistantMessageID string           `json:"assistant_message_id"`
-	Filters            *MetadataFilters `json:"filters,omitempty"`
+type ChatPayload struct {
+	ChatID    string           `json:"chat_id"`
+	Mode      string           `json:"mode"`
+	Message   string           `json:"message"`
+	UploadIDs []string         `json:"upload_ids,omitempty"`
+	UserID    string           `json:"user_id"`
+	MessageID string           `json:"message_id"`
+	Filters   *MetadataFilters `json:"filters,omitempty"`
 }
 
 type ChatSource struct {
@@ -64,18 +61,10 @@ type Citation struct {
 	UploadID   string `json:"upload_id"`
 }
 
-type PageSummaryQueuedResponse struct {
-	Status    string `json:"status"`
-	PageID    string `json:"page_id"`
-	DedupeKey string `json:"dedupe_key"`
-}
-
-type PageSummaryBatchRequest struct {
-	PageIDs []string `json:"page_ids"`
-}
-
-type PageSummaryBatchQueuedResponse struct {
-	Status    string   `json:"status"`
-	PageIDs   []string `json:"page_ids"`
-	DedupeKey string   `json:"dedupe_key"`
+type ChatContext struct {
+	ContextID  string
+	UploadID   string
+	PageNumber int
+	Title      string
+	Text       string
 }

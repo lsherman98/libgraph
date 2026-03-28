@@ -8,7 +8,7 @@ import { edgeTypeConfig, nodeTypeConfig, uploadTypeConfig } from "./graph-style-
 
 const nodeTypeIconPaths: Record<NodesTypeOptions, string> = {
   [NodesTypeOptions.upload]: "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8",
-  [NodesTypeOptions.author]: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z",
+  [NodesTypeOptions.person]: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8z",
   [NodesTypeOptions.tag]: "M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z M7 7h.01",
   [NodesTypeOptions.topic]: "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z",
   [NodesTypeOptions.highlight]: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7 M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z",
@@ -202,7 +202,7 @@ function buildExpandedHTML(enrichedNode: EnrichedNodesResponse, isDark: boolean)
         }
         break;
       }
-      case NodesTypeOptions.author: {
+      case NodesTypeOptions.person: {
         title = (rd.name as string) || "Unknown Person";
         if (rd.type) details.push(formatLabel(rd.type as string));
         if (rd.created) details.push(`Added ${formatDateShort(rd.created as string)}`);

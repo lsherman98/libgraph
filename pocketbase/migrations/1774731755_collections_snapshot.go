@@ -835,6 +835,22 @@ func init() {
 					},
 					{
 						"hidden": false,
+						"id": "select2063623452",
+						"maxSelect": 1,
+						"name": "status",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "select",
+						"values": [
+							"pending",
+							"processing",
+							"success",
+							"failed"
+						]
+					},
+					{
+						"hidden": false,
 						"id": "file2359244304",
 						"maxSelect": 1,
 						"maxSize": 2147483648,
@@ -859,22 +875,6 @@ func init() {
 						"required": true,
 						"system": false,
 						"type": "relation"
-					},
-					{
-						"hidden": false,
-						"id": "select2063623452",
-						"maxSelect": 1,
-						"name": "status",
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "select",
-						"values": [
-							"PENDING",
-							"PROCESSING",
-							"FAILED",
-							"SUCCESS"
-						]
 					},
 					{
 						"cascadeDelete": false,
@@ -909,7 +909,7 @@ func init() {
 						"id": "relation2638274075",
 						"maxSelect": 999,
 						"minSelect": 0,
-						"name": "topic",
+						"name": "topics",
 						"presentable": false,
 						"required": false,
 						"system": false,
@@ -948,6 +948,19 @@ func init() {
 						"maxSelect": 999,
 						"minSelect": 0,
 						"name": "uploads",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "relation"
+					},
+					{
+						"cascadeDelete": false,
+						"collectionId": "pbc_526341563",
+						"hidden": false,
+						"id": "relation31824181202",
+						"maxSelect": 1,
+						"minSelect": 0,
+						"name": "author",
 						"presentable": false,
 						"required": false,
 						"system": false,
@@ -1014,33 +1027,6 @@ func init() {
 						"required": false,
 						"system": false,
 						"type": "text"
-					},
-					{
-						"exceptDomains": null,
-						"hidden": false,
-						"id": "url1602912115",
-						"name": "source",
-						"onlyDomains": null,
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "url"
-					},
-					{
-						"hidden": false,
-						"id": "select2363381545",
-						"maxSelect": 1,
-						"name": "type",
-						"presentable": false,
-						"required": true,
-						"system": false,
-						"type": "select",
-						"values": [
-							"youtube_channel",
-							"author",
-							"publication",
-							"podcast"
-						]
 					},
 					{
 						"cascadeDelete": true,
@@ -1188,13 +1174,13 @@ func init() {
 						"system": false,
 						"type": "select",
 						"values": [
-							"author",
 							"tag",
 							"topic",
 							"upload",
 							"highlight",
 							"bookmark",
-							"note"
+							"note",
+							"person"
 						]
 					},
 					{
@@ -1536,6 +1522,19 @@ func init() {
 						"name": "user",
 						"presentable": false,
 						"required": true,
+						"system": false,
+						"type": "relation"
+					},
+					{
+						"cascadeDelete": false,
+						"collectionId": "pbc_39049810",
+						"hidden": false,
+						"id": "relation3458754147",
+						"maxSelect": 1,
+						"minSelect": 0,
+						"name": "summary",
+						"presentable": false,
+						"required": false,
 						"system": false,
 						"type": "relation"
 					},
@@ -1956,7 +1955,7 @@ func init() {
 						"type": "text"
 					},
 					{
-						"cascadeDelete": false,
+						"cascadeDelete": true,
 						"collectionId": "pbc_121766130",
 						"hidden": false,
 						"id": "relation398321183",
@@ -2366,7 +2365,8 @@ func init() {
 						"type": "select",
 						"values": [
 							"search",
-							"chat"
+							"chat",
+							"context_chat"
 						]
 					},
 					{
@@ -2506,7 +2506,7 @@ func init() {
 				"indexes": [
 					"CREATE INDEX ` + "`" + `idx_trDZJh04XE` + "`" + ` ON ` + "`" + `messages` + "`" + ` (\n  ` + "`" + `chat` + "`" + `,\n  ` + "`" + `created` + "`" + `\n)"
 				],
-				"listRule": "@request.auth.id = user.id && @request.body.chat = chat.id",
+				"listRule": "@request.auth.id = user.id",
 				"name": "messages",
 				"system": false,
 				"type": "base",
@@ -2747,7 +2747,8 @@ func init() {
 				"indexes": [
 					"CREATE INDEX ` + "`" + `idx_bBz36OAvhm` + "`" + ` ON ` + "`" + `document_chunks` + "`" + ` (` + "`" + `upload` + "`" + `)",
 					"CREATE INDEX ` + "`" + `idx_rtS6XzVwLV` + "`" + ` ON ` + "`" + `document_chunks` + "`" + ` (` + "`" + `page` + "`" + `)",
-					"CREATE UNIQUE INDEX ` + "`" + `idx_9R1CP46XMq` + "`" + ` ON ` + "`" + `document_chunks` + "`" + ` (\n  ` + "`" + `upload` + "`" + `,\n  ` + "`" + `page` + "`" + `,\n  ` + "`" + `chunk_index` + "`" + `\n)"
+					"CREATE UNIQUE INDEX ` + "`" + `idx_9R1CP46XMq` + "`" + ` ON ` + "`" + `document_chunks` + "`" + ` (\n  ` + "`" + `upload` + "`" + `,\n  ` + "`" + `page` + "`" + `,\n  ` + "`" + `chunk_index` + "`" + `\n)",
+					"CREATE INDEX ` + "`" + `idx_m2TCCglP4R` + "`" + ` ON ` + "`" + `document_chunks` + "`" + ` (` + "`" + `vector_id` + "`" + `)"
 				],
 				"listRule": "@request.auth.id = user.id",
 				"name": "document_chunks",
@@ -2975,12 +2976,11 @@ func init() {
 						"system": false,
 						"type": "select",
 						"values": [
-							"upload.parse_or_transcribe",
 							"chunk.generate",
 							"page.summarize",
 							"chunk.embed",
-							"chunk.embed.submit",
-							"chunk.embed.poll"
+							"upload.parse",
+							"upload.transcribe"
 						]
 					},
 					{
@@ -2995,69 +2995,10 @@ func init() {
 						"values": [
 							"queued",
 							"running",
-							"succeeded",
 							"failed",
-							"deadletter",
-							"cancelled"
+							"cancelled",
+							"success"
 						]
-					},
-					{
-						"hidden": false,
-						"id": "number1655102503",
-						"max": null,
-						"min": null,
-						"name": "priority",
-						"onlyInt": false,
-						"presentable": false,
-						"required": true,
-						"system": false,
-						"type": "number"
-					},
-					{
-						"hidden": false,
-						"id": "number3217549156",
-						"max": null,
-						"min": null,
-						"name": "attempts",
-						"onlyInt": false,
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "number"
-					},
-					{
-						"hidden": false,
-						"id": "number3470954935",
-						"max": null,
-						"min": null,
-						"name": "max_attempts",
-						"onlyInt": false,
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "number"
-					},
-					{
-						"hidden": false,
-						"id": "date164390390",
-						"max": "",
-						"min": "",
-						"name": "scheduled_at",
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "date"
-					},
-					{
-						"hidden": false,
-						"id": "date35549773",
-						"max": "",
-						"min": "",
-						"name": "lease_until",
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "date"
 					},
 					{
 						"hidden": false,
@@ -3099,7 +3040,7 @@ func init() {
 						"hidden": false,
 						"id": "json966904008",
 						"maxSize": 0,
-						"name": "payload_json",
+						"name": "payload",
 						"presentable": false,
 						"required": false,
 						"system": false,
@@ -3148,20 +3089,6 @@ func init() {
 						"type": "text"
 					},
 					{
-						"autogeneratePattern": "",
-						"hidden": false,
-						"id": "text3188542320",
-						"max": 0,
-						"min": 0,
-						"name": "trace_id",
-						"pattern": "",
-						"presentable": false,
-						"primaryKey": false,
-						"required": false,
-						"system": false,
-						"type": "text"
-					},
-					{
 						"cascadeDelete": false,
 						"collectionId": "_pb_users_auth_",
 						"hidden": false,
@@ -3201,32 +3128,6 @@ func init() {
 						"type": "relation"
 					},
 					{
-						"cascadeDelete": false,
-						"collectionId": "pbc_392403009",
-						"hidden": false,
-						"id": "relation2500227374",
-						"maxSelect": 1,
-						"minSelect": 0,
-						"name": "chunk",
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "relation"
-					},
-					{
-						"cascadeDelete": false,
-						"collectionId": "pbc_2956699289",
-						"hidden": false,
-						"id": "relation2766269861",
-						"maxSelect": 1,
-						"minSelect": 0,
-						"name": "embedding_operation",
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "relation"
-					},
-					{
 						"hidden": false,
 						"id": "autodate2990389176",
 						"name": "created",
@@ -3249,114 +3150,10 @@ func init() {
 				],
 				"id": "pbc_85348442",
 				"indexes": [
-					"CREATE UNIQUE INDEX ` + "`" + `idx_BBuFBrEqm2` + "`" + ` ON ` + "`" + `processing_jobs` + "`" + ` (` + "`" + `dedupe_key` + "`" + `)",
-					"CREATE INDEX ` + "`" + `idx_lOrIp1i0yh` + "`" + ` ON ` + "`" + `processing_jobs` + "`" + ` (\n  ` + "`" + `status` + "`" + `,\n  ` + "`" + `scheduled_at` + "`" + `,\n  ` + "`" + `priority` + "`" + `\n)",
-					"CREATE INDEX ` + "`" + `idx_MErOmtfYbr` + "`" + ` ON ` + "`" + `processing_jobs` + "`" + ` (\n  ` + "`" + `lease_until` + "`" + `,\n  ` + "`" + `status` + "`" + `\n)",
-					"CREATE INDEX ` + "`" + `idx_uD4l8ixESv` + "`" + ` ON ` + "`" + `processing_jobs` + "`" + ` (\n  ` + "`" + `upload` + "`" + `,\n  ` + "`" + `job_type` + "`" + `,\n  ` + "`" + `status` + "`" + `\n)"
+					"CREATE UNIQUE INDEX ` + "`" + `idx_BBuFBrEqm2` + "`" + ` ON ` + "`" + `queue` + "`" + ` (` + "`" + `dedupe_key` + "`" + `)"
 				],
 				"listRule": null,
-				"name": "processing_jobs",
-				"system": false,
-				"type": "base",
-				"updateRule": null,
-				"viewRule": null
-			},
-			{
-				"createRule": null,
-				"deleteRule": null,
-				"fields": [
-					{
-						"autogeneratePattern": "[a-z0-9]{15}",
-						"hidden": false,
-						"id": "text3208210256",
-						"max": 15,
-						"min": 15,
-						"name": "id",
-						"pattern": "^[a-z0-9]+$",
-						"presentable": false,
-						"primaryKey": true,
-						"required": true,
-						"system": true,
-						"type": "text"
-					},
-					{
-						"cascadeDelete": false,
-						"collectionId": "pbc_85348442",
-						"hidden": false,
-						"id": "relation4225294584",
-						"maxSelect": 1,
-						"minSelect": 0,
-						"name": "job",
-						"presentable": false,
-						"required": true,
-						"system": false,
-						"type": "relation"
-					},
-					{
-						"autogeneratePattern": "",
-						"hidden": false,
-						"id": "text2467634050",
-						"max": 0,
-						"min": 0,
-						"name": "event_type",
-						"pattern": "",
-						"presentable": false,
-						"primaryKey": false,
-						"required": false,
-						"system": false,
-						"type": "text"
-					},
-					{
-						"autogeneratePattern": "",
-						"hidden": false,
-						"id": "text3065852031",
-						"max": 0,
-						"min": 0,
-						"name": "message",
-						"pattern": "",
-						"presentable": false,
-						"primaryKey": false,
-						"required": false,
-						"system": false,
-						"type": "text"
-					},
-					{
-						"hidden": false,
-						"id": "json4171322886",
-						"maxSize": 0,
-						"name": "meta_json",
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "json"
-					},
-					{
-						"hidden": false,
-						"id": "autodate2990389176",
-						"name": "created",
-						"onCreate": true,
-						"onUpdate": false,
-						"presentable": false,
-						"system": false,
-						"type": "autodate"
-					},
-					{
-						"hidden": false,
-						"id": "autodate3332085495",
-						"name": "updated",
-						"onCreate": true,
-						"onUpdate": true,
-						"presentable": false,
-						"system": false,
-						"type": "autodate"
-					}
-				],
-				"id": "pbc_3173329488",
-				"indexes": [
-					"CREATE INDEX ` + "`" + `idx_NaEplaRt08` + "`" + ` ON ` + "`" + `processing_job_events` + "`" + ` (\n  ` + "`" + `job` + "`" + `,\n  ` + "`" + `created` + "`" + `\n)"
-				],
-				"listRule": null,
-				"name": "processing_job_events",
+				"name": "queue",
 				"system": false,
 				"type": "base",
 				"updateRule": null,
@@ -3401,19 +3198,6 @@ func init() {
 						"maxSelect": 1,
 						"minSelect": 0,
 						"name": "source_upload",
-						"presentable": false,
-						"required": true,
-						"system": false,
-						"type": "relation"
-					},
-					{
-						"cascadeDelete": true,
-						"collectionId": "pbc_3446931122",
-						"hidden": false,
-						"id": "relation360723235",
-						"maxSelect": 1,
-						"minSelect": 0,
-						"name": "source_page",
 						"presentable": false,
 						"required": true,
 						"system": false,
@@ -3509,9 +3293,7 @@ func init() {
 					}
 				],
 				"id": "pbc_39049810",
-				"indexes": [
-					"CREATE UNIQUE INDEX ` + "`" + `idx_XXwO1TiZ3u` + "`" + ` ON ` + "`" + `summaries` + "`" + ` (\n  ` + "`" + `user` + "`" + `,\n  ` + "`" + `source_page` + "`" + `,\n  ` + "`" + `source_upload` + "`" + `\n)"
-				],
+				"indexes": [],
 				"listRule": "@request.auth.id = user.id",
 				"name": "summaries",
 				"system": false,
@@ -3557,20 +3339,7 @@ func init() {
 						"id": "relation1048988677",
 						"maxSelect": 1,
 						"minSelect": 0,
-						"name": "processing_job",
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "relation"
-					},
-					{
-						"cascadeDelete": false,
-						"collectionId": "pbc_3446931122",
-						"hidden": false,
-						"id": "relation336246304",
-						"maxSelect": 1,
-						"minSelect": 0,
-						"name": "page",
+						"name": "job",
 						"presentable": false,
 						"required": false,
 						"system": false,
@@ -3592,24 +3361,10 @@ func init() {
 					{
 						"autogeneratePattern": "",
 						"hidden": false,
-						"id": "text2462348188",
-						"max": 0,
-						"min": 0,
-						"name": "provider",
-						"pattern": "",
-						"presentable": false,
-						"primaryKey": false,
-						"required": false,
-						"system": false,
-						"type": "text"
-					},
-					{
-						"autogeneratePattern": "",
-						"hidden": false,
 						"id": "text400177470",
 						"max": 0,
 						"min": 0,
-						"name": "provider_operation_id",
+						"name": "batch_id",
 						"pattern": "",
 						"presentable": false,
 						"primaryKey": false,
@@ -3631,130 +3386,18 @@ func init() {
 							"submitted",
 							"polling",
 							"succeeded",
-							"failing",
-							"cancelled",
-							"expired"
+							"failed"
 						]
-					},
-					{
-						"autogeneratePattern": "",
-						"hidden": false,
-						"id": "text3616895705",
-						"max": 0,
-						"min": 0,
-						"name": "model",
-						"pattern": "",
-						"presentable": false,
-						"primaryKey": false,
-						"required": false,
-						"system": false,
-						"type": "text"
 					},
 					{
 						"hidden": false,
 						"id": "json2193354422",
 						"maxSize": 0,
-						"name": "chunk_ids_json",
+						"name": "chunk_ids",
 						"presentable": false,
 						"required": false,
 						"system": false,
 						"type": "json"
-					},
-					{
-						"hidden": false,
-						"id": "number257550243",
-						"max": null,
-						"min": null,
-						"name": "total_chunks",
-						"onlyInt": false,
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "number"
-					},
-					{
-						"hidden": false,
-						"id": "number3295815537",
-						"max": null,
-						"min": null,
-						"name": "succeeded_chunks",
-						"onlyInt": false,
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "number"
-					},
-					{
-						"hidden": false,
-						"id": "number328251847",
-						"max": null,
-						"min": null,
-						"name": "failed_chunks",
-						"onlyInt": false,
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "number"
-					},
-					{
-						"hidden": false,
-						"id": "number3217549156",
-						"max": null,
-						"min": null,
-						"name": "attempts",
-						"onlyInt": false,
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "number"
-					},
-					{
-						"hidden": false,
-						"id": "number3470954935",
-						"max": null,
-						"min": null,
-						"name": "max_attempts",
-						"onlyInt": false,
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "number"
-					},
-					{
-						"hidden": false,
-						"id": "date729074881",
-						"max": "",
-						"min": "",
-						"name": "next_poll_at",
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "date"
-					},
-					{
-						"hidden": false,
-						"id": "date35549773",
-						"max": "",
-						"min": "",
-						"name": "lease_until",
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "date"
-					},
-					{
-						"autogeneratePattern": "",
-						"hidden": false,
-						"id": "text1797306934",
-						"max": 0,
-						"min": 0,
-						"name": "worker_id",
-						"pattern": "",
-						"presentable": false,
-						"primaryKey": false,
-						"required": false,
-						"system": false,
-						"type": "text"
 					},
 					{
 						"autogeneratePattern": "",
@@ -3772,17 +3415,6 @@ func init() {
 					},
 					{
 						"hidden": false,
-						"id": "date830654268",
-						"max": "",
-						"min": "",
-						"name": "submitted_at",
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "date"
-					},
-					{
-						"hidden": false,
 						"id": "date2457226749",
 						"max": "",
 						"min": "",
@@ -3791,6 +3423,15 @@ func init() {
 						"required": false,
 						"system": false,
 						"type": "date"
+					},
+					{
+						"hidden": false,
+						"id": "bool4161491668",
+						"name": "batch",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "bool"
 					},
 					{
 						"hidden": false,
@@ -3826,14 +3467,154 @@ func init() {
 				],
 				"id": "pbc_2956699289",
 				"indexes": [
-					"CREATE UNIQUE INDEX ` + "`" + `idx_2E5iVYGGjs` + "`" + ` ON ` + "`" + `embedding_operations` + "`" + ` (` + "`" + `provider_operation_id` + "`" + `)"
+					"CREATE UNIQUE INDEX ` + "`" + `idx_0qKKx73CoW` + "`" + ` ON ` + "`" + `embedding_jobs` + "`" + ` (` + "`" + `batch_id` + "`" + `) WHERE ` + "`" + `batch_id` + "`" + ` IS NOT NULL AND ` + "`" + `batch_id` + "`" + ` != ''"
 				],
 				"listRule": null,
-				"name": "embedding_operations",
+				"name": "embedding_jobs",
 				"system": false,
 				"type": "base",
 				"updateRule": null,
 				"viewRule": null
+			},
+			{
+				"createRule": "@request.auth.id != \"\"",
+				"deleteRule": "@request.auth.id = user.id",
+				"fields": [
+					{
+						"autogeneratePattern": "[a-z0-9]{15}",
+						"hidden": false,
+						"id": "text3208210256",
+						"max": 15,
+						"min": 15,
+						"name": "id",
+						"pattern": "^[a-z0-9]+$",
+						"presentable": false,
+						"primaryKey": true,
+						"required": true,
+						"system": true,
+						"type": "text"
+					},
+					{
+						"cascadeDelete": true,
+						"collectionId": "pbc_3861817060",
+						"hidden": false,
+						"id": "relation1704850090",
+						"maxSelect": 1,
+						"minSelect": 0,
+						"name": "chat",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "relation"
+					},
+					{
+						"cascadeDelete": false,
+						"collectionId": "_pb_users_auth_",
+						"hidden": false,
+						"id": "relation2375276105",
+						"maxSelect": 1,
+						"minSelect": 0,
+						"name": "user",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "relation"
+					},
+					{
+						"cascadeDelete": false,
+						"collectionId": "pbc_121766130",
+						"hidden": false,
+						"id": "relation398321183",
+						"maxSelect": 1,
+						"minSelect": 0,
+						"name": "upload",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "relation"
+					},
+					{
+						"cascadeDelete": false,
+						"collectionId": "pbc_3446931122",
+						"hidden": false,
+						"id": "relation336246304",
+						"maxSelect": 1,
+						"minSelect": 0,
+						"name": "page",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "relation"
+					},
+					{
+						"autogeneratePattern": "",
+						"hidden": false,
+						"id": "text999008199",
+						"max": 0,
+						"min": 0,
+						"name": "text",
+						"pattern": "",
+						"presentable": false,
+						"primaryKey": false,
+						"required": false,
+						"system": false,
+						"type": "text"
+					},
+					{
+						"hidden": false,
+						"id": "number1054784938",
+						"max": null,
+						"min": null,
+						"name": "page_from",
+						"onlyInt": false,
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "number"
+					},
+					{
+						"hidden": false,
+						"id": "number1694029424",
+						"max": null,
+						"min": null,
+						"name": "page_to",
+						"onlyInt": false,
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "number"
+					},
+					{
+						"hidden": false,
+						"id": "autodate2990389176",
+						"name": "created",
+						"onCreate": true,
+						"onUpdate": false,
+						"presentable": false,
+						"system": false,
+						"type": "autodate"
+					},
+					{
+						"hidden": false,
+						"id": "autodate3332085495",
+						"name": "updated",
+						"onCreate": true,
+						"onUpdate": true,
+						"presentable": false,
+						"system": false,
+						"type": "autodate"
+					}
+				],
+				"id": "pbc_1900487924",
+				"indexes": [
+					"CREATE UNIQUE INDEX ` + "`" + `idx_4WBwBx6gCL` + "`" + ` ON ` + "`" + `chat_contexts` + "`" + ` (` + "`" + `chat` + "`" + `)"
+				],
+				"listRule": "@request.auth.id = user.id",
+				"name": "chat_contexts",
+				"system": false,
+				"type": "base",
+				"updateRule": "@request.auth.id = user.id",
+				"viewRule": "@request.auth.id = user.id"
 			}
 		]`
 

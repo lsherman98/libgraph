@@ -18,4 +18,8 @@ const (
 	DocumentChunks = "document_chunks"
 	EmbeddingJobs  = "embedding_jobs"
 	Queue          = "queue"
+	Collections    = "collections"
+	Chats          = "chats"
+	Messages       = "messages"
+	DocumentChunksEmbeddings = "document_chunks_embeddings"
 )

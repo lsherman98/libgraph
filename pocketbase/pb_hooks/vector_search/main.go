@@ -14,7 +14,7 @@ import (
 )
 
 const embeddingDims = 3072
-const embeddingsTable = "document_chunks_embeddings"
+const embeddingsTable = collections.DocumentChunksEmbeddings
 
 var client *genai.Client
 
@@ -60,22 +60,10 @@ func Init(app *pocketbase.PocketBase) error {
 		return e.Next()
 	})
 
-	app.Cron().MustAdd("recoverEmbeddingPollJobs", "*/5 * * * *", func() {
-		enqueuePendingEmbeddingPollJobs(app, 200)
-	})
-
-	app.Cron().MustAdd("cleanupOrphanedEmbeddings", "0 2 * * *", func() {
-		stmt := fmt.Sprintf(
-			"DELETE FROM %s WHERE id NOT IN (SELECT vector_id FROM document_chunks WHERE vector_id IS NOT NULL AND vector_id != 0)",
-			embeddingsTable,
-		)
-		app.DB().NewQuery(stmt).Execute()
-	})
-
 	return nil
 }
 
-func Search(app *pocketbase.PocketBase, query string, uploadIDs []string, k int) ([]SearchResult, error) {
+func Search(app core.App, query string, uploadIDs []string, k int) ([]SearchResult, error) {
 	if query == "" {
 		return nil, fmt.Errorf("vector_search: query cannot be empty")
 	}

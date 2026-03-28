@@ -14,6 +14,7 @@ import (
 	fts "github.com/lsherman98/libgraph/pocketbase/pb_hooks/full_text_search"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/graph"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/processing"
+	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/summarize"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/uploads"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/vector_search"
 	"github.com/mattn/go-sqlite3"
@@ -86,6 +87,10 @@ func main() {
 
 	if err := chat.Init(app); err != nil {
 		log.Fatal("Failed to initialize Chat hooks: ", err)
+	}
+
+	if err := summarize.Init(app); err != nil {
+		log.Fatal("Failed to initialize Summarization hooks: ", err)
 	}
 
 	if err := fts.Init(app, "document_chunks", "uploads"); err != nil {

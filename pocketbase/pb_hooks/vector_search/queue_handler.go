@@ -342,10 +342,7 @@ func processChunkEmbeddingsSyncBulk(app *pocketbase.PocketBase, chunks []chunkRe
 }
 
 func createEmbeddingOperationRecord(app *pocketbase.PocketBase, job *core.Record, chunkIDs []string, providerOperationID string, modelName string, totalChunks int, maxAttempts int) (*core.Record, error) {
-	collection, err := app.FindCollectionByNameOrId(collections.EmbeddingJobs)
-	if err != nil {
-		return nil, err
-	}
+	collection, _ := app.FindCollectionByNameOrId(collections.EmbeddingJobs)
 
 	if maxAttempts <= 0 {
 		maxAttempts = 1
@@ -459,7 +456,7 @@ func rescheduleEmbeddingPollJob(app *pocketbase.PocketBase, job *core.Record, op
 	return app.Save(job)
 }
 
-func enqueuePendingEmbeddingPollJobs(app *pocketbase.PocketBase, limit int) error {
+func EnqueuePendingEmbeddingPollJobs(app *pocketbase.PocketBase, limit int) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	if limit <= 0 {
 		limit = 100

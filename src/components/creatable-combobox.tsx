@@ -19,6 +19,7 @@ interface CreatableComboboxProps {
   placeholder?: string;
   emptyText?: string;
   isMulti?: boolean;
+  allowClear?: boolean;
   searchable?: boolean;
   className?: string;
 }
@@ -31,6 +32,7 @@ export function CreatableCombobox({
   placeholder = "Select...",
   emptyText = "No results found.",
   isMulti = false,
+  allowClear = false,
   searchable = true,
   className,
 }: CreatableComboboxProps) {
@@ -79,7 +81,11 @@ export function CreatableCombobox({
                   value={option.label}
                   className="[&>span]:whitespace-normal"
                   onSelect={() => {
-                    onSelect(option.value);
+                    if (!isMulti && allowClear && value === option.value) {
+                      onSelect("");
+                    } else {
+                      onSelect(option.value);
+                    }
                     if (!isMulti) setOpen(false);
                   }}
                 >

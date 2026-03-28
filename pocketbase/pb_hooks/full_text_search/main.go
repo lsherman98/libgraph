@@ -129,6 +129,7 @@ func createCollectionFts(app *pocketbase.PocketBase, target string) error {
 	if err != nil {
 		return fmt.Errorf("failed to find collection %s: %w", target, err)
 	}
+
 	fields := collectionFields(collection, "id", target)
 	exists, _ := checkIfTableExists(app, target+"_fts")
 

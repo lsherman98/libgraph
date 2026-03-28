@@ -25,14 +25,10 @@ const (
 	SummaryStatusFailed     = "failed"
 	SummaryStatusSuccess    = "success"
 
-	ChatTypeSearch = "search"
-	ChatTypeChat   = "chat"
+	ChatTypeSearch  = "search"
+	ChatTypeChat    = "chat"
+	ChatTypeContext = "context_chat"
 
 	MessageRoleUser      = "user"
 	MessageRoleAssistant = "assistant"
-
-	MessageStatusQueued    = "queued"
-	MessageStatusRunning   = "running"
-	MessageStatusCompleted = "completed"
-	MessageStatusFailed    = "failed"
 )
