@@ -25,8 +25,6 @@ func Init(app *pocketbase.PocketBase) error {
 		return err
 	}
 
-	registerQueueHandlers()
-
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		if err := ensureEmbeddingsTable(app); err != nil {
 			return err

@@ -73,10 +73,6 @@ func main() {
 		log.Fatal("Failed to initialize Uploads hooks: ", err)
 	}
 
-	if err := processing.Init(app); err != nil {
-		log.Fatal("Failed to initialize Processing queue: ", err)
-	}
-
 	if err := vector_search.Init(app); err != nil {
 		log.Fatal("Failed to initialize Vector Search: ", err)
 	}
@@ -91,6 +87,16 @@ func main() {
 
 	if err := summarize.Init(app); err != nil {
 		log.Fatal("Failed to initialize Summarization hooks: ", err)
+	}
+
+	if err := processing.Init(app, processing.Handlers{
+		UploadParse:      uploads.HandleUploadParseOrTranscribeJob,
+		ChunkGenerate:    uploads.HandleChunkGenerateJob,
+		PageSummarize:    summarize.HandlePageSummarizeJob,
+		ChunkEmbedSubmit: vector_search.HandleChunkEmbedSubmitJob,
+		ChunkEmbedPoll:   vector_search.HandleChunkEmbedPollJob,
+	}); err != nil {
+		log.Fatal("Failed to initialize Processing queue: ", err)
 	}
 
 	if err := fts.Init(app, "document_chunks", "uploads"); err != nil {

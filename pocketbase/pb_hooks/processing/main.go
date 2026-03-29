@@ -1,7 +1,6 @@
 package processing
 
 import (
-	"strings"
 	"time"
 
 	"github.com/lsherman98/libgraph/pocketbase/collections"
@@ -12,12 +11,12 @@ import (
 	"github.com/pocketbase/pocketbase/tools/routine"
 )
 
-func RegisterHandler(jobType string, handler JobHandler) {
-	handlers[jobType] = handler
-}
+func Init(app *pocketbase.PocketBase, h Handlers) error {
+	handlers = h
 
-func Init(app *pocketbase.PocketBase) error {
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		recoverHangingJobs(app)
+
 		workers := []Worker{
 			{name: "parse", jobType: JobTypeUploadParseOrTranscribe, limit: getWorkerCount("PROCESSING_PARSE_WORKERS"), interval: queuePollInterval},
 			{name: "chunk", jobType: JobTypeChunkGenerate, limit: getWorkerCount("PROCESSING_CHUNK_WORKERS"), interval: queuePollInterval},
@@ -26,13 +25,13 @@ func Init(app *pocketbase.PocketBase) error {
 			{name: "embed-poll", jobType: JobTypeChunkEmbedPoll, limit: getWorkerCount("PROCESSING_EMBED_POLL_WORKERS"), interval: embedPollInterval},
 		}
 
-		for _, spec := range workers {
+		for _, worker := range workers {
 			routine.FireAndForget(func() {
-				ticker := time.NewTicker(spec.interval)
+				ticker := time.NewTicker(worker.interval)
 				defer ticker.Stop()
 
 				for range ticker.C {
-					processDueJobs(app, spec)
+					processDueJobs(app, worker)
 				}
 			})
 		}
@@ -49,21 +48,13 @@ func Enqueue(app core.App, req EnqueueRequest) error {
 		"dedupe_key = {:dedupeKey}",
 		dbx.Params{"dedupeKey": req.DedupeKey},
 	)
-	if err == nil {
+	if err != nil {
+		return err
+	}
+
+	if existing != nil {
 		switch existing.GetString("status") {
 		case vars.QueueStatusQueued, vars.QueueStatusRunning, vars.QueueStatusSuccess:
-			if existing.GetString("status") == vars.QueueStatusSuccess && req.AllowRequeueOnSuccess {
-				existing.Set("status", vars.QueueStatusQueued)
-				existing.Set("started_at", nil)
-				existing.Set("finished_at", nil)
-				existing.Set("error_code", nil)
-				existing.Set("error_message", nil)
-				existing.Set("payload", req.Payload)
-				existing.Set("user", req.UserID)
-				existing.Set("upload", req.UploadID)
-				existing.Set("page", req.PageID)
-				return app.Save(existing)
-			}
 			return nil
 		case vars.QueueStatusFailed, vars.QueueStatusCancelled:
 			existing.Set("status", vars.QueueStatusQueued)
@@ -88,9 +79,7 @@ func Enqueue(app core.App, req EnqueueRequest) error {
 	record.Set("user", req.UserID)
 	record.Set("upload", req.UploadID)
 	record.Set("page", req.PageID)
-
-	err = app.Save(record)
-	if err != nil {
+	if err = app.Save(record); err != nil {
 		return err
 	}
 
@@ -98,7 +87,7 @@ func Enqueue(app core.App, req EnqueueRequest) error {
 }
 
 func processDueJobs(app core.App, worker Worker) error {
-	records, err := app.FindRecordsByFilter(
+	jobs, err := app.FindRecordsByFilter(
 		collections.Queue,
 		"status = 'queued' && job_type = {:jobType}",
 		"created",
@@ -110,7 +99,7 @@ func processDueJobs(app core.App, worker Worker) error {
 		return err
 	}
 
-	for _, job := range records {
+	for _, job := range jobs {
 		if err := claimJob(app, job, worker.name); err != nil {
 			continue
 		}
@@ -127,52 +116,17 @@ func processDueJobs(app core.App, worker Worker) error {
 			continue
 		}
 
-		markUploadSuccessfulIfComplete(app, job)
+		if err := markUploadSuccess(app, job); err != nil {
+			continue
+		}
 	}
 
 	return nil
 }
 
-func claimJob(app core.App, job *core.Record, workerName string) error {
-	now := time.Now().UTC()
-	job.Set("status", vars.QueueStatusRunning)
-	job.Set("started_at", now)
-	job.Set("worker_id", workerName)
-	return app.Save(job)
-}
+func recoverHangingJobs(app core.App) {
+	recoverRunningJobs(app)
 
-func executeJob(app core.App, job *core.Record) error {
-	jobType := job.GetString("job_type")
-	handler := handlers[jobType]
-
-	return handler(app, job)
-}
-
-func handleJobFailure(app core.App, job *core.Record, err error) {
-	now := time.Now().UTC()
-	job.Set("status", vars.QueueStatusFailed)
-	job.Set("finished_at", now)
-	job.Set("error_message", err.Error())
-	if err := app.Save(job); err != nil {
-		return
-	}
-}
-
-func markUploadSuccessfulIfComplete(app core.App, job *core.Record) {
-	uploadID := job.GetString("upload")
-	if uploadID == "" {
-		return
-	}
-
-	uploadRecord, err := app.FindRecordById(collections.Uploads, uploadID)
-	if err != nil {
-		return
-	}
-
-	reconcileUploadStatusFromQueue(app, uploadRecord)
-}
-
-func RecoverHangingProcessingUploads(app core.App) {
 	uploads, err := app.FindRecordsByFilter(
 		collections.Uploads,
 		"status = {:status}",
@@ -186,68 +140,8 @@ func RecoverHangingProcessingUploads(app core.App) {
 	}
 
 	for _, uploadRecord := range uploads {
-		reconcileUploadStatusFromQueue(app, uploadRecord)
+		if err := reconcileUploadStatus(app, uploadRecord); err != nil {
+			continue
+		}
 	}
-}
-
-func reconcileUploadStatusFromQueue(app core.App, uploadRecord *core.Record) {
-	if uploadRecord == nil {
-		return
-	}
-
-	uploadType := strings.TrimSpace(uploadRecord.GetString("type"))
-	if uploadType == vars.UploadTypeSummary {
-		return
-	}
-
-	uploadID := strings.TrimSpace(uploadRecord.Id)
-	if uploadID == "" {
-		return
-	}
-
-	status := strings.TrimSpace(uploadRecord.GetString("status"))
-	if status == vars.UploadStatusSuccess || status == vars.UploadStatusFailed {
-		return
-	}
-
-	inFlightJobs, err := app.FindRecordsByFilter(
-		collections.Queue,
-		"upload = {:uploadId} && (status = 'queued' || status = 'running')",
-		"",
-		1,
-		0,
-		dbx.Params{"uploadId": uploadID},
-	)
-	if err != nil || len(inFlightJobs) > 0 {
-		return
-	}
-
-	failedJobs, err := app.FindRecordsByFilter(
-		collections.Queue,
-		"upload = {:uploadId} && (status = 'failed' || status = 'cancelled')",
-		"",
-		1,
-		0,
-		dbx.Params{"uploadId": uploadID},
-	)
-	if err != nil || len(failedJobs) > 0 {
-		uploadRecord.Set("status", vars.UploadStatusFailed)
-		app.Save(uploadRecord)
-		return
-	}
-
-	successJobs, err := app.FindRecordsByFilter(
-		collections.Queue,
-		"upload = {:uploadId} && status = 'success'",
-		"",
-		1,
-		0,
-		dbx.Params{"uploadId": uploadID},
-	)
-	if err != nil || len(successJobs) == 0 {
-		return
-	}
-
-	uploadRecord.Set("status", vars.UploadStatusSuccess)
-	app.Save(uploadRecord)
 }

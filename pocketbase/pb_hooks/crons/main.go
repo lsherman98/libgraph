@@ -4,16 +4,11 @@ import (
 	"fmt"
 
 	"github.com/lsherman98/libgraph/pocketbase/collections"
-	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/processing"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/vector_search"
 	"github.com/pocketbase/pocketbase"
 )
 
 func Init(app *pocketbase.PocketBase) error {
-	app.Cron().MustAdd("recoverHangingProcessingUploads", "*/5 * * * *", func() {
-		processing.RecoverHangingProcessingUploads(app)
-	})
-
 	app.Cron().MustAdd("recoverEmbeddingPollJobs", "*/5 * * * *", func() {
 		vector_search.EnqueuePendingEmbeddingPollJobs(app, 200)
 	})

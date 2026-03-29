@@ -47,8 +47,6 @@ const (
 )
 
 func Init(app *pocketbase.PocketBase) error {
-	registerQueueHandlers()
-
 	app.OnRecordCreateRequest(collections.Uploads).BindFunc(func(e *core.RecordRequestEvent) error {
 		upload := e.Record
 

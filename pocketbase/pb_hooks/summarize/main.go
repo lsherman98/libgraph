@@ -35,8 +35,6 @@ func Init(app *pocketbase.PocketBase) error {
 	}
 	geminiClient = client
 
-	registerQueueHandlers()
-
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		se.Router.POST("/api/pages/{pageId}/summarize", func(e *core.RequestEvent) error {
 			pageID := strings.TrimSpace(e.Request.PathValue("pageId"))
@@ -86,10 +84,9 @@ func Init(app *pocketbase.PocketBase) error {
 					"upload_id":     pageUploadID,
 					"full_document": fullDocument,
 				},
-				UserID:                userID,
-				UploadID:              pageUploadID,
-				PageID:                pageID,
-				AllowRequeueOnSuccess: true,
+				UserID:   userID,
+				UploadID: pageUploadID,
+				PageID:   pageID,
 			}); err != nil {
 				app.Logger().Error("single page summarize failed: enqueue failed", "route", "/api/pages/{pageId}/summarize", "user_id", userID, "page_id", pageID, "upload_id", pageUploadID, "dedupe_key", dedupeKey, "full_document", fullDocument, "error", err)
 				return e.InternalServerError("failed to enqueue summary", err)
@@ -162,10 +159,9 @@ func Init(app *pocketbase.PocketBase) error {
 					"upload_id":     uploadID,
 					"full_document": true,
 				},
-				UserID:                userID,
-				UploadID:              uploadID,
-				PageID:                anchorPageID,
-				AllowRequeueOnSuccess: true,
+				UserID:   userID,
+				UploadID: uploadID,
+				PageID:   anchorPageID,
 			}); err != nil {
 				app.Logger().Error("upload summarize failed: enqueue failed", "route", "/api/uploads/{uploadId}/summarize", "user_id", userID, "upload_id", uploadID, "page_id", anchorPageID, "dedupe_key", dedupeKey, "error", err)
 				return e.InternalServerError("failed to enqueue summary", err)
@@ -276,10 +272,9 @@ func Init(app *pocketbase.PocketBase) error {
 					"user_id":   userID,
 					"upload_id": uploadID,
 				},
-				UserID:                userID,
-				UploadID:              uploadID,
-				PageID:                sortedIDs[0],
-				AllowRequeueOnSuccess: true,
+				UserID:   userID,
+				UploadID: uploadID,
+				PageID:   sortedIDs[0],
 			}); err != nil {
 				app.Logger().Error("batch summarize failed: enqueue failed", "route", "/api/pages/summarize", "user_id", userID, "upload_id", uploadID, "page_ids", sortedIDs, "dedupe_key", dedupeKey, "error", err)
 				return e.InternalServerError("failed to enqueue summary", err)
@@ -299,11 +294,7 @@ func Init(app *pocketbase.PocketBase) error {
 	return nil
 }
 
-func registerQueueHandlers() {
-	processing.RegisterHandler(processing.JobTypePageSummarize, handlePageSummarizeJob)
-}
-
-func handlePageSummarizeJob(app core.App, job *core.Record) error {
+func HandlePageSummarizeJob(app core.App, job *core.Record) error {
 	payload := pageSummarizePayload{}
 	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
 		app.Logger().Error("page summarize job failed: payload unmarshal failed", "job_id", job.Id, "job_type", job.GetString("job_type"), "error", err)

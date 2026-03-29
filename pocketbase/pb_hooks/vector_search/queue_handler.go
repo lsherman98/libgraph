@@ -41,12 +41,7 @@ func clampEmbeddingOperationErrorMessage(message string) string {
 	return string(runes[:maxContentLen]) + suffix
 }
 
-func registerQueueHandlers() {
-	processing.RegisterHandler(processing.JobTypeChunkEmbedSubmit, handleChunkEmbedSubmitJob)
-	processing.RegisterHandler(processing.JobTypeChunkEmbedPoll, handleChunkEmbedPollJob)
-}
-
-func handleChunkEmbedSubmitJob(app core.App, job *core.Record) error {
+func HandleChunkEmbedSubmitJob(app core.App, job *core.Record) error {
 	payload := chunkEmbedPayload{}
 	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
 		return err
@@ -86,7 +81,7 @@ func handleChunkEmbedSubmitJob(app core.App, job *core.Record) error {
 	return submitEmbeddingOperationAndProcessSync(app, job, chunks)
 }
 
-func handleChunkEmbedPollJob(app core.App, job *core.Record) error {
+func HandleChunkEmbedPollJob(app core.App, job *core.Record) error {
 	payload := chunkEmbedPayload{}
 	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
 		return err

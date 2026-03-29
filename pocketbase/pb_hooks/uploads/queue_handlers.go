@@ -31,12 +31,7 @@ type chunkGeneratePayload struct {
 
 const chunkEmbedEnqueueBatchSize = 250
 
-func registerQueueHandlers() {
-	processing.RegisterHandler(processing.JobTypeUploadParseOrTranscribe, handleUploadParseOrTranscribeJob)
-	processing.RegisterHandler(processing.JobTypeChunkGenerate, handleChunkGenerateJob)
-}
-
-func handleUploadParseOrTranscribeJob(app core.App, job *core.Record) error {
+func HandleUploadParseOrTranscribeJob(app core.App, job *core.Record) error {
 	payload := uploadJobPayload{}
 	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
 		return err
@@ -251,7 +246,7 @@ func enqueueChunkGenerateForPage(app core.App, upload *core.Record, page *core.R
 	})
 }
 
-func handleChunkGenerateJob(app core.App, job *core.Record) error {
+func HandleChunkGenerateJob(app core.App, job *core.Record) error {
 	payload := chunkGeneratePayload{}
 	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
 		return fmt.Errorf("invalid payload: %w", err)
