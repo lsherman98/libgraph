@@ -15,7 +15,7 @@ func Init(app *pocketbase.PocketBase, h Handlers) error {
 	handlers = h
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
-		recoverHangingJobs(app)
+		recoverHangingJobs(se.App)
 
 		workers := []Worker{
 			{name: "parse", jobType: JobTypeUploadParseOrTranscribe, limit: getWorkerCount("PROCESSING_PARSE_WORKERS"), interval: queuePollInterval},
@@ -31,7 +31,7 @@ func Init(app *pocketbase.PocketBase, h Handlers) error {
 				defer ticker.Stop()
 
 				for range ticker.C {
-					processDueJobs(app, worker)
+					processDueJobs(se.App, worker)
 				}
 			})
 		}
@@ -63,6 +63,7 @@ func Enqueue(app core.App, req EnqueueRequest) error {
 			existing.Set("error_code", nil)
 			existing.Set("error_message", nil)
 			existing.Set("payload", req.Payload)
+			existing.Set("page", req.PageID)
 			return app.Save(existing)
 		default:
 			return nil
