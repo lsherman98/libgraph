@@ -14,35 +14,8 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
-type chunkEmbedPayload struct {
-	ChunkIDs             []string `json:"chunk_ids,omitempty"`
-	EmbeddingOperationID string   `json:"embedding_operation_id,omitempty"`
-}
-
-const embeddingOperationErrorMessageMaxLen = 5000
-
-func clampEmbeddingOperationErrorMessage(message string) string {
-	trimmed := strings.TrimSpace(message)
-	if trimmed == "" {
-		return ""
-	}
-
-	runes := []rune(trimmed)
-	if len(runes) <= embeddingOperationErrorMessageMaxLen {
-		return trimmed
-	}
-
-	suffix := " ... (truncated)"
-	maxContentLen := embeddingOperationErrorMessageMaxLen - len([]rune(suffix))
-	if maxContentLen <= 0 {
-		return string(runes[:embeddingOperationErrorMessageMaxLen])
-	}
-
-	return string(runes[:maxContentLen]) + suffix
-}
-
-func HandleChunkEmbedSubmitJob(app core.App, job *core.Record) error {
-	payload := chunkEmbedPayload{}
+func HandleEmbedJob(app core.App, job *core.Record) error {
+	payload := EmbedPayload{}
 	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
 		return err
 	}
@@ -73,7 +46,7 @@ func HandleChunkEmbedSubmitJob(app core.App, job *core.Record) error {
 		return nil
 	}
 
-	useBatch := batchEmbeddingEnabled()
+	useBatch := isBatchEnabled()
 	if useBatch {
 		return submitEmbeddingOperationAndEnqueuePoll(app, job, chunks)
 	}
@@ -81,8 +54,8 @@ func HandleChunkEmbedSubmitJob(app core.App, job *core.Record) error {
 	return submitEmbeddingOperationAndProcessSync(app, job, chunks)
 }
 
-func HandleChunkEmbedPollJob(app core.App, job *core.Record) error {
-	payload := chunkEmbedPayload{}
+func HandleEmbedPollJob(app core.App, job *core.Record) error {
+	payload := EmbedPayload{}
 	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
 		return err
 	}
@@ -115,18 +88,26 @@ func HandleChunkEmbedPollJob(app core.App, job *core.Record) error {
 		return fmt.Errorf("embedding operation missing provider_operation_id/batch_id")
 	}
 
-	batchOperation, rawBody, err := getBatchJobStatus(context.Background(), providerOperationID)
+	batchOperation, err := getBatchOperation(context.Background(), providerOperationID)
 	if err != nil {
 		return handleEmbeddingOperationPollError(app, job, operationRecord, err)
 	}
 
-	isDone := batchOperation.Done ||
-		batchOperation.State == "JOB_STATE_SUCCEEDED" ||
-		batchOperation.State == "JOB_STATE_FAILED" ||
-		batchOperation.State == "JOB_STATE_CANCELLED"
+	isDone, err := getBatchJobStatus(batchOperation)
+	if err != nil {
+		if isDone {
+			operationRecord.Set("status", "failing")
+			operationRecord.Set("error_message", err.Error())
+			operationRecord.Set("last_polled_at", now)
+			operationRecord.Set("finished_at", now)
+			return app.Save(operationRecord)
+		}
+
+		return handleEmbeddingOperationPollError(app, job, operationRecord, err)
+	}
 
 	if !isDone {
-		nextPollAt := now.Add(embeddingPollInterval())
+		nextPollAt := now.Add(pollInterval)
 		operationRecord.Set("status", "polling")
 		operationRecord.Set("error_message", "")
 		operationRecord.Set("last_polled_at", now)
@@ -138,24 +119,10 @@ func HandleChunkEmbedPollJob(app core.App, job *core.Record) error {
 		return rescheduleEmbeddingPollJob(app, job, operationRecord, nextPollAt)
 	}
 
-	if batchOperation.Error != nil || batchOperation.State == "JOB_STATE_FAILED" || batchOperation.State == "JOB_STATE_CANCELLED" {
-		errMessage := "embedding batch failed"
-		if batchOperation.Error != nil && strings.TrimSpace(batchOperation.Error.Message) != "" {
-			errMessage = batchOperation.Error.Message
-		}
-		errMessage = clampEmbeddingOperationErrorMessage(errMessage)
-		operationRecord.Set("status", "failing")
-		operationRecord.Set("error_message", errMessage)
-		operationRecord.Set("last_polled_at", now)
-		operationRecord.Set("finished_at", now)
-		return app.Save(operationRecord)
-	}
-
-	result, err := resolveBatchResult(batchOperation, rawBody)
+	result, err := resolveBatchResult(batchOperation)
 	if err != nil {
-		errMessage := clampEmbeddingOperationErrorMessage(err.Error())
 		operationRecord.Set("status", "failing")
-		operationRecord.Set("error_message", errMessage)
+		operationRecord.Set("error_message", err.Error())
 		operationRecord.Set("last_polled_at", now)
 		operationRecord.Set("finished_at", now)
 		if saveErr := app.Save(operationRecord); saveErr != nil {
@@ -196,7 +163,7 @@ func HandleChunkEmbedPollJob(app core.App, job *core.Record) error {
 }
 
 func submitEmbeddingOperationAndEnqueuePoll(app core.App, job *core.Record, chunkRecords []*core.Record) error {
-	chunks := collectChunkRecords(app, chunkRecords)
+	chunks := getDocumentChunks(app, chunkRecords)
 	if len(chunks) == 0 {
 		return nil
 	}
@@ -205,14 +172,14 @@ func submitEmbeddingOperationAndEnqueuePoll(app core.App, job *core.Record, chun
 		chunkIDs = append(chunkIDs, chunk.Record.Id)
 	}
 
-	modelName := embeddingModelName()
+	modelName := getEmbeddingModel()
 	fullModel := fmt.Sprintf("models/%s", modelName)
-	requests := make([]inlinedEmbedContentRequest, len(chunks))
+	requests := make([]EmbedContentRequest, len(chunks))
 	for i, c := range chunks {
-		requests[i] = inlinedEmbedContentRequest{
-			Request: restEmbedContentRequest{
+		requests[i] = EmbedContentRequest{
+			Request: EmbedRequestPayload{
 				Model:    fullModel,
-				Content:  restContent{Parts: []restPart{{Text: c.Content}}},
+				Content:  Content{Parts: []Part{{Text: c.Content}}},
 				TaskType: "RETRIEVAL_DOCUMENT",
 				Title:    c.Title,
 			},
@@ -222,8 +189,7 @@ func submitEmbeddingOperationAndEnqueuePoll(app core.App, job *core.Record, chun
 		}
 	}
 
-	batchLabel := fmt.Sprintf("queue-chunk-embed-submit-%s", job.Id)
-	operation, err := submitBatchEmbedJob(context.Background(), requests, batchLabel, modelName)
+	operation, err := runBatchEmbed(context.Background(), requests, modelName)
 	if err != nil {
 		return err
 	}
@@ -233,11 +199,11 @@ func submitEmbeddingOperationAndEnqueuePoll(app core.App, job *core.Record, chun
 		return err
 	}
 
-	return enqueueEmbeddingPollJob(app, operationRecord, time.Now().UTC().Add(embeddingPollInterval()))
+	return enqueueEmbeddingPollJob(app, operationRecord, time.Now().UTC().Add(pollInterval))
 }
 
 func submitEmbeddingOperationAndProcessSync(app core.App, job *core.Record, chunkRecords []*core.Record) error {
-	chunks := collectChunkRecords(app, chunkRecords)
+	chunks := getDocumentChunks(app, chunkRecords)
 	if len(chunks) == 0 {
 		return nil
 	}
@@ -247,7 +213,7 @@ func submitEmbeddingOperationAndProcessSync(app core.App, job *core.Record, chun
 		chunkIDs = append(chunkIDs, chunk.Record.Id)
 	}
 
-	modelName := embeddingModelName()
+	modelName := getEmbeddingModel()
 	providerOperationID := fmt.Sprintf("sync:%s", job.Id)
 
 	operationRecord, err := createEmbeddingOperationRecord(app, job, chunkIDs, providerOperationID, modelName, len(chunks), 1)
@@ -268,7 +234,6 @@ func submitEmbeddingOperationAndProcessSync(app core.App, job *core.Record, chun
 		if err != nil {
 			errMessage = err.Error()
 		}
-		errMessage = clampEmbeddingOperationErrorMessage(errMessage)
 		operationRecord.Set("status", "failing")
 		operationRecord.Set("error_message", errMessage)
 	} else {
@@ -285,22 +250,21 @@ func submitEmbeddingOperationAndProcessSync(app core.App, job *core.Record, chun
 	return nil
 }
 
-func processChunkEmbeddingsSyncBulk(app core.App, chunks []chunkRecord, modelName string) (processed int, failed int, firstErr error) {
+func processChunkEmbeddingsSyncBulk(app core.App, chunks []ChunkRecord, modelName string) (processed int, failed int, firstErr error) {
 	if len(chunks) == 0 {
 		return 0, 0, nil
 	}
 
-	batchSize := embeddingMaxBatchSize()
 	for start := 0; start < len(chunks); start += batchSize {
 		end := min(start+batchSize, len(chunks))
 		batch := chunks[start:end]
 
-		parts := make([]restPart, len(batch))
+		parts := make([]Part, len(batch))
 		for i, chunk := range batch {
-			parts[i] = restPart{Text: chunk.Content}
+			parts[i] = Part{Text: chunk.Content}
 		}
 
-		vectors, err := submitBulkEmbedContent(context.Background(), modelName, parts)
+		vectors, err := handleBulkEmbed(context.Background(), modelName, parts)
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err
@@ -370,7 +334,7 @@ func handleEmbeddingOperationPollError(app core.App, job *core.Record, operation
 	}
 
 	operationRecord.Set("attempts", attempts)
-	operationRecord.Set("error_message", clampEmbeddingOperationErrorMessage(pollErr.Error()))
+	operationRecord.Set("error_message", pollErr.Error())
 	operationRecord.Set("last_polled_at", now)
 
 	if attempts >= maxAttempts {
@@ -379,7 +343,7 @@ func handleEmbeddingOperationPollError(app core.App, job *core.Record, operation
 		return app.Save(operationRecord)
 	}
 
-	nextPollAt := now.Add(embeddingPollInterval())
+	nextPollAt := now.Add(pollInterval)
 	operationRecord.Set("status", "polling")
 	operationRecord.Set("next_poll_at", nextPollAt)
 	if err := app.Save(operationRecord); err != nil {
@@ -544,14 +508,14 @@ func embeddingOperationChunkIDs(operationRecord *core.Record) ([]string, error) 
 	return chunkIDs, nil
 }
 
-func persistEmbeddingBatchResult(app core.App, chunkRecords []*core.Record, result *embedContentBatchResult) (processed int, failed int, err error) {
-	responses := result.Output.getInlinedResponses()
+func persistEmbeddingBatchResult(app core.App, chunkRecords []*core.Record, result *BatchEmbedResult) (processed int, failed int, err error) {
+	responses := result.Output.getBatchResponses()
 	if len(responses) == 0 {
 		return 0, len(chunkRecords), fmt.Errorf("batch result has no inline responses")
 	}
 
 	processable := min(len(responses), len(chunkRecords))
-	for i := 0; i < processable; i++ {
+	for i := range processable {
 		resp := responses[i]
 		record := chunkRecords[i]
 
@@ -559,11 +523,11 @@ func persistEmbeddingBatchResult(app core.App, chunkRecords []*core.Record, resu
 			failed++
 			continue
 		}
-		if resp.Response == nil || resp.Response.Embedding == nil || len(resp.Response.Embedding.Values) == 0 {
+		if resp.Embedding == nil || len(resp.Embedding.Values) == 0 {
 			failed++
 			continue
 		}
-		if storeErr := storeChunkEmbedding(app, record, resp.Response.Embedding.Values); storeErr != nil {
+		if storeErr := storeChunkEmbedding(app, record, resp.Embedding.Values); storeErr != nil {
 			failed++
 			continue
 		}

@@ -2,9 +2,23 @@ package vector_search
 
 import (
 	"encoding/json"
+	"fmt"
+	"time"
 
+	"github.com/lsherman98/libgraph/pocketbase/collections"
 	"github.com/pocketbase/pocketbase/core"
 )
+
+const (
+	geminiAPIBase   = "https://generativelanguage.googleapis.com/v1beta"
+	batchSize       = 500
+	bulkSize        = 100
+	pollInterval    = 300 * time.Second
+	embeddingDims   = 3072
+	embeddingsTable = collections.DocumentChunksEmbeddings
+)
+
+var errRateLimited = fmt.Errorf("rate limited by Gemini API")
 
 type SearchResult struct {
 	ChunkID    string  `json:"chunk_id"`
@@ -16,107 +30,81 @@ type SearchResult struct {
 	Title      string  `json:"title"`
 }
 
-type asyncBatchEmbedRequest struct {
-	Batch batchEmbedJobConfig `json:"batch"`
+type BatchEmbedRequest struct {
+	Batch []EmbedContentRequest `json:"batch"`
 }
 
-type batchEmbedJobConfig struct {
-	DisplayName string                  `json:"displayName"`
-	InputConfig inputEmbedContentConfig `json:"inputConfig"`
+type EmbedContentRequest struct {
+	Request  EmbedRequestPayload `json:"request"`
+	Metadata map[string]any      `json:"metadata,omitempty"`
 }
 
-type inputEmbedContentConfig struct {
-	Requests *inlinedEmbedContentRequests `json:"requests,omitempty"`
+type EmbedRequestPayload struct {
+	Model    string  `json:"model,omitempty"`
+	Content  Content `json:"content"`
+	TaskType string  `json:"taskType,omitempty"`
+	Title    string  `json:"title,omitempty"`
 }
 
-type inlinedEmbedContentRequests struct {
-	Requests []inlinedEmbedContentRequest `json:"requests"`
+type Content struct {
+	Parts []Part `json:"parts"`
 }
 
-type inlinedEmbedContentRequest struct {
-	Request  restEmbedContentRequest `json:"request"`
-	Metadata map[string]any          `json:"metadata,omitempty"`
-}
-
-type restEmbedContentRequest struct {
-	Model    string      `json:"model,omitempty"`
-	Content  restContent `json:"content"`
-	TaskType string      `json:"taskType,omitempty"`
-	Title    string      `json:"title,omitempty"`
-}
-
-type restContent struct {
-	Parts []restPart `json:"parts"`
-}
-
-type restPart struct {
+type Part struct {
 	Text string `json:"text"`
 }
 
-type batchOperation struct {
+type BatchEmbed struct {
 	Name     string          `json:"name"`
 	Done     bool            `json:"done"`
-	Error    *rpcStatus      `json:"error,omitempty"`
+	Error    *Status         `json:"error,omitempty"`
 	Response json.RawMessage `json:"response,omitempty"`
 	Metadata json.RawMessage `json:"metadata,omitempty"`
-
-	State      string                   `json:"state,omitempty"`
-	Output     *embedContentBatchOutput `json:"output,omitempty"`
-	BatchStats *batchStats              `json:"batchStats,omitempty"`
+	State    string          `json:"state,omitempty"`
+	Output   *BatchOutput    `json:"output,omitempty"`
 }
 
-type rpcStatus struct {
+type Status struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
 }
 
-type embedContentBatchResult struct {
-	Model      string                   `json:"model"`
-	Name       string                   `json:"name"`
-	State      string                   `json:"state"`
-	Output     *embedContentBatchOutput `json:"output,omitempty"`
-	BatchStats *batchStats              `json:"batchStats,omitempty"`
-	RawDebug   string                   `json:"-"`
+type BatchEmbedResult struct {
+	Model  string       `json:"model"`
+	Name   string       `json:"name"`
+	State  string       `json:"state"`
+	Output *BatchOutput `json:"output,omitempty"`
 }
 
-type embedContentBatchOutput struct {
+type BatchOutput struct {
 	RawInlined    json.RawMessage `json:"inlinedResponses,omitempty"`
 	ResponsesFile string          `json:"responsesFile,omitempty"`
 }
 
-type inlinedEmbedContentResponse struct {
-	Response *restEmbedContentResponse `json:"response,omitempty"`
-	Error    *rpcStatus                `json:"error,omitempty"`
+type EmbedContentResponse struct {
+	Embedding *ContentEmbedding `json:"embedding,omitempty"`
+	Values    []float32         `json:"values,omitempty"`
+	Error     *Status           `json:"error,omitempty"`
 }
 
-type restEmbedContentResponse struct {
-	Embedding *restContentEmbedding `json:"embedding,omitempty"`
-	Values    []float32             `json:"values,omitempty"`
+type BulkEmbedContentResponse struct {
+	Embeddings []EmbedContentResponse `json:"embeddings,omitempty"`
+	Embedding  *ContentEmbedding      `json:"embedding,omitempty"`
+	Error      *Status                `json:"error,omitempty"`
 }
 
-type restBulkEmbedContentResponse struct {
-	Embeddings []restEmbedContentResponse `json:"embeddings,omitempty"`
-	Embedding  *restContentEmbedding      `json:"embedding,omitempty"`
-}
-
-type restBulkEmbedContentRequest struct {
-	Requests []restEmbedContentRequest `json:"requests"`
-}
-
-type restContentEmbedding struct {
+type ContentEmbedding struct {
 	Values []float32 `json:"values"`
 }
 
-type batchStats struct {
-	RequestCount           string `json:"requestCount"`
-	SuccessfulRequestCount string `json:"successfulRequestCount"`
-	FailedRequestCount     string `json:"failedRequestCount"`
-	PendingRequestCount    string `json:"pendingRequestCount"`
-}
-
-type chunkRecord struct {
+type ChunkRecord struct {
 	Record   *core.Record
 	Content  string
 	Title    string
 	UploadID string
+}
+
+type EmbedPayload struct {
+	ChunkIDs             []string `json:"chunk_ids,omitempty"`
+	EmbeddingOperationID string   `json:"embedding_operation_id,omitempty"`
 }

@@ -16,7 +16,7 @@ import (
 	"github.com/pocketbase/pocketbase/tools/filesystem"
 )
 
-func HandlePageSummarizeJob(app core.App, job *core.Record) error {
+func HandleSummarizeJob(app core.App, job *core.Record) error {
 	payload := SummarizePayload{}
 	if err := job.UnmarshalJSONField("payload", &payload); err != nil {
 		return err

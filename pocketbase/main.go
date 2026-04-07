@@ -90,11 +90,11 @@ func main() {
 	}
 
 	if err := processing.Init(app, processing.Handlers{
-		UploadParse:      uploads.HandleUploadParseOrTranscribeJob,
-		ChunkGenerate:    uploads.HandleChunkGenerateJob,
-		PageSummarize:    summarize.HandlePageSummarizeJob,
-		ChunkEmbedSubmit: vector_search.HandleChunkEmbedSubmitJob,
-		ChunkEmbedPoll:   vector_search.HandleChunkEmbedPollJob,
+		UploadParse:      uploads.HandleUploadJob,
+		ChunkGenerate:    uploads.HandleChunkJob,
+		PageSummarize:    summarize.HandleSummarizeJob,
+		ChunkEmbedSubmit: vector_search.HandleEmbedJob,
+		ChunkEmbedPoll:   vector_search.HandleEmbedPollJob,
 	}); err != nil {
 		log.Fatal("Failed to initialize Processing queue: ", err)
 	}

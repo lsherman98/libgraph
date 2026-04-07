@@ -9,7 +9,7 @@ import (
 	"google.golang.org/api/option"
 )
 
-func createGoogleAiClient() (*genai.Client, error) {
+func newGeminiClient() (*genai.Client, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
 		return nil, fmt.Errorf("GEMINI_API_KEY environment variable is not set")
@@ -22,9 +22,9 @@ func createGoogleAiClient() (*genai.Client, error) {
 	return client, nil
 }
 
-func googleAiEmbedContent(client *genai.Client, taskType genai.TaskType, title string, parts ...genai.Part) ([]float32, error) {
+func embedContent(client *genai.Client, taskType genai.TaskType, title string, parts ...genai.Part) ([]float32, error) {
 	ctx := context.Background()
-	model := googleAiEmbeddingModel(client)
+	model := setEmbeddingModel(client)
 	model.TaskType = taskType
 	if title != "" {
 		res, err := model.EmbedContentWithTitle(ctx, title, parts...)
@@ -40,12 +40,11 @@ func googleAiEmbedContent(client *genai.Client, taskType genai.TaskType, title s
 	return res.Embedding.Values, nil
 }
 
-func googleAiEmbeddingModel(client *genai.Client) *genai.EmbeddingModel {
-	em := client.EmbeddingModel(embeddingModelName())
-	return em
+func setEmbeddingModel(client *genai.Client) *genai.EmbeddingModel {
+	return client.EmbeddingModel(getEmbeddingModel())
 }
 
-func embeddingModelName() string {
+func getEmbeddingModel() string {
 	modelName := os.Getenv("GOOGLE_EMBEDDING_MODEL")
 	if modelName == "" {
 		modelName = "gemini-embedding-001"

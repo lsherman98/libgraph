@@ -10,17 +10,13 @@ import (
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tools/routine"
 )
-
-const embeddingDims = 3072
-const embeddingsTable = collections.DocumentChunksEmbeddings
 
 var client *genai.Client
 
 func Init(app *pocketbase.PocketBase) error {
 	var err error
-	client, err = createGoogleAiClient()
+	client, err = newGeminiClient()
 	if err != nil {
 		return err
 	}
@@ -33,28 +29,11 @@ func Init(app *pocketbase.PocketBase) error {
 		return se.Next()
 	})
 
-	app.OnRecordAfterUpdateSuccess(collections.DocumentChunks).BindFunc(func(e *core.RecordEvent) error {
-		record := e.Record
-		oldContent := record.Original().GetString("content")
-
-		newContent := record.GetString("content")
-
-		if oldContent == newContent {
+	app.OnRecordAfterDeleteSuccess(collections.DocumentChunks).BindFunc(func(e *core.RecordEvent) error {
+		if err := deleteEmbeddingForRecord(app, e.Record); err != nil {
 			return e.Next()
 		}
 
-		routine.FireAndForget(func() {
-			deleteEmbeddingForRecord(app, record.Original())
-
-			updateStmt := "UPDATE document_chunks SET vector_id = 0 WHERE id = {:chunkId}"
-			app.DB().NewQuery(updateStmt).Bind(dbx.Params{"chunkId": record.Id}).Execute()
-		})
-		return e.Next()
-	})
-
-	app.OnRecordAfterDeleteSuccess(collections.DocumentChunks).BindFunc(func(e *core.RecordEvent) error {
-		record := e.Record
-		deleteEmbeddingForRecord(app, record)
 		return e.Next()
 	})
 
@@ -65,22 +44,19 @@ func Search(app core.App, query string, uploadIDs []string, k int) ([]SearchResu
 	if query == "" {
 		return nil, fmt.Errorf("vector_search: query cannot be empty")
 	}
-	if k <= 0 {
-		k = 10
-	}
 
-	vector, err := googleAiEmbedContent(client, genai.TaskTypeRetrievalQuery, "", genai.Text(query))
+	vector, err := embedContent(client, genai.TaskTypeRetrievalQuery, "", genai.Text(query))
 	if err != nil {
 		return nil, err
 	}
 
-	jsonVec, err := json.Marshal(vector)
+	json, err := json.Marshal(vector)
 	if err != nil {
 		return nil, err
 	}
 
 	params := dbx.Params{
-		"embedding": string(jsonVec),
+		"embedding": string(json),
 	}
 
 	var stmt strings.Builder
@@ -93,16 +69,14 @@ func Search(app core.App, query string, uploadIDs []string, k int) ([]SearchResu
 			params[key] = uid
 		}
 
-		stmt.WriteString(fmt.Sprintf(
-			"SELECT dc.id, dc.content, dc.upload, dc.page_number, dc.chunk_index, u.title, "+
-				"vec_distance_cosine((SELECT e.embedding FROM %s e WHERE e.id = dc.vector_id), {:embedding}) as distance ",
-			embeddingsTable,
-		))
+		fmt.Fprintf(&stmt, "SELECT dc.id, dc.content, dc.upload, dc.page_number, dc.chunk_index, u.title, "+
+			"vec_distance_cosine((SELECT e.embedding FROM %s e WHERE e.id = dc.vector_id), {:embedding}) as distance ",
+			embeddingsTable)
 		stmt.WriteString("FROM document_chunks dc ")
 		stmt.WriteString("JOIN uploads u ON dc.upload = u.id ")
 		stmt.WriteString("WHERE dc.vector_id IS NOT NULL AND dc.vector_id != 0 ")
 		stmt.WriteString("AND dc.upload IN (" + strings.Join(placeholders, ", ") + ") ")
-		stmt.WriteString(fmt.Sprintf("ORDER BY distance ASC LIMIT %d;", k))
+		fmt.Fprintf(&stmt, "ORDER BY distance ASC LIMIT %d;", k)
 	} else {
 		fmt.Fprintf(&stmt, "WITH sub(id, distance) AS MATERIALIZED (SELECT id, distance FROM %s WHERE embedding MATCH {:embedding} AND k = %d) ", embeddingsTable, k)
 		stmt.WriteString("SELECT dc.id, sub.distance, dc.content, dc.upload, dc.page_number, dc.chunk_index, u.title ")
@@ -156,35 +130,4 @@ func Search(app core.App, query string, uploadIDs []string, k int) ([]SearchResu
 	}
 
 	return items, nil
-}
-
-func ensureEmbeddingsTable(app *pocketbase.PocketBase) error {
-	stmt := fmt.Sprintf(
-		"CREATE VIRTUAL TABLE IF NOT EXISTS %s USING vec0(id INTEGER PRIMARY KEY AUTOINCREMENT, embedding float[%d]);",
-		embeddingsTable, embeddingDims,
-	)
-	if _, err := app.DB().NewQuery(stmt).Execute(); err != nil {
-		return err
-	}
-
-	if _, err := app.DB().NewQuery("CREATE INDEX IF NOT EXISTS idx_document_chunks_vector_id ON document_chunks(vector_id);").Execute(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func deleteEmbeddingForRecord(app *pocketbase.PocketBase, record *core.Record) error {
-	vectorID := record.GetInt("vector_id")
-
-	if vectorID == 0 {
-		return nil
-	}
-
-	stmt := fmt.Sprintf("DELETE FROM %s WHERE id = {:id}", embeddingsTable)
-	_, err := app.DB().NewQuery(stmt).Bind(dbx.Params{
-		"id": vectorID,
-	}).Execute()
-
-	return err
 }
