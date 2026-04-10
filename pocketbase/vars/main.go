@@ -19,7 +19,7 @@ const (
 	EmbeddingStatusSubmitted = "submitted"
 	EmbeddingStatusPolling   = "polling"
 	EmbeddingStatusSucceeded = "succeeded"
-	EmbeddingStatusFailing   = "failing"
+	EmbeddingStatusFailed   = "failed"
 
 	SummaryStatusProcessing = "processing"
 	SummaryStatusFailed     = "failed"

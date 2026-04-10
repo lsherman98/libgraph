@@ -3,6 +3,7 @@ package vector_search
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/google/generative-ai-go/genai"
@@ -20,6 +21,8 @@ func Init(app *pocketbase.PocketBase) error {
 	if err != nil {
 		return err
 	}
+
+	batchEnabled = os.Getenv("BATCH") == "true"
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		if err := ensureEmbeddingsTable(app); err != nil {

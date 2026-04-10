@@ -1,10 +1,9 @@
 package vector_search
 
 import (
-	"errors"
 	"fmt"
-	"os"
 
+	"github.com/lsherman98/libgraph/pocketbase/collections"
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
@@ -41,10 +40,32 @@ func deleteEmbeddingForRecord(app *pocketbase.PocketBase, record *core.Record) e
 	return err
 }
 
-func isRateLimited(err error) bool {
-	return errors.Is(err, errRateLimited)
+func createEmbeddingJob(app core.App, job *core.Record, providerOperationID string) (*core.Record, error) {
+	embeddingJobs, _ := app.FindCollectionByNameOrId(collections.EmbeddingJobs)
+	embeddingJob := core.NewRecord(embeddingJobs)
+	embeddingJob.Set("job", job.Id)
+	embeddingJob.Set("upload", job.GetString("upload"))
+	embeddingJob.Set("page", job.GetString("page"))
+	embeddingJob.Set("user", job.GetString("user"))
+	embeddingJob.Set("batch_id", providerOperationID)
+	embeddingJob.Set("status", "submitted")
+	if err := app.Save(embeddingJob); err != nil {
+		return nil, err
+	}
+
+	return embeddingJob, nil
 }
 
-func isBatchEnabled() bool {
-	return os.Getenv("BATCH") == "true"
+func loadChunkRecords(app core.App, chunkIDs []string) ([]*core.Record, error) {
+	chunks := make([]*core.Record, 0, len(chunkIDs))
+	for _, id := range chunkIDs {
+		chunk, err := app.FindRecordById(collections.DocumentChunks, id)
+		if err != nil {
+			return nil, err
+		}
+
+		chunks = append(chunks, chunk)
+	}
+
+	return chunks, nil
 }

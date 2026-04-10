@@ -18,6 +18,7 @@ const (
 	embeddingsTable = collections.DocumentChunksEmbeddings
 )
 
+var batchEnabled = false
 var errRateLimited = fmt.Errorf("rate limited by Gemini API")
 
 type SearchResult struct {
@@ -97,7 +98,7 @@ type ContentEmbedding struct {
 	Values []float32 `json:"values"`
 }
 
-type ChunkRecord struct {
+type Chunk struct {
 	Record   *core.Record
 	Content  string
 	Title    string
@@ -106,5 +107,5 @@ type ChunkRecord struct {
 
 type EmbedPayload struct {
 	ChunkIDs             []string `json:"chunk_ids,omitempty"`
-	EmbeddingOperationID string   `json:"embedding_operation_id,omitempty"`
+	EmbeddingJobID string   `json:"embedding_job_id,omitempty"`
 }

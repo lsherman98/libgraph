@@ -10,7 +10,7 @@ import (
 
 func Init(app *pocketbase.PocketBase) error {
 	app.Cron().MustAdd("recoverEmbeddingPollJobs", "*/5 * * * *", func() {
-		vector_search.EnqueuePendingEmbeddingPollJobs(app, 200)
+		vector_search.EnqueuePendingPollJobs(app, 200)
 	})
 
 	app.Cron().MustAdd("cleanupOrphanedEmbeddings", "0 2 * * *", func() {

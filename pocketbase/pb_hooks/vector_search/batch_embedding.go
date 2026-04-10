@@ -27,8 +27,8 @@ func (o *BatchOutput) getBatchResponses() []EmbedContentResponse {
 	return nil
 }
 
-func getDocumentChunks(app core.App, records []*core.Record) []ChunkRecord {
-	chunks := make([]ChunkRecord, 0, len(records))
+func buildChunks(app core.App, records []*core.Record) []Chunk {
+	chunks := make([]Chunk, 0, len(records))
 	titleCache := make(map[string]string)
 	lookupDone := make(map[string]bool)
 
@@ -52,7 +52,7 @@ func getDocumentChunks(app core.App, records []*core.Record) []ChunkRecord {
 
 		title = titleCache[uploadID]
 
-		chunks = append(chunks, ChunkRecord{
+		chunks = append(chunks, Chunk{
 			Record:   record,
 			Content:  content,
 			Title:    title,
@@ -63,7 +63,7 @@ func getDocumentChunks(app core.App, records []*core.Record) []ChunkRecord {
 	return chunks
 }
 
-func runBatchEmbed(ctx context.Context, requests []EmbedContentRequest, modelName string) (*BatchEmbed, error) {
+func postBatchEmbed(ctx context.Context, requests []EmbedContentRequest, modelName string) (*BatchEmbed, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
 		return nil, fmt.Errorf("GEMINI_API_KEY not set")
@@ -113,11 +113,13 @@ func runBatchEmbed(ctx context.Context, requests []EmbedContentRequest, modelNam
 	return &op, nil
 }
 
-func handleBulkEmbed(ctx context.Context, modelName string, parts []Part) ([][]float32, error) {
+func handleBulkEmbed(ctx context.Context, parts []Part) ([][]float32, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
 		return nil, fmt.Errorf("GEMINI_API_KEY not set")
 	}
+
+	modelName := getEmbeddingModel()
 
 	requests := make([]EmbedContentRequest, len(parts))
 	for i, part := range parts {
@@ -133,7 +135,7 @@ func handleBulkEmbed(ctx context.Context, modelName string, parts []Part) ([][]f
 	vectors := make([][]float32, 0, len(requests))
 	for start := 0; start < len(requests); start += bulkSize {
 		end := min(start+bulkSize, len(requests))
-		chunkVectors, err := runBulkEmbed(ctx, apiKey, modelName, requests[start:end])
+		chunkVectors, err := postBulkEmbed(ctx, apiKey, modelName, requests[start:end])
 		if err != nil {
 			return nil, err
 		}
@@ -143,7 +145,7 @@ func handleBulkEmbed(ctx context.Context, modelName string, parts []Part) ([][]f
 	return vectors, nil
 }
 
-func runBulkEmbed(ctx context.Context, apiKey, modelName string, requests []EmbedContentRequest) ([][]float32, error) {
+func postBulkEmbed(ctx context.Context, apiKey, modelName string, requests []EmbedContentRequest) ([][]float32, error) {
 	url := fmt.Sprintf("%s/models/%s:batchEmbedContents?key=%s", geminiAPIBase, modelName, apiKey)
 	body := BatchEmbedRequest{
 		Batch: requests,
@@ -204,13 +206,13 @@ func runBulkEmbed(ctx context.Context, apiKey, modelName string, requests []Embe
 	return vectors, nil
 }
 
-func getBatchOperation(ctx context.Context, batchName string) (*BatchEmbed, error) {
+func getBatchOperation(ctx context.Context, batchId string) (*BatchEmbed, error) {
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
 		return nil, fmt.Errorf("GEMINI_API_KEY not set")
 	}
 
-	url := fmt.Sprintf("%s/%s?key=%s", geminiAPIBase, batchName, apiKey)
+	url := fmt.Sprintf("%s/%s?key=%s", geminiAPIBase, batchId, apiKey)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
