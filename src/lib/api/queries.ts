@@ -82,6 +82,7 @@ export function usePageByNumber(uploadId?: string, pageNumber?: number) {
         queryKey: queryKeys.pages.byNumber(uploadId, pageNumber),
         queryFn: uploadId && pageNumber != null ? () => getPageByNumber(uploadId, pageNumber) : skipToken,
         placeholderData: keepPreviousData,
+        staleTime: 60_000,
     });
 }
 
@@ -120,7 +121,6 @@ export function usePageMarkdown(pageId?: string) {
                 return await response.text();
             }
             : skipToken,
-        placeholderData: keepPreviousData,
     });
 }
 

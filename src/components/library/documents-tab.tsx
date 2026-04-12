@@ -337,7 +337,6 @@ export function DocumentsTab() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Add to Collection</DialogTitle>
-            <DialogDescription>Add {addingToCollectionUpload?.title || "this document"} to one or more collections.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 py-2">
             <div className="relative">

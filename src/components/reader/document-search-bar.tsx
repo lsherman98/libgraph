@@ -1,26 +1,36 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Search, X, ChevronUp, ChevronDown, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { getPage } from "@/lib/api/api";
 import { useFullTextSearch } from "@/lib/api/queries";
+import { queryKeys } from "@/lib/api/queryKeys";
 import { cn, useDebouncedCallback } from "@/lib/utils";
 import { clearSearchHighlights, applySearchHighlights, updateActiveSearchHighlight, reconnectSearchObserver } from "@/lib/utils/search-highlights";
 
 interface SearchMatch {
+  pageId: string;
   pageNumber: number;
   chunkIndex: number;
   content: string;
   occurrenceIndex: number;
 }
 
+interface ResolvedSearchPage {
+  pageId: string;
+  pageNumber: number;
+}
+
 interface DocumentSearchBarProps {
   uploadId: string;
-  onNavigateToPage: (pageNumber: number) => void;
+  onNavigateToPage: (page: ResolvedSearchPage) => void;
   className?: string;
 }
 
 export function DocumentSearchBar({ uploadId, onNavigateToPage, className }: DocumentSearchBarProps) {
+  const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -28,10 +38,12 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, className }: Doc
   const inputRef = useRef<HTMLInputElement>(null);
   const onNavigateToPageRef = useRef(onNavigateToPage);
   onNavigateToPageRef.current = onNavigateToPage;
-  const lastNavigatedPageRef = useRef<number | null>(null);
   const activeMatchRef = useRef({ pageNumber: 0, highlightIndex: 0 });
   const observerRef = useRef<MutationObserver | null>(null);
   const observerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const navigationIdRef = useRef(0);
+  const resolvedPageNumbersRef = useRef(new Map<string, number>());
+  const [isNavigating, setIsNavigating] = useState(false);
 
   const debouncedSetQuery = useDebouncedCallback((value: string) => {
     setDebouncedQuery(value);
@@ -53,6 +65,7 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, className }: Doc
 
     const sortedChunks = [...searchResults]
       .map((r) => ({
+        pageId: r.page,
         pageNumber: parseInt(r.page_number, 10),
         chunkIndex: parseInt(r.chunk_index, 10),
         content: r.content,
@@ -66,6 +79,7 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, className }: Doc
       let occIdx = 0;
       while (regex.exec(chunk.content) !== null) {
         expanded.push({
+          pageId: chunk.pageId,
           pageNumber: chunk.pageNumber,
           chunkIndex: chunk.chunkIndex,
           content: chunk.content,
@@ -74,60 +88,94 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, className }: Doc
         occIdx++;
         if (expanded.length >= MAX_MATCHES) break;
       }
-      if (occIdx === 0) {
-        expanded.push({
-          pageNumber: chunk.pageNumber,
-          chunkIndex: chunk.chunkIndex,
-          content: chunk.content,
-          occurrenceIndex: 0,
-        });
-      }
     }
 
     return expanded;
   }, [searchResults, debouncedQuery]);
 
+  useEffect(() => {
+    resolvedPageNumbersRef.current.clear();
+  }, [uploadId]);
+
+  const resolvePageForMatch = useCallback(
+    async (match: SearchMatch): Promise<ResolvedSearchPage> => {
+      const cachedPageNumber = resolvedPageNumbersRef.current.get(match.pageId);
+      if (cachedPageNumber != null) {
+        return { pageId: match.pageId, pageNumber: cachedPageNumber };
+      }
+
+      try {
+        const pageRecord = await queryClient.fetchQuery({
+          queryKey: queryKeys.pages.detail(match.pageId),
+          queryFn: () => getPage(match.pageId),
+          staleTime: 60_000,
+        });
+
+        const resolvedPageNumber = Number.isFinite(pageRecord.page)
+          ? Math.max(1, Math.floor(pageRecord.page))
+          : Number.isFinite(match.pageNumber)
+            ? Math.max(1, Math.floor(match.pageNumber))
+            : 1;
+
+        resolvedPageNumbersRef.current.set(match.pageId, resolvedPageNumber);
+        return { pageId: pageRecord.id, pageNumber: resolvedPageNumber };
+      } catch {
+        const fallbackPageNumber = Number.isFinite(match.pageNumber) ? Math.max(1, Math.floor(match.pageNumber)) : 1;
+        resolvedPageNumbersRef.current.set(match.pageId, fallbackPageNumber);
+        return { pageId: match.pageId, pageNumber: fallbackPageNumber };
+      }
+    },
+    [queryClient],
+  );
+
   const navigateToMatch = useCallback(
-    (index: number) => {
+    async (index: number) => {
       if (matches.length === 0) return;
       const match = matches[index];
       if (!match) return;
 
-      const highlightIndexOnPage = matches.filter((m, i) => i < index && m.pageNumber === match.pageNumber).length;
-      activeMatchRef.current = { pageNumber: match.pageNumber, highlightIndex: highlightIndexOnPage };
+      // Cancel any previous tryApply loop.
+      const navId = ++navigationIdRef.current;
+      setIsNavigating(true);
 
-      const needsPageChange = lastNavigatedPageRef.current !== match.pageNumber;
-      lastNavigatedPageRef.current = match.pageNumber;
+      const resolvedPage = await resolvePageForMatch(match);
+      if (navigationIdRef.current !== navId) return;
 
-      if (needsPageChange) {
-        onNavigateToPageRef.current(match.pageNumber);
-      }
+      const targetPageNumber = resolvedPage.pageNumber;
 
-      if (!needsPageChange) {
-        const success = updateActiveSearchHighlight(match.pageNumber, highlightIndexOnPage);
-        if (success) return;
-      }
+      const highlightIndexOnPage = matches.filter((m, i) => i < index && m.pageId === match.pageId).length;
+      activeMatchRef.current = { pageNumber: targetPageNumber, highlightIndex: highlightIndexOnPage };
+
+      clearSearchHighlights();
+
+      onNavigateToPageRef.current(resolvedPage);
 
       const tryApply = (attempt: number) => {
-        if (attempt > 5) return;
+        if (navigationIdRef.current !== navId) return;
+        if (attempt > 30) {
+          setIsNavigating(false);
+          return;
+        }
 
         if (observerTimerRef.current) clearTimeout(observerTimerRef.current);
         observerTimerRef.current = null;
         observerRef.current?.disconnect();
 
         applySearchHighlights(debouncedQuery);
-        const success = updateActiveSearchHighlight(match.pageNumber, highlightIndexOnPage);
+        const success = updateActiveSearchHighlight(targetPageNumber, highlightIndexOnPage);
 
         reconnectSearchObserver(observerRef, observerTimerRef, debouncedQuery, activeMatchRef);
 
         if (!success) {
-          setTimeout(() => tryApply(attempt + 1), 100);
+          setTimeout(() => tryApply(attempt + 1), 150);
+        } else {
+          setIsNavigating(false);
         }
       };
 
       requestAnimationFrame(() => tryApply(0));
     },
-    [matches, debouncedQuery],
+    [matches, debouncedQuery, resolvePageForMatch],
   );
 
   useEffect(() => {
@@ -159,7 +207,7 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, className }: Doc
     if (matches.length > 0 && debouncedQuery) {
       navigateToMatch(currentMatchIndex);
     }
-  }, [currentMatchIndex, matches.length, debouncedQuery]);
+  }, [currentMatchIndex, matches, debouncedQuery, navigateToMatch]);
 
   const goToNext = useCallback(() => {
     if (matches.length === 0) return;
@@ -171,38 +219,11 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, className }: Doc
     setCurrentMatchIndex((prev) => (prev - 1 + matches.length) % matches.length);
   }, [matches.length]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
-        e.preventDefault();
-        setIsOpen(true);
-        setTimeout(() => inputRef.current?.focus(), 50);
-      }
-
-      if (e.key === "Escape" && isOpen) {
-        handleClose();
-      }
-
-      if (e.key === "Enter" && isOpen && matches.length > 0) {
-        e.preventDefault();
-        if (e.shiftKey) {
-          goToPrev();
-        } else {
-          goToNext();
-        }
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, matches.length, goToNext, goToPrev]);
-
   const handleClose = useCallback(() => {
     setIsOpen(false);
     setSearchQuery("");
     setDebouncedQuery("");
     setCurrentMatchIndex(0);
-    lastNavigatedPageRef.current = null;
     activeMatchRef.current = { pageNumber: 0, highlightIndex: 0 };
     if (observerTimerRef.current) clearTimeout(observerTimerRef.current);
     observerTimerRef.current = null;
@@ -243,24 +264,17 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, className }: Doc
         placeholder="Search in document..."
         className="h-7 w-40 border-0 px-1 text-sm shadow-none focus-visible:ring-0"
       />
-      {isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0 opacity-50" />}
-      {!isLoading && debouncedQuery && (
+      {(isLoading || isNavigating) && <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0 opacity-50" />}
+      {!isLoading && !isNavigating && debouncedQuery && (
         <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5 shrink-0 font-mono">
           {matches.length > 0 ? `${currentMatchIndex + 1}/${matches.length}` : "0/0"}
         </Badge>
       )}
       <div className="flex items-center shrink-0">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6"
-          onClick={goToPrev}
-          disabled={matches.length === 0}
-          title="Previous match (Shift+Enter)"
-        >
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={goToPrev} disabled={matches.length === 0}>
           <ChevronUp className="h-3.5 w-3.5" />
         </Button>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={goToNext} disabled={matches.length === 0} title="Next match (Enter)">
+        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={goToNext} disabled={matches.length === 0}>
           <ChevronDown className="h-3.5 w-3.5" />
         </Button>
       </div>

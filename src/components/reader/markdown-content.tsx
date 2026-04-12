@@ -76,6 +76,21 @@ export function MarkdownContent({
   const pendingBookmark = editorState?.mode === "pending-bookmark" ? editorState.data : null;
   const activeNote = editorState?.mode === "pending-note" || editorState?.mode === "editing-note" ? editorState.data : null;
   const isHighlightEditorOpen = editorState?.mode === "pending-highlight" || editorState?.mode === "editing-highlight";
+  const previousPageIdRef = useRef<string | undefined>(pageId);
+
+  useEffect(() => {
+    if (previousPageIdRef.current === pageId) {
+      return;
+    }
+
+    previousPageIdRef.current = pageId;
+    setSelection(null);
+    setActiveHighlight(null);
+    setTempHighlight(null);
+    setHighlightEditorPosition(null);
+    setEditorState(null);
+    window.getSelection()?.removeAllRanges();
+  }, [pageId, setEditorState]);
 
   useEffect(() => {
     if (tempHighlight) {

@@ -137,6 +137,7 @@ export function PaginatedReader({
 
   return (
     <PaginatedPageContent
+      key={page.id}
       pageId={page.id}
       pageNumber={page.page}
       bookmarks={bookmarks}

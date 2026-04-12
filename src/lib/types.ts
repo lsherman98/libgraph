@@ -102,6 +102,7 @@ export interface FTSSearchResult {
     id: string;
     content: string;
     upload: string;
+    page: string;
     page_number: string;
     chunk_index: string;
 }

@@ -86,7 +86,7 @@ func Init(app *pocketbase.PocketBase, collections ...string) error {
 				query.WriteString("AND upload = {:upload} ")
 				params["upload"] = uploadFilter
 			}
-			query.WriteString("ORDER BY rank;")
+			query.WriteString("ORDER BY CAST(page_number AS INTEGER) ASC, CAST(chunk_index AS INTEGER) ASC;")
 
 			results := []dbx.NullStringMap{}
 			err := app.DB().
@@ -268,6 +268,7 @@ func collectionFields(collection *core.Collection, id string, collectionName str
 			"upload":      true,
 			"page_number": true,
 			"chunk_index": true,
+			"page":        true,
 		},
 		"uploads": {
 			"title": true,

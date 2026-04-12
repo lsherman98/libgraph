@@ -113,9 +113,6 @@ export function EditUploadDialog({ upload, open, onOpenChange }: EditUploadDialo
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Edit Document</DialogTitle>
-          <DialogDescription>
-            Update the metadata for this document. Changes to authors, tags, topics, and linked documents will be reflected in your knowledge graph.
-          </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
           <div className="grid gap-2">

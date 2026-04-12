@@ -114,19 +114,13 @@ export function updateActiveSearchHighlight(pageNumber: number, highlightIndexOn
     }
 
     if (!target) {
-        target =
-            allHighlights.length > highlightIndexOnPage
-                ? allHighlights[highlightIndexOnPage]
-                : allHighlights[0] ?? null;
+        // Page not in DOM or no highlights on page yet — retry.
+        return false;
     }
 
-    if (target) {
-        target.classList.add(ACTIVE_HIGHLIGHT_CLASS);
-        target.scrollIntoView({ behavior: "smooth", block: "center" });
-        return true;
-    }
-
-    return false;
+    target.classList.add(ACTIVE_HIGHLIGHT_CLASS);
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    return true;
 }
 
 export function reconnectSearchObserver(
@@ -143,7 +137,7 @@ export function reconnectSearchObserver(
     if (!container || !query.trim()) return;
 
     let retryCount = 0;
-    const MAX_RETRIES = 3;
+    const MAX_RETRIES = 10;
 
     const observer = new MutationObserver(() => {
         if (timerRef.current) clearTimeout(timerRef.current);

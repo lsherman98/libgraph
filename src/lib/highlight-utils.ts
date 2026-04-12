@@ -42,7 +42,6 @@ export function injectHighlightsIntoMarkdown(
         const { start_offset, end_offset, id, color, isPending } = highlight;
 
         if (start_offset < 0 || end_offset > result.length || start_offset >= end_offset) {
-            console.warn(`Invalid highlight offsets: ${start_offset}-${end_offset} for text length ${result.length}`);
             continue;
         }
 

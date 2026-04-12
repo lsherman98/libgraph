@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { usePages, usePageByNumber, usePage, useSummary, useBookmarks, useNotes, useUploadById } from "@/lib/api/queries";
 import { useCreateHighlight, useUpdateHighlight, useDeleteHighlight, useSummarizeUpload, useSummarizePages } from "@/lib/api/mutations";
+import { queryKeys } from "@/lib/api/queryKeys";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -44,6 +46,7 @@ interface ReaderPaneProps {
 }
 
 export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, showHeader = true, onPageChange, onTitleLoad }: ReaderPaneProps) {
+  const queryClient = useQueryClient();
   const { data: upload } = useUploadById(uploadId);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isAudioOpen, setIsAudioOpen] = useState(false);
@@ -81,7 +84,8 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
 
   const isSummaryUpload = upload?.type === "summary";
   const isBookUpload = upload?.type === "book";
-  const isScrollMode = !isBookUpload && settings.viewMode === "scroll";
+  const isScrollMode = !isBookUpload && !isSummaryUpload && settings.viewMode === "scroll";
+  const showScrollToggle = !isBookUpload && !isSummaryUpload;
   const summarySourcePageId = isBookUpload ? currentPageId : firstPageId;
   const shouldPollForBookSummary = !isSummaryUpload && isBookUpload && !!queuedBookSummaryPageId;
   const shouldPollCurrentQueuedRangePage =
@@ -181,16 +185,6 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
     if (isActive) {
       setCurrentUploadId(uploadId ?? null);
       setCurrentPageState(resolvedCurrentPageId, pageSettings.currentPage);
-
-      if (upload?.type === "book") {
-        console.info("[ReaderPane] setCurrentPageState", {
-          uploadId,
-          requestedPageNumber: pageSettings.currentPage,
-          fetchedPageNumber: currentPageData?.page,
-          pageId: resolvedCurrentPageId ?? null,
-          hadStalePageData: !!currentPageData && currentPageData?.page !== pageSettings.currentPage,
-        });
-      }
     }
   }, [uploadId, resolvedCurrentPageId, pageSettings.currentPage, setCurrentUploadId, setCurrentPageState, isActive, upload?.type, currentPageData]);
 
@@ -507,7 +501,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
               )}
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              {!isBookUpload && (
+              {showScrollToggle && (
                 <div className="hidden xl:flex items-center gap-2 px-2">
                   <Label htmlFor={`scroll-mode-${tabId}`} className="text-xs cursor-pointer whitespace-nowrap">
                     Scroll
@@ -515,7 +509,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                   <Switch id={`scroll-mode-${tabId}`} checked={settings.viewMode === "scroll"} onCheckedChange={toggleScrollMode} />
                 </div>
               )}
-              {!isBookUpload && <Separator orientation="vertical" className="hidden xl:block data-[orientation=vertical]:h-5" />}
+              {showScrollToggle && <Separator orientation="vertical" className="hidden xl:block data-[orientation=vertical]:h-5" />}
               <div className="hidden xl:flex items-center gap-1 px-2">
                 <QuickFontSizeControl fontSize={settings.fontSize} onChange={(fontSize) => setSettings({ fontSize })} />
               </div>
@@ -523,15 +517,24 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
               {!isSummaryUpload && (
                 <DocumentSearchBar
                   uploadId={uploadId}
-                  onNavigateToPage={(pageNumber) => {
+                  onNavigateToPage={({ pageId, pageNumber }) => {
+                    const cachedPage = queryClient.getQueryData(queryKeys.pages.detail(pageId));
+                    if (cachedPage) {
+                      queryClient.setQueryData(queryKeys.pages.byNumber(uploadId, pageNumber), cachedPage);
+                    }
+
                     handlePageChange(pageNumber);
                     if (isScrollMode) {
-                      setTimeout(() => {
+                      const tryScroll = (attempt: number) => {
+                        if (attempt > 30) return;
                         const el = document.getElementById(`page-${pageNumber}`);
                         if (el) {
                           el.scrollIntoView({ behavior: "smooth", block: "start" });
+                        } else {
+                          setTimeout(() => tryScroll(attempt + 1), 100);
                         }
-                      }, 100);
+                      };
+                      setTimeout(() => tryScroll(0), 50);
                     }
                   }}
                 />
