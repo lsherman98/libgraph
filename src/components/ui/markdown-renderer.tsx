@@ -23,11 +23,12 @@ export const sharedMarkdownComponents: Components = {
 interface SharedMarkdownRendererProps {
   content: string;
   components?: Components;
+  rehypePlugins?: any[];
 }
 
-export function SharedMarkdownRenderer({ content, components }: SharedMarkdownRendererProps) {
+export function SharedMarkdownRenderer({ content, components, rehypePlugins }: SharedMarkdownRendererProps) {
   return (
-    <Markdown rehypePlugins={sharedMarkdownRehypePlugins} components={components ?? sharedMarkdownComponents}>
+    <Markdown rehypePlugins={[...sharedMarkdownRehypePlugins, ...(rehypePlugins ?? [])]} components={components ?? sharedMarkdownComponents}>
       {content}
     </Markdown>
   );

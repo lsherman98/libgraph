@@ -12,6 +12,7 @@ import type { ChatSource, ChatMessage } from "@/lib/types";
 
 export interface LocalMessage extends ChatMessage {
   id: string;
+  created?: string;
   sources?: ChatSource[];
   isLoading?: boolean;
 }
@@ -53,10 +54,8 @@ export function MessageBubble({ message, mode = "chat", onSourceClick }: Message
         <div className="text-sm leading-relaxed">
           {hasCitations && message.sources ? (
             <CitationContent content={message.content} sources={message.sources} citationMap={citationMap} onSourceClick={onSourceClick} />
-          ) : !isUser ? (
-            <SharedMarkdownRenderer content={message.content} />
           ) : (
-            <span className="whitespace-pre-wrap">{message.content}</span>
+            <SharedMarkdownRenderer content={message.content} />
           )}
         </div>
         {!isUser &&

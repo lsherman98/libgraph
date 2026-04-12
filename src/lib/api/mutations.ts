@@ -387,6 +387,7 @@ interface SendChatMessageOptions {
     activeChatId: string | undefined;
     setActiveChatId: (id: string) => void;
     setInput: (value: string) => void;
+    clearPendingMessages: () => void;
 }
 
 export function useSendChatMessage({
@@ -395,6 +396,7 @@ export function useSendChatMessage({
     activeChatId,
     setActiveChatId,
     setInput,
+    clearPendingMessages,
 }: SendChatMessageOptions) {
     const queryClient = useQueryClient();
 
@@ -409,6 +411,12 @@ export function useSendChatMessage({
         },
         onMutate: async (message) => {
             setInput("");
+            const optimisticMessage = {
+                id: "optimistic-user-" + Date.now(),
+                role: "user" as const,
+                content: message,
+                created: new Date().toISOString(),
+            };
 
             if (activeChatId) {
                 const messagesKey = queryKeys.messages.byChat(activeChatId);
@@ -416,22 +424,25 @@ export function useSendChatMessage({
                 const previousMessages = queryClient.getQueryData(messagesKey);
                 queryClient.setQueryData(messagesKey, (old: any[] | null) => [
                     ...(old || []),
-                    {
-                        id: "optimistic-user-" + Date.now(),
-                        role: "user",
-                        content: message,
-                        created: new Date().toISOString(),
-                    },
+                    optimisticMessage,
                 ]);
 
-                return { previousMessages, chatId: activeChatId };
+                return { previousMessages, chatId: activeChatId, optimisticMessage };
             }
 
-            return { previousMessages: null, chatId: null };
+            return { previousMessages: null, chatId: null, optimisticMessage };
         },
-        onSuccess: (data) => {
+        onSuccess: (data, _message, context) => {
             if (!activeChatId) {
+                queryClient.setQueryData(queryKeys.messages.byChat(data.chat_id), (old: any[] | undefined) => {
+                    if (Array.isArray(old) && old.length > 0) {
+                        return old;
+                    }
+
+                    return context?.optimisticMessage ? [context.optimisticMessage] : [];
+                });
                 setActiveChatId(data.chat_id);
+                clearPendingMessages();
             }
 
             queryClient.invalidateQueries({ queryKey: queryKeys.messages.byChat(data.chat_id) });
@@ -443,6 +454,10 @@ export function useSendChatMessage({
                     queryKeys.messages.byChat(context.chatId),
                     context.previousMessages,
                 );
+            }
+
+            if (!context?.chatId) {
+                clearPendingMessages();
             }
         },
     });

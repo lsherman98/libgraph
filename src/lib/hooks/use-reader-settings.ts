@@ -64,6 +64,23 @@ export const DEFAULT_READER_SETTINGS: ReaderSettings = {
     paragraphSpacing: 1.5,
 };
 
+function parseReaderSettings(value: unknown): Partial<ReaderSettings> | null {
+    if (!value) {
+        return null;
+    }
+
+    if (typeof value === "string") {
+        try {
+            const parsed = JSON.parse(value);
+            return typeof parsed === "object" && parsed !== null ? (parsed as Partial<ReaderSettings>) : null;
+        } catch {
+            return null;
+        }
+    }
+
+    return typeof value === "object" ? (value as Partial<ReaderSettings>) : null;
+}
+
 export function useReaderSettings() {
     const { data: preferences, isSuccess } = usePreferences();
     const updatePreferences = useUpdatePreferences();
@@ -74,28 +91,47 @@ export function useReaderSettings() {
     const settingsRef = useRef(settings);
     settingsRef.current = settings;
 
-    useEffect(() => {
-        if (isSuccess && preferences?.reader_settings) {
-            const dbSettings = preferences.reader_settings as Partial<ReaderSettings>;
-            setSettingsState((prev) => ({ ...prev, ...dbSettings }));
+    const flushSave = useCallback((nextSettings: ReaderSettings) => {
+        const userId = getUserId();
+        if (!userId) {
+            return;
         }
+
+        updatePreferences.mutate({
+            reader_settings: nextSettings,
+            user: userId,
+        });
+    }, [updatePreferences]);
+
+    useEffect(() => {
         if (isSuccess) {
+            const dbSettings = parseReaderSettings(preferences?.reader_settings);
+
+            if (dbSettings) {
+                setSettingsState((prev) => ({ ...prev, ...dbSettings }));
+            }
+
             setIsLoaded(true);
         }
-    }, [isSuccess, preferences?.id]);
+    }, [isSuccess, preferences?.reader_settings]);
 
     const scheduleSave = useCallback((newSettings: ReaderSettings) => {
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
         saveTimerRef.current = setTimeout(() => {
-            updatePreferences.mutate({ reader_settings: JSON.stringify(newSettings), user: getUserId() });
+            saveTimerRef.current = null;
+            flushSave(newSettings);
         }, 1000);
-    }, [updatePreferences]);
+    }, [flushSave]);
 
     useEffect(() => {
         return () => {
-            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+            if (saveTimerRef.current) {
+                clearTimeout(saveTimerRef.current);
+                saveTimerRef.current = null;
+                flushSave(settingsRef.current);
+            }
         };
-    }, []);
+    }, [flushSave]);
 
     const setSettings = useCallback((newSettings: Partial<ReaderSettings>) => {
         setSettingsState((prev) => {
@@ -161,24 +197,53 @@ export function usePageSettings(uploadId: string, initialPage?: number) {
 
     const [isLoaded, setIsLoaded] = useState(false);
     const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pageSettingsRef = useRef(pageSettings);
+    pageSettingsRef.current = pageSettings;
+
+    const flushSave = useCallback((nextPageSettings: PageSettings, nextUploadId = uploadId) => {
+        if (!nextUploadId) {
+            return;
+        }
+
+        updateProgress.mutate({
+            uploadId: nextUploadId,
+            data: {
+                current_page: nextPageSettings.currentPage,
+                scroll_position: nextPageSettings.scrollPosition,
+            },
+        });
+    }, [uploadId, updateProgress]);
 
     useEffect(() => {
-        if (isSuccess && progress) {
-            setPageSettingsState({
-                currentPage: progress.current_page || 1,
-                scrollPosition: progress.scroll_position || undefined,
-            });
-        }
         if (isSuccess) {
+            setPageSettingsState(
+                progress
+                    ? {
+                        currentPage: progress.current_page || 1,
+                        scrollPosition: progress.scroll_position || undefined,
+                    }
+                    : {
+                        currentPage: initialPage ?? 1,
+                        scrollPosition: undefined,
+                    }
+            );
             setIsLoaded(true);
         }
-    }, [isSuccess, progress?.id]);
+    }, [initialPage, isSuccess, progress?.current_page, progress?.scroll_position, uploadId]);
+
+    useEffect(() => {
+        setIsLoaded(false);
+    }, [uploadId]);
 
     useEffect(() => {
         return () => {
-            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+            if (saveTimerRef.current) {
+                clearTimeout(saveTimerRef.current);
+                saveTimerRef.current = null;
+                flushSave(pageSettingsRef.current);
+            }
         };
-    }, []);
+    }, [flushSave]);
 
     const setPageSettings = useCallback(
         (newSettings: Partial<PageSettings>) => {
@@ -193,20 +258,15 @@ export function usePageSettings(uploadId: string, initialPage?: number) {
                 if (uploadId) {
                     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
                     saveTimerRef.current = setTimeout(() => {
-                        updateProgress.mutate({
-                            uploadId,
-                            data: {
-                                current_page: updated.currentPage,
-                                scroll_position: updated.scrollPosition,
-                            },
-                        });
+                        saveTimerRef.current = null;
+                        flushSave(updated, uploadId);
                     }, 1000);
                 }
 
                 return updated;
             });
         },
-        [uploadId, updateProgress]
+        [flushSave, uploadId]
     );
 
     return {

@@ -26,7 +26,6 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Plus, ArrowUp, Loader2, FileText, X, MessageSquare, MoreHorizontal, Pencil, Trash2, ChevronDown, Type, BookOpen } from "lucide-react";
 import { cn, getUserId } from "@/lib/utils";
@@ -50,6 +49,7 @@ export function ReaderAiChatPanel() {
   const [editTitle, setEditTitle] = useState("");
   const [previewSource, setPreviewSource] = useState<ChatSource | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isAddContextMenuOpen, setIsAddContextMenuOpen] = useState(false);
   const [pageRangeDialog, setPageRangeDialog] = useState<{ uploadId: string; title: string } | null>(null);
   const [pageFrom, setPageFrom] = useState("");
   const [pageTo, setPageTo] = useState("");
@@ -74,6 +74,7 @@ export function ReaderAiChatPanel() {
   );
 
   const { data: sidebarChats = [] } = useSidebarChats();
+  const canToggleChatList = sidebarChats.length > 1;
 
   const { data: dbMessages, isLoading: isLoadingMessages } = useMessages(activeChatId);
   const { data: chatContexts = [] } = useChatContexts(activeChatId);
@@ -119,6 +120,12 @@ export function ReaderAiChatPanel() {
   useEffect(() => {
     if (activeChatId) setPendingMessages([]);
   }, [activeChatId]);
+
+  useEffect(() => {
+    if (!canToggleChatList) {
+      setShowChatList(false);
+    }
+  }, [canToggleChatList]);
 
   // Handle pending chat text from highlight popover
   useEffect(() => {
@@ -460,6 +467,11 @@ export function ReaderAiChatPanel() {
     setPageTo("");
   };
 
+  const handleClosePageRangeDialog = () => {
+    setPageRangeDialog(null);
+    setIsAddContextMenuOpen(false);
+  };
+
   const handleAddPageRange = async () => {
     if (!pageRangeDialog) return;
 
@@ -475,7 +487,7 @@ export function ReaderAiChatPanel() {
         pageTo: to,
         title: pageRangeDialog.title,
       });
-      setPageRangeDialog(null);
+      handleClosePageRangeDialog();
       return;
     }
 
@@ -493,7 +505,7 @@ export function ReaderAiChatPanel() {
         page_to: to,
         user: getUserId(),
       } as any);
-      setPageRangeDialog(null);
+      handleClosePageRangeDialog();
     } finally {
       pendingContextAddKeysRef.current.delete(contextKey);
     }
@@ -679,7 +691,16 @@ export function ReaderAiChatPanel() {
   };
 
   const addContextDropdown = (
-    <DropdownMenu>
+    <DropdownMenu
+      modal={false}
+      open={isAddContextMenuOpen}
+      onOpenChange={(open) => {
+        setIsAddContextMenuOpen(open);
+        if (!open) {
+          setPageRangeDialog(null);
+        }
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="h-5 w-5">
           <Plus className="h-3 w-3" />
@@ -697,13 +718,34 @@ export function ReaderAiChatPanel() {
           Add current page
         </DropdownMenuItem>
         {isBookUpload && (
-          <DropdownMenuItem
-            onClick={() => currentUploadId && handleOpenPageRangeDialog(currentUploadId, currentDocTitle || "Document")}
-            disabled={!currentUploadId}
+          <DropdownMenuSub
+            open={!!pageRangeDialog}
+            onOpenChange={(open) => {
+              if (!open) {
+                setPageRangeDialog(null);
+                return;
+              }
+
+              if (!currentUploadId) return;
+              handleOpenPageRangeDialog(currentUploadId, currentDocTitle || "Document");
+            }}
           >
-            <BookOpen className="h-3.5 w-3.5 mr-2" />
-            Add page range...
-          </DropdownMenuItem>
+            <DropdownMenuSubTrigger disabled={!currentUploadId}>
+              <BookOpen className="h-3.5 w-3.5 mr-2" />
+              Add page range...
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-72 space-y-3 p-3">
+              <PageRangePopover
+                title={pageRangeDialog?.title || currentDocTitle || "Document"}
+                pageFrom={pageFrom}
+                pageTo={pageTo}
+                setPageFrom={setPageFrom}
+                setPageTo={setPageTo}
+                onConfirm={() => void handleAddPageRange()}
+                onCancel={handleClosePageRangeDialog}
+              />
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
         )}
         {otherReaderTabs.length > 0 && (
           <>
@@ -737,10 +779,14 @@ export function ReaderAiChatPanel() {
             variant="ghost"
             size="sm"
             className="flex-1 justify-between h-7 text-xs px-2 font-normal"
-            onClick={() => setShowChatList(!showChatList)}
+            onClick={() => {
+              if (!canToggleChatList) return;
+              setShowChatList((prev) => !prev);
+            }}
+            disabled={!canToggleChatList}
           >
             <span className="truncate">{sidebarChats.find((c) => c.id === activeChatId)?.title || "Chat"}</span>
-            <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />
+            {canToggleChatList && <ChevronDown className="h-3 w-3 shrink-0 opacity-50" />}
           </Button>
           <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={handleNewChat}>
             <Plus className="h-3.5 w-3.5" />
@@ -941,26 +987,14 @@ export function ReaderAiChatPanel() {
         </div>
       </div>
 
-      <PageRangeDialog
-        open={!!pageRangeDialog}
-        title={pageRangeDialog?.title || ""}
-        pageFrom={pageFrom}
-        pageTo={pageTo}
-        setPageFrom={setPageFrom}
-        setPageTo={setPageTo}
-        onConfirm={handleAddPageRange}
-        onCancel={() => setPageRangeDialog(null)}
-      />
-
       <PreviewDialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen} type="source" item={null} source={previewSource} />
     </div>
   );
 }
 
-// ── Page range dialog ─────────────────────────────────────────────────────────
+// ── Page range popover ────────────────────────────────────────────────────────
 
-function PageRangeDialog({
-  open,
+function PageRangePopover({
   title,
   pageFrom,
   pageTo,
@@ -969,7 +1003,6 @@ function PageRangeDialog({
   onConfirm,
   onCancel,
 }: {
-  open: boolean;
   title: string;
   pageFrom: string;
   pageTo: string;
@@ -983,55 +1016,56 @@ function PageRangeDialog({
   const isValid = !isNaN(from) && !isNaN(to) && from >= 1 && to >= from;
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
-      <DialogContent className="sm:max-w-xs">
-        <DialogHeader>
-          <DialogTitle className="text-sm">Add page range</DialogTitle>
-          <p className="text-xs text-muted-foreground truncate">{title}</p>
-        </DialogHeader>
-        <div className="flex gap-3 items-end">
-          <div className="flex-1">
-            <Label htmlFor="page-from" className="text-xs">
-              From
-            </Label>
-            <Input
-              id="page-from"
-              type="number"
-              min={1}
-              value={pageFrom}
-              onChange={(e) => setPageFrom(e.target.value)}
-              placeholder="1"
-              className="h-8 text-xs"
-            />
-          </div>
-          <div className="flex-1">
-            <Label htmlFor="page-to" className="text-xs">
-              To
-            </Label>
-            <Input
-              id="page-to"
-              type="number"
-              min={1}
-              value={pageTo}
-              onChange={(e) => setPageTo(e.target.value)}
-              placeholder="10"
-              className="h-8 text-xs"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && isValid) onConfirm();
-              }}
-            />
-          </div>
+    <>
+      <div className="space-y-1">
+        <p className="text-sm font-medium">Add page range</p>
+        <p className="text-xs text-muted-foreground truncate">{title}</p>
+      </div>
+      <div className="flex gap-3 items-end">
+        <div className="flex-1">
+          <Label htmlFor="page-from" className="text-xs">
+            From
+          </Label>
+          <Input
+            id="page-from"
+            type="number"
+            min={1}
+            value={pageFrom}
+            onChange={(e) => setPageFrom(e.target.value)}
+            onKeyDown={(e) => e.stopPropagation()}
+            placeholder="1"
+            className="h-8 text-xs"
+            autoFocus
+          />
         </div>
-        <DialogFooter>
-          <Button variant="ghost" size="sm" onClick={onCancel} className="text-xs">
-            Cancel
-          </Button>
-          <Button size="sm" onClick={onConfirm} disabled={!isValid} className="text-xs">
-            Add
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        <div className="flex-1">
+          <Label htmlFor="page-to" className="text-xs">
+            To
+          </Label>
+          <Input
+            id="page-to"
+            type="number"
+            min={1}
+            value={pageTo}
+            onChange={(e) => setPageTo(e.target.value)}
+            placeholder="10"
+            className="h-8 text-xs"
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Enter" && isValid) onConfirm();
+            }}
+          />
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 pt-1">
+        <Button variant="ghost" size="sm" onClick={onCancel} className="text-xs">
+          Cancel
+        </Button>
+        <Button size="sm" onClick={onConfirm} disabled={!isValid} className="text-xs">
+          Add
+        </Button>
+      </div>
+    </>
   );
 }
 

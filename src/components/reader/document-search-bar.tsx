@@ -8,7 +8,7 @@ import { getPage } from "@/lib/api/api";
 import { useFullTextSearch } from "@/lib/api/queries";
 import { queryKeys } from "@/lib/api/queryKeys";
 import { cn, useDebouncedCallback } from "@/lib/utils";
-import { clearSearchHighlights, applySearchHighlights, updateActiveSearchHighlight, reconnectSearchObserver } from "@/lib/utils/search-highlights";
+import { useReaderStore } from "@/lib/stores/reader-store";
 
 interface SearchMatch {
   pageId: string;
@@ -37,10 +37,9 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, className }: Doc
   const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const onNavigateToPageRef = useRef(onNavigateToPage);
+  const setReaderSearchQuery = useReaderStore((state) => state.setSearchQuery);
+  const setActiveSearchMatch = useReaderStore((state) => state.setActiveSearchMatch);
   onNavigateToPageRef.current = onNavigateToPage;
-  const activeMatchRef = useRef({ pageNumber: 0, highlightIndex: 0 });
-  const observerRef = useRef<MutationObserver | null>(null);
-  const observerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigationIdRef = useRef(0);
   const resolvedPageNumbersRef = useRef(new Map<string, number>());
   const [isNavigating, setIsNavigating] = useState(false);
@@ -144,70 +143,43 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, className }: Doc
       const targetPageNumber = resolvedPage.pageNumber;
 
       const highlightIndexOnPage = matches.filter((m, i) => i < index && m.pageId === match.pageId).length;
-      activeMatchRef.current = { pageNumber: targetPageNumber, highlightIndex: highlightIndexOnPage };
-
-      clearSearchHighlights();
+      setActiveSearchMatch({ pageNumber: targetPageNumber, highlightIndex: highlightIndexOnPage });
 
       onNavigateToPageRef.current(resolvedPage);
 
-      const tryApply = (attempt: number) => {
+      requestAnimationFrame(() => {
         if (navigationIdRef.current !== navId) return;
-        if (attempt > 30) {
-          setIsNavigating(false);
-          return;
-        }
-
-        if (observerTimerRef.current) clearTimeout(observerTimerRef.current);
-        observerTimerRef.current = null;
-        observerRef.current?.disconnect();
-
-        applySearchHighlights(debouncedQuery);
-        const success = updateActiveSearchHighlight(targetPageNumber, highlightIndexOnPage);
-
-        reconnectSearchObserver(observerRef, observerTimerRef, debouncedQuery, activeMatchRef);
-
-        if (!success) {
-          setTimeout(() => tryApply(attempt + 1), 150);
-        } else {
-          setIsNavigating(false);
-        }
-      };
-
-      requestAnimationFrame(() => tryApply(0));
+        setIsNavigating(false);
+      });
     },
-    [matches, debouncedQuery, resolvePageForMatch],
+    [matches, resolvePageForMatch, setActiveSearchMatch],
   );
 
   useEffect(() => {
-    if (observerTimerRef.current) clearTimeout(observerTimerRef.current);
-    observerTimerRef.current = null;
-    observerRef.current?.disconnect();
-    observerRef.current = null;
+    setReaderSearchQuery(debouncedQuery);
 
-    clearSearchHighlights();
-
-    if (debouncedQuery.trim()) {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          applySearchHighlights(debouncedQuery);
-          reconnectSearchObserver(observerRef, observerTimerRef, debouncedQuery, activeMatchRef);
-        });
-      });
+    if (!debouncedQuery.trim()) {
+      setActiveSearchMatch(null);
+      setIsNavigating(false);
     }
-
-    return () => {
-      if (observerTimerRef.current) clearTimeout(observerTimerRef.current);
-      observerTimerRef.current = null;
-      observerRef.current?.disconnect();
-      observerRef.current = null;
-    };
-  }, [debouncedQuery]);
+  }, [debouncedQuery, setActiveSearchMatch, setReaderSearchQuery]);
 
   useEffect(() => {
-    if (matches.length > 0 && debouncedQuery) {
-      navigateToMatch(currentMatchIndex);
+    return () => {
+      setReaderSearchQuery("");
+      setActiveSearchMatch(null);
+    };
+  }, [setActiveSearchMatch, setReaderSearchQuery]);
+
+  useEffect(() => {
+    if (!debouncedQuery.trim() || matches.length === 0) {
+      setActiveSearchMatch(null);
+      setIsNavigating(false);
+      return;
     }
-  }, [currentMatchIndex, matches, debouncedQuery, navigateToMatch]);
+
+    navigateToMatch(currentMatchIndex);
+  }, [currentMatchIndex, matches, debouncedQuery, navigateToMatch, setActiveSearchMatch]);
 
   const goToNext = useCallback(() => {
     if (matches.length === 0) return;
@@ -224,13 +196,9 @@ export function DocumentSearchBar({ uploadId, onNavigateToPage, className }: Doc
     setSearchQuery("");
     setDebouncedQuery("");
     setCurrentMatchIndex(0);
-    activeMatchRef.current = { pageNumber: 0, highlightIndex: 0 };
-    if (observerTimerRef.current) clearTimeout(observerTimerRef.current);
-    observerTimerRef.current = null;
-    observerRef.current?.disconnect();
-    observerRef.current = null;
-    clearSearchHighlights();
-  }, []);
+    setReaderSearchQuery("");
+    setActiveSearchMatch(null);
+  }, [setActiveSearchMatch, setReaderSearchQuery]);
 
   const handleInputChange = (value: string) => {
     setSearchQuery(value);

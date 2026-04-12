@@ -52,6 +52,11 @@ export interface EditingNote {
     pageNumber: number;
 }
 
+export interface ActiveSearchMatch {
+    pageNumber: number;
+    highlightIndex: number;
+}
+
 export type EditorState =
     | { mode: "pending-highlight"; data: PendingHighlight }
     | { mode: "editing-highlight"; data: EditingHighlight }
@@ -74,6 +79,10 @@ interface ReaderStore {
     setEditorState: (state: EditorState | null) => void;
     pendingChatText: string | null;
     setPendingChatText: (text: string | null) => void;
+    searchQuery: string;
+    setSearchQuery: (query: string) => void;
+    activeSearchMatch: ActiveSearchMatch | null;
+    setActiveSearchMatch: (match: ActiveSearchMatch | null) => void;
 }
 
 export const useReaderStore = create<ReaderStore>((set) => ({
@@ -90,4 +99,37 @@ export const useReaderStore = create<ReaderStore>((set) => ({
     setEditorState: (state) => set({ editorState: state }),
     pendingChatText: null,
     setPendingChatText: (text) => set({ pendingChatText: text }),
+    searchQuery: "",
+    setSearchQuery: (query) =>
+        set((state) => {
+            if (state.searchQuery === query) {
+                return state;
+            }
+
+            return { searchQuery: query };
+        }),
+    activeSearchMatch: null,
+    setActiveSearchMatch: (match) =>
+        set((state) => {
+            const currentMatch = state.activeSearchMatch;
+
+            if (currentMatch === match) {
+                return state;
+            }
+
+            if (
+                currentMatch &&
+                match &&
+                currentMatch.pageNumber === match.pageNumber &&
+                currentMatch.highlightIndex === match.highlightIndex
+            ) {
+                return state;
+            }
+
+            if (!currentMatch && !match) {
+                return state;
+            }
+
+            return { activeSearchMatch: match };
+        }),
 }));

@@ -15,11 +15,29 @@ import {
   type SelectionInfo,
   type HighlightInput,
 } from "@/lib/highlight-utils";
+import { ACTIVE_HIGHLIGHT_CLASS, createSearchHighlightRehypePlugin } from "@/lib/utils/search-highlights";
 import { cn } from "@/lib/utils";
 
 interface EditorAnchorPosition {
   x: number;
   y: number;
+  side: "top" | "bottom";
+}
+
+const HIGHLIGHT_EDITOR_ESTIMATED_HEIGHT = 320;
+const VIEWPORT_EDGE_PADDING = 16;
+const HIGHLIGHT_EDITOR_OFFSET = 8;
+
+function getHighlightEditorAnchor(rect: Pick<DOMRect, "top" | "bottom" | "left" | "right" | "width">): EditorAnchorPosition {
+  const spaceAbove = rect.top - VIEWPORT_EDGE_PADDING;
+  const spaceBelow = window.innerHeight - rect.bottom - VIEWPORT_EDGE_PADDING;
+  const side = spaceBelow >= HIGHLIGHT_EDITOR_ESTIMATED_HEIGHT || spaceBelow >= spaceAbove ? "bottom" : "top";
+
+  return {
+    x: rect.left + rect.width / 2,
+    y: side === "bottom" ? rect.bottom + HIGHLIGHT_EDITOR_OFFSET : rect.top - HIGHLIGHT_EDITOR_OFFSET,
+    side,
+  };
 }
 
 export function extractText(children: ReactNode): string {
@@ -70,9 +88,12 @@ export function MarkdownContent({
 
   const editorState = useReaderStore((state) => state.editorState);
   const setEditorState = useReaderStore((state) => state.setEditorState);
+  const searchQuery = useReaderStore((state) => state.searchQuery);
+  const activeSearchMatch = useReaderStore((state) => state.activeSearchMatch);
   const { setOpenRight, openRight } = useSidebar();
 
   const pendingHighlight = editorState?.mode === "pending-highlight" ? editorState.data : null;
+  const editingHighlight = editorState?.mode === "editing-highlight" ? editorState.data : null;
   const pendingBookmark = editorState?.mode === "pending-bookmark" ? editorState.data : null;
   const activeNote = editorState?.mode === "pending-note" || editorState?.mode === "editing-note" ? editorState.data : null;
   const isHighlightEditorOpen = editorState?.mode === "pending-highlight" || editorState?.mode === "editing-highlight";
@@ -243,8 +264,8 @@ export function MarkdownContent({
   const handleOpenNewHighlightEditor = useCallback(() => {
     if (!selection || !tempHighlight || !pageId) return;
 
-    const editorY = Math.max(selection.position.y - 8, 12);
-    setHighlightEditorPosition({ x: selection.position.x, y: editorY });
+    const rangeRect = selection.range.getBoundingClientRect();
+    setHighlightEditorPosition(getHighlightEditorAnchor(rangeRect));
 
     setEditorState({
       mode: "pending-highlight",
@@ -267,8 +288,7 @@ export function MarkdownContent({
 
     const highlight = activeHighlightData;
     const rect = activeHighlight.element.getBoundingClientRect();
-    const editorY = Math.max(rect.top - 8, 12);
-    setHighlightEditorPosition({ x: rect.left + rect.width / 2, y: editorY });
+    setHighlightEditorPosition(getHighlightEditorAnchor(rect));
 
     setEditorState({
       mode: "editing-highlight",
@@ -290,6 +310,25 @@ export function MarkdownContent({
       setHighlightEditorPosition(null);
     }
   }, [isHighlightEditorOpen]);
+
+  useEffect(() => {
+    if (!isHighlightEditorOpen || highlightEditorPosition || !contentRef.current) {
+      return;
+    }
+
+    if (editingHighlight && editingHighlight.pageId === pageId) {
+      const currentEditingHighlight = editingHighlight;
+      const highlightElement = contentRef.current.querySelector(`[data-highlight-id="${currentEditingHighlight.id}"]`);
+
+      if (highlightElement instanceof HTMLElement) {
+        setHighlightEditorPosition(getHighlightEditorAnchor(highlightElement.getBoundingClientRect()));
+        return;
+      }
+    }
+
+    const rect = contentRef.current.getBoundingClientRect();
+    setHighlightEditorPosition(getHighlightEditorAnchor(rect));
+  }, [editingHighlight, isHighlightEditorOpen, highlightEditorPosition, pageId]);
 
   useEffect(() => {
     if (!selection && !activeHighlight && !isHighlightEditorOpen) {
@@ -518,7 +557,7 @@ export function MarkdownContent({
           </ol>
         );
       },
-      li: ({ children }: any) => <li>{children}</li>,
+      li: ({ children }: any) => <li className="whitespace-pre-wrap">{children}</li>,
       p: ({ node, children }: any) => {
         const d = renderDataRef.current;
         const blockId = d.getBlockId(node);
@@ -577,24 +616,17 @@ export function MarkdownContent({
     [],
   );
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-current border-t-transparent opacity-60" />
-          <span className="text-sm opacity-60">Loading content...</span>
-        </div>
-      </div>
-    );
-  }
+  const searchHighlightPlugin = useMemo(() => {
+    const trimmedQuery = searchQuery.trim();
+    if (!trimmedQuery) {
+      return null;
+    }
 
-  if (!content) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <span className="opacity-60">No content available</span>
-      </div>
-    );
-  }
+    return createSearchHighlightRehypePlugin({
+      query: trimmedQuery,
+      activeHighlightIndex: activeSearchMatch && activeSearchMatch.pageNumber === pageNumber ? activeSearchMatch.highlightIndex : null,
+    });
+  }, [searchQuery, activeSearchMatch, pageNumber]);
 
   let allHighlights = [...highlights];
 
@@ -617,9 +649,45 @@ export function MarkdownContent({
 
   const processedContent = injectHighlightsIntoMarkdown(content ?? "", allHighlights);
 
+  useEffect(() => {
+    if (!content || !searchQuery.trim() || activeSearchMatch?.pageNumber !== pageNumber) {
+      return;
+    }
+
+    const activeElement = contentRef.current?.querySelector(`.${ACTIVE_HIGHLIGHT_CLASS}`);
+    if (!(activeElement instanceof HTMLElement)) {
+      return;
+    }
+
+    activeElement.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [content, searchQuery, activeSearchMatch, pageNumber, processedContent]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-current border-t-transparent opacity-60" />
+          <span className="text-sm opacity-60">Loading content...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!content) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <span className="opacity-60">No content available</span>
+      </div>
+    );
+  }
+
   return (
     <div className="reader-content relative" ref={contentRef} onMouseUp={handleMouseUp}>
-      <SharedMarkdownRenderer content={processedContent} components={markdownComponents} />
+      <SharedMarkdownRenderer
+        content={processedContent}
+        components={markdownComponents}
+        rehypePlugins={searchHighlightPlugin ? [searchHighlightPlugin] : undefined}
+      />
       <Popover open={isHighlightEditorOpen && !!highlightEditorPosition} onOpenChange={(open) => !open && handleCloseHighlightEditor()}>
         {highlightEditorPosition && (
           <PopoverAnchor asChild>
@@ -632,7 +700,13 @@ export function MarkdownContent({
             />
           </PopoverAnchor>
         )}
-        <PopoverContent side="left" align="center" sideOffset={8} className="w-80 space-y-3" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <PopoverContent
+          side={highlightEditorPosition?.side ?? "bottom"}
+          align="center"
+          sideOffset={8}
+          className="w-80 space-y-3"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           <HighlightEditorPopover onClose={handleCloseHighlightEditor} />
         </PopoverContent>
       </Popover>

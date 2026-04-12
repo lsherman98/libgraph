@@ -765,7 +765,11 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
             >
               <style>{`
                 .reader-paragraph {
+                  white-space: pre-wrap;
                   margin-bottom: ${settings.paragraphSpacing}em;
+                }
+                .reader-content li {
+                  white-space: pre-wrap;
                 }
                 .reader-paragraph:last-child {
                   margin-bottom: 0;

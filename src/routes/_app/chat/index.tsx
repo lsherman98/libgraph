@@ -84,12 +84,22 @@ function ChatPage() {
 
   const { data: dbMessages, isLoading: isLoadingMessages } = useMessages(activeChatId);
 
+  const chatMutation = useSendChatMessage({
+    mode,
+    filters,
+    activeChatId,
+    setActiveChatId,
+    setInput,
+    clearPendingMessages: () => setPendingMessages([]),
+  });
+
   const displayMessages: LocalMessage[] = useMemo(() => {
     if (activeChatId && dbMessages) {
       return (dbMessages as MessagesResponse<ChatSource[]>[]).map((m) => ({
         id: m.id,
         role: m.role as "user" | "assistant",
         content: m.content || "",
+        created: m.created,
         sources: m.sources || undefined,
       }));
     }
@@ -97,17 +107,20 @@ function ChatPage() {
   }, [activeChatId, dbMessages, pendingMessages]);
 
   const showAssistantLoadingIndicator = useMemo(() => {
-    if (!activeChatId || !dbMessages || dbMessages.length === 0) return false;
+    if (displayMessages.length === 0) return false;
 
-    const messages = dbMessages as MessagesResponse<ChatSource[]>[];
-    const lastMessage = messages[messages.length - 1];
+    const lastMessage = displayMessages[displayMessages.length - 1];
     if (!lastMessage || lastMessage.role !== "user") return false;
 
-    const createdAt = Date.parse(lastMessage.created);
+    if (!activeChatId) {
+      return chatMutation.isPending;
+    }
+
+    const createdAt = Date.parse(lastMessage.created || "");
     if (Number.isNaN(createdAt)) return true;
 
     return Date.now() - createdAt < CHAT_POLL_TIMEOUT_MS;
-  }, [activeChatId, dbMessages]);
+  }, [activeChatId, chatMutation.isPending, displayMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -125,22 +138,10 @@ function ChatPage() {
     setStoredActiveChatId(mode, activeChatId);
   }, [mode, activeChatId]);
 
-  const chatMutation = useSendChatMessage({
-    mode,
-    filters,
-    activeChatId,
-    setActiveChatId,
-    setInput,
-  });
-
   const handleSendMessage = (message: string) => {
     if (!activeChatId) {
       const now = Date.now();
-      setPendingMessages((prev) => [
-        ...prev,
-        { id: `pending-user-${now}`, role: "user", content: message },
-        { id: `pending-loading-${now}`, role: "assistant", content: "", isLoading: true },
-      ]);
+      setPendingMessages((prev) => [...prev, { id: `pending-user-${now}`, role: "user", content: message, created: new Date(now).toISOString() }]);
     }
     chatMutation.mutate(message);
   };

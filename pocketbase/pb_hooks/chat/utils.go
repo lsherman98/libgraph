@@ -114,18 +114,15 @@ func resolveFilterUploadIDs(app core.App, filters *MetadataFilters) ([]string, e
 }
 
 func hasChatContext(app core.App, chatID, userID string) (bool, error) {
-	contextRecords, err := app.FindRecordsByFilter(
+	count, err := app.CountRecords(
 		collections.ChatContexts,
-		"chat = {:chatId} && user = {:userId}",
-		"",
-		0, 1,
-		dbx.Params{"chatId": chatID, "userId": userID},
+		dbx.HashExp{"chat": chatID, "user": userID},
 	)
 	if err != nil {
 		return false, err
 	}
 
-	return len(contextRecords) > 0, nil
+	return count > 0, nil
 }
 
 func loadChatContext(app core.App, chatID, userID string) ([]ChatContext, error) {
@@ -306,14 +303,6 @@ func buildGeminiHistory(messages []ChatMessage) []*genai.Content {
 }
 
 func persistMessage(app core.App, payload ChatPayload, content string, sources []ChatSource, errorMessage string) (string, error) {
-	if payload.MessageID != "" {
-		if err := updateMessage(app, payload.MessageID, content, sources, errorMessage); err != nil {
-			return "", err
-		}
-
-		return payload.MessageID, nil
-	}
-
 	return saveMessage(app, payload.ChatID, payload.UserID, vars.MessageRoleAssistant, content, sources, errorMessage)
 }
 
