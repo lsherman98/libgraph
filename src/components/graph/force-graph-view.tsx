@@ -345,6 +345,37 @@ interface GraphEdge extends d3.SimulationLinkDatum<GraphNode> {
   source: string | GraphNode;
   target: string | GraphNode;
   type?: EdgesTypeOptions;
+  curveOffset: number;
+}
+
+function buildLinkPath(edge: GraphEdge): string {
+  const source = typeof edge.source === "string" ? undefined : edge.source;
+  const target = typeof edge.target === "string" ? undefined : edge.target;
+
+  if (!source || !target) {
+    return "";
+  }
+
+  const sourceX = source.x ?? 0;
+  const sourceY = source.y ?? 0;
+  const targetX = target.x ?? 0;
+  const targetY = target.y ?? 0;
+  const deltaX = targetX - sourceX;
+  const deltaY = targetY - sourceY;
+  const distance = Math.hypot(deltaX, deltaY) || 1;
+
+  if (edge.curveOffset === 0) {
+    return `M ${sourceX} ${sourceY} L ${targetX} ${targetY}`;
+  }
+
+  const midX = (sourceX + targetX) / 2;
+  const midY = (sourceY + targetY) / 2;
+  const normalX = -deltaY / distance;
+  const normalY = deltaX / distance;
+  const controlX = midX + normalX * edge.curveOffset;
+  const controlY = midY + normalY * edge.curveOffset;
+
+  return `M ${sourceX} ${sourceY} Q ${controlX} ${controlY} ${targetX} ${targetY}`;
 }
 
 /**
@@ -442,13 +473,28 @@ export function ForceGraphView({
       };
     });
 
-    const graphEdges: GraphEdge[] = edges
-      .filter((e) => allNodeIds.has(e.source) && allNodeIds.has(e.target))
-      .map((edge) => ({
+    const visibleEdges = edges.filter((e) => allNodeIds.has(e.source) && allNodeIds.has(e.target));
+    const pairCounts = new Map<string, number>();
+
+    for (const edge of visibleEdges) {
+      const pairKey = [edge.source, edge.target].sort().join(":");
+      pairCounts.set(pairKey, (pairCounts.get(pairKey) ?? 0) + 1);
+    }
+
+    const pairOffsets = new Map<string, number>();
+    const graphEdges: GraphEdge[] = visibleEdges.map((edge) => {
+      const pairKey = [edge.source, edge.target].sort().join(":");
+      const pairCount = pairCounts.get(pairKey) ?? 1;
+      const pairIndex = pairOffsets.get(pairKey) ?? 0;
+      pairOffsets.set(pairKey, pairIndex + 1);
+
+      return {
         source: edge.source,
         target: edge.target,
         type: edge.type as EdgesTypeOptions,
-      }));
+        curveOffset: pairCount > 1 ? (pairIndex - (pairCount - 1) / 2) * 28 : 0,
+      };
+    });
 
     nodeTypeMapRef.current = new Map(graphNodes.map((n) => [n.id, n.type]));
 
@@ -599,12 +645,14 @@ export function ForceGraphView({
 
     const link = g
       .append("g")
+      .attr("fill", "none")
       .attr("stroke-opacity", 0.5)
-      .selectAll("line")
+      .selectAll("path")
       .data(graphData.edges)
-      .join("line")
+      .join("path")
       .attr("stroke", (d) => edgeTypeConfig[d.type as EdgesTypeOptions]?.color || "#999")
       .attr("stroke-width", 1.5)
+      .attr("d", (d) => buildLinkPath(d))
       .attr("marker-end", (d) => `url(#force-arrow-${d.type})`);
 
     const node = g
@@ -890,11 +938,7 @@ export function ForceGraphView({
     simulation.alpha(0.7).restart();
 
     simulation.on("tick", () => {
-      link
-        .attr("x1", (d) => (d.source as GraphNode).x!)
-        .attr("y1", (d) => (d.source as GraphNode).y!)
-        .attr("x2", (d) => (d.target as GraphNode).x!)
-        .attr("y2", (d) => (d.target as GraphNode).y!);
+      link.attr("d", (d) => buildLinkPath(d));
 
       node.attr("transform", (d) => `translate(${d.x},${d.y})`);
 

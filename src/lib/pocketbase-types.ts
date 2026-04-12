@@ -206,10 +206,9 @@ export enum EmbeddingJobsStatusOptions {
 	"succeeded" = "succeeded",
 	"failed" = "failed",
 }
-export type EmbeddingJobsRecord<Tchunk_ids = unknown> = {
+export type EmbeddingJobsRecord = {
 	batch?: boolean
 	batch_id?: string
-	chunk_ids?: null | Tchunk_ids
 	created: IsoAutoDateString
 	error_message?: string
 	finished_at?: IsoDateString
@@ -498,7 +497,7 @@ export type ChatsResponse<Texpand = unknown> = Required<ChatsRecord> & BaseSyste
 export type CollectionsResponse<Texpand = unknown> = Required<CollectionsRecord> & BaseSystemFields<Texpand>
 export type DocumentChunksResponse<Texpand = unknown> = Required<DocumentChunksRecord> & BaseSystemFields<Texpand>
 export type EdgesResponse<Texpand = unknown> = Required<EdgesRecord> & BaseSystemFields<Texpand>
-export type EmbeddingJobsResponse<Tchunk_ids = unknown, Texpand = unknown> = Required<EmbeddingJobsRecord<Tchunk_ids>> & BaseSystemFields<Texpand>
+export type EmbeddingJobsResponse<Texpand = unknown> = Required<EmbeddingJobsRecord> & BaseSystemFields<Texpand>
 export type HighlightsResponse<Texpand = unknown> = Required<HighlightsRecord> & BaseSystemFields<Texpand>
 export type MessagesResponse<Tsources = unknown, Texpand = unknown> = Required<MessagesRecord<Tsources>> & BaseSystemFields<Texpand>
 export type NodesResponse<Tdata = unknown, Texpand = unknown> = Required<NodesRecord<Tdata>> & BaseSystemFields<Texpand>

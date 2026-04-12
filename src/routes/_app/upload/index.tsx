@@ -34,7 +34,7 @@ interface FileMetadata {
   file: File;
   transcriptFile?: File;
   name: string;
-  type: UploadsTypeOptions;
+  type?: UploadsTypeOptions;
   author: string;
   people: string[];
   publication: string;
@@ -100,15 +100,11 @@ function RouteComponent() {
     });
 
   const createFileMetadata = (file: File, transcriptFile?: File): FileMetadata => {
-    const ext = getExtension(file.name);
-    const detectedType = AUDIO_EXTENSIONS.has(ext) ? UploadsTypeOptions.podcast : UploadsTypeOptions.book;
-
     return {
       id: Math.random().toString(36).substring(7),
       file,
       transcriptFile,
       name: getBaseName(file.name),
-      type: detectedType,
       author: "",
       people: [],
       publication: "",
@@ -239,6 +235,7 @@ function RouteComponent() {
 
   const pendingIds = files.filter((f) => f.status === "PENDING").map((f) => f.id);
   const allSelected = pendingIds.length > 0 && pendingIds.every((id) => selectedIds.has(id));
+  const pendingFilesMissingType = files.some((f) => f.status === "PENDING" && !f.type);
 
   const toggleAll = () => {
     if (allSelected) {
@@ -280,13 +277,21 @@ function RouteComponent() {
     const pendingFiles = files.filter((f) => f.status === "PENDING" || f.status === "ERROR");
     if (pendingFiles.length === 0) return;
 
+    const missingTypeCount = pendingFiles.filter((file) => !file.type).length;
+    if (missingTypeCount > 0) {
+      toast.error(
+        `Select a type for all files before uploading. ${missingTypeCount} file${missingTypeCount > 1 ? "s are" : " is"} still missing a type.`,
+      );
+      return;
+    }
+
     for (const fileData of pendingFiles) {
       updateFile(fileData.id, { status: "UPLOADING" });
       try {
         await uploadMutation.mutateAsync({
           file: fileData.file,
           title: fileData.name,
-          type: fileData.type,
+          type: fileData.type!,
           author: fileData.author || undefined,
           people: fileData.people.length > 0 ? fileData.people : undefined,
           publication: fileData.publication || undefined,
@@ -329,7 +334,10 @@ function RouteComponent() {
             <Button variant="outline" size="sm" onClick={open}>
               <Plus className="mr-1 h-4 w-4" /> Add Files
             </Button>
-            <Button onClick={handleUploadAll} disabled={uploadMutation.isPending || files.every((f) => f.status === "SUCCESS")}>
+            <Button
+              onClick={handleUploadAll}
+              disabled={uploadMutation.isPending || files.every((f) => f.status === "SUCCESS") || pendingFilesMissingType}
+            >
               {uploadMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Upload {files.filter((f) => f.status === "PENDING").length} Files
             </Button>
@@ -387,7 +395,7 @@ function RouteComponent() {
                           />
                           <Select value={file.type} onValueChange={(val) => updateFile(file.id, { type: val as UploadsTypeOptions })}>
                             <SelectTrigger className="h-8 text-sm w-25 shrink-0">
-                              <SelectValue placeholder="Type" />
+                              <SelectValue placeholder="Select type" />
                             </SelectTrigger>
                             <SelectContent>
                               {USER_UPLOAD_TYPES.map((type) => (

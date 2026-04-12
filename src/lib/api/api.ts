@@ -267,7 +267,7 @@ export const getNodeById = async (id: string) => {
 }
 
 export const getNodeByRecord = async (recordId: string, type: NodesTypeOptions) => {
-    return await pb.collection(Collections.Nodes).getFirstListItem(`record = "${recordId}" && type = "${type}"`);
+    return await pb.collection(Collections.Nodes).getFirstListItem(`record_id = "${recordId}" && type = "${type}"`);
 }
 
 export const getEdges = async (filters?: { sourceId?: string; targetId?: string; type?: string }) => {

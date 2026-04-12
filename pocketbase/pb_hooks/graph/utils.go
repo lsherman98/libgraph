@@ -318,6 +318,40 @@ func syncIncomingEdges(app core.App, targetNodeId string, sourceRecordIds []stri
 	return nil
 }
 
+func syncUploadMetadataEdges(app core.App, upload *core.Record, uploadNodeId string, userId string) error {
+	people := upload.GetStringSlice("people")
+	if err := syncIncomingEdges(app, uploadNodeId, people, NodeTypePerson, EdgeTypeAboutPerson, userId); err != nil {
+		return err
+	}
+
+	author := upload.GetString("author")
+	if err := syncEdges(app, uploadNodeId, []string{author}, NodeTypePerson, EdgeTypeAuthoredBy, userId); err != nil {
+		return err
+	}
+
+	publicationId := upload.GetString("publication")
+	if err := syncIncomingEdges(app, uploadNodeId, []string{publicationId}, NodeTypePublication, EdgeTypePublishedBy, userId); err != nil {
+		return err
+	}
+
+	tags := upload.GetStringSlice("tags")
+	if err := syncIncomingEdges(app, uploadNodeId, tags, NodeTypeTag, EdgeTypeTaggedWith, userId); err != nil {
+		return err
+	}
+
+	topics := upload.GetStringSlice("topics")
+	if err := syncIncomingEdges(app, uploadNodeId, topics, NodeTypeTopic, EdgeTypeBelongsTo, userId); err != nil {
+		return err
+	}
+
+	relatedUploads := upload.GetStringSlice("uploads")
+	if err := syncEdges(app, uploadNodeId, relatedUploads, NodeTypeUpload, EdgeTypeLinksTo, userId); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func ensureUploadNode(app core.App, uploadRecordId string, userId string) (*core.Record, error) {
 	existingNode, err := findNodeByRecord(app, uploadRecordId, userId, NodeTypeUpload)
 	if err != nil {
@@ -428,29 +462,15 @@ func syncSummaryEdgesForUpload(app core.App, uploadRecordID string, userId strin
 	return nil
 }
 
-func createAnnotationEdges(app core.App, record *core.Record, edgetype EdgeType, userId, nodeId string) error {
+func syncAnnotationEdges(app core.App, record *core.Record, edgeType EdgeType, userId, nodeId string) error {
 	uploadId := record.GetString("upload")
-	uploadNode, err := findNodeByRecord(app, uploadId, userId, NodeTypeUpload)
-	if err != nil || uploadNode == nil {
-		return err
-	}
-
-	err = createEdge(app, uploadNode.Id, nodeId, edgetype, userId)
-	if err != nil {
+	if err := syncIncomingEdges(app, nodeId, []string{uploadId}, NodeTypeUpload, edgeType, userId); err != nil {
 		return err
 	}
 
 	tags := record.GetStringSlice("tags")
-	for _, tagId := range tags {
-		tagNode, err := findNodeByRecord(app, tagId, userId, NodeTypeTag)
-		if err != nil || tagNode == nil {
-			continue
-		}
-
-		err = createEdge(app, tagNode.Id, nodeId, EdgeTypeTaggedWith, userId)
-		if err != nil {
-			return err
-		}
+	if err := syncIncomingEdges(app, nodeId, tags, NodeTypeTag, EdgeTypeTaggedWith, userId); err != nil {
+		return err
 	}
 
 	return nil

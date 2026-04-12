@@ -36,7 +36,7 @@ func Init(app *pocketbase.PocketBase) error {
 			}
 		})
 
-		return nil
+		return e.Next()
 	})
 
 	app.OnRecordDeleteRequest(collections.Uploads).BindFunc(func(e *core.RecordRequestEvent) error {
