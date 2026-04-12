@@ -58,6 +58,15 @@ func Init(app *pocketbase.PocketBase) error {
 			}
 
 			chatID := body.ChatID
+			if chatID != "" {
+				chatRecord, err := e.App.FindRecordById(collections.Chats, chatID)
+				if err != nil {
+					chatID = ""
+				} else if chatRecord.GetString("user") != userID {
+					return e.ForbiddenError("chat does not belong to the authenticated user", nil)
+				}
+			}
+
 			if chatID == "" {
 				title := buildChatTitle(body.Message, body.Mode)
 				chatsCollection, _ := e.App.FindCollectionByNameOrId(collections.Chats)

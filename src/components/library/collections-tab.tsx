@@ -10,15 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { FileText, Plus, Trash2, Pencil, Library, Search } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { getUserId } from "@/lib/utils";
@@ -56,8 +48,7 @@ function CollectionsEmptyState({ onCreateClick }: { onCreateClick: () => void })
         </div>
         <CardTitle className="mb-2">No collections yet</CardTitle>
         <CardDescription className="text-center mb-6 max-w-sm">
-          Create a collection to group documents together. Use collections as shortcuts to set AI chat context
-          instantly.
+          Create a collection to group documents together. Use collections as shortcuts to set AI chat context instantly.
         </CardDescription>
         <Button onClick={onCreateClick}>
           <Plus className="mr-2 h-4 w-4" />
@@ -84,32 +75,22 @@ function UploadPicker({
   const filtered = uploads.filter((u) => !search || (u.title || "").toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="grid gap-2">
+    <div className="grid min-w-0 gap-2">
       <Label>Documents ({selectedIds.length} selected)</Label>
-      <div className="relative">
+      <div className="relative min-w-0">
         <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search documents..."
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          className="pl-9"
-        />
+        <Input placeholder="Search documents..." value={search} onChange={(e) => onSearchChange(e.target.value)} className="pl-9" />
       </div>
-      <ScrollArea className="h-48 rounded-md border">
-        <div className="p-2 space-y-1">
+      <ScrollArea className="h-48 w-full min-w-0 rounded-md border">
+        <div className="min-w-0 space-y-1 p-2">
           {filtered.map((upload) => (
-            <label
-              key={upload.id}
-              className="flex items-center gap-3 rounded-md px-2 py-2 text-sm hover:bg-accent cursor-pointer"
-            >
+            <label key={upload.id} className="flex min-w-0 items-start gap-3 rounded-md px-2 py-2 text-sm hover:bg-accent cursor-pointer">
               <Checkbox checked={selectedIds.includes(upload.id)} onCheckedChange={() => onToggle(upload.id)} />
-              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className="truncate">{upload.title || "Untitled"}</span>
+              <FileText className="mt-0.5 h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="min-w-0 flex-1 whitespace-normal wrap-break-word">{upload.title || "Untitled"}</span>
             </label>
           ))}
-          {filtered.length === 0 && (
-            <p className="text-xs text-muted-foreground text-center py-4">No documents found</p>
-          )}
+          {filtered.length === 0 && <p className="text-xs text-muted-foreground text-center py-4">No documents found</p>}
         </div>
       </ScrollArea>
     </div>
@@ -140,9 +121,7 @@ export function CollectionsTab() {
   };
 
   const toggleUpload = (uploadId: string) => {
-    setCollectionUploads((prev) =>
-      prev.includes(uploadId) ? prev.filter((id) => id !== uploadId) : [...prev, uploadId],
-    );
+    setCollectionUploads((prev) => (prev.includes(uploadId) ? prev.filter((id) => id !== uploadId) : [...prev, uploadId]));
   };
 
   const handleCreate = () => {
@@ -160,9 +139,7 @@ export function CollectionsTab() {
     setEditingCollection(collection);
     setCollectionName(collection.name || "");
     setCollectionDescription(collection.description || "");
-    setCollectionUploads(
-      Array.isArray(collection.uploads) ? collection.uploads : collection.uploads ? [collection.uploads] : [],
-    );
+    setCollectionUploads(Array.isArray(collection.uploads) ? collection.uploads : collection.uploads ? [collection.uploads] : []);
   };
 
   const handleSave = () => {
@@ -267,12 +244,7 @@ export function CollectionsTab() {
             </div>
             <div className="grid gap-2">
               <Label htmlFor="edit-col-desc">Description (optional)</Label>
-              <Textarea
-                id="edit-col-desc"
-                value={collectionDescription}
-                onChange={(e) => setCollectionDescription(e.target.value)}
-                rows={2}
-              />
+              <Textarea id="edit-col-desc" value={collectionDescription} onChange={(e) => setCollectionDescription(e.target.value)} rows={2} />
             </div>
             <UploadPicker
               uploads={successUploads}
@@ -306,11 +278,7 @@ export function CollectionsTab() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {collections?.map((collection) => {
-            const uploadCount = Array.isArray(collection.uploads)
-              ? collection.uploads.length
-              : collection.uploads
-                ? 1
-                : 0;
+            const uploadCount = Array.isArray(collection.uploads) ? collection.uploads.length : collection.uploads ? 1 : 0;
             return (
               <Card key={collection.id} className="group relative">
                 <CardContent className="pt-6">
@@ -321,9 +289,7 @@ export function CollectionsTab() {
                       </div>
                       <div className="min-w-0">
                         <h3 className="font-semibold truncate">{collection.name || "Untitled"}</h3>
-                        {collection.description && (
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{collection.description}</p>
-                        )}
+                        {collection.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{collection.description}</p>}
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">

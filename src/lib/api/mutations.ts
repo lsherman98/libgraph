@@ -433,7 +433,9 @@ export function useSendChatMessage({
             return { previousMessages: null, chatId: null, optimisticMessage };
         },
         onSuccess: (data, _message, context) => {
-            if (!activeChatId) {
+            const shouldSwitchChat = !activeChatId || activeChatId !== data.chat_id;
+
+            if (shouldSwitchChat) {
                 queryClient.setQueryData(queryKeys.messages.byChat(data.chat_id), (old: any[] | undefined) => {
                     if (Array.isArray(old) && old.length > 0) {
                         return old;
