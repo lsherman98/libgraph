@@ -66,6 +66,12 @@ func executeJob(app core.App, job *core.Record) error {
 }
 
 func handleJobFailure(app core.App, job *core.Record, err error) {
+	app.Logger().Error("job execution failed",
+		"queue_job", job.Id,
+		"job_type", job.GetString("job_type"),
+		"upload", job.GetString("upload"),
+		"error", err,
+	)
 	now := time.Now().UTC()
 	job.Set("status", vars.QueueStatusFailed)
 	job.Set("finished_at", now)

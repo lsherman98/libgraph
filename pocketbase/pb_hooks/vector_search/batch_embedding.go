@@ -72,7 +72,7 @@ func postBatchEmbed(ctx context.Context, requests []EmbedContentRequest, modelNa
 	url := fmt.Sprintf("%s/models/%s:asyncBatchEmbedContent?key=%s", geminiAPIBase, modelName, apiKey)
 
 	body := BatchEmbedRequest{
-		Batch: requests,
+		Requests: requests,
 	}
 
 	payload, err := json.Marshal(body)
@@ -124,11 +124,9 @@ func handleBulkEmbed(ctx context.Context, parts []Part) ([][]float32, error) {
 	requests := make([]EmbedContentRequest, len(parts))
 	for i, part := range parts {
 		requests[i] = EmbedContentRequest{
-			Request: EmbedRequestPayload{
-				Model:    fmt.Sprintf("models/%s", modelName),
-				Content:  Content{Parts: []Part{{Text: part.Text}}},
-				TaskType: "RETRIEVAL_DOCUMENT",
-			},
+			Model:    fmt.Sprintf("models/%s", modelName),
+			Content:  Content{Parts: []Part{{Text: part.Text}}},
+			TaskType: "RETRIEVAL_DOCUMENT",
 		}
 	}
 
@@ -148,7 +146,7 @@ func handleBulkEmbed(ctx context.Context, parts []Part) ([][]float32, error) {
 func postBulkEmbed(ctx context.Context, apiKey, modelName string, requests []EmbedContentRequest) ([][]float32, error) {
 	url := fmt.Sprintf("%s/models/%s:batchEmbedContents?key=%s", geminiAPIBase, modelName, apiKey)
 	body := BatchEmbedRequest{
-		Batch: requests,
+		Requests: requests,
 	}
 
 	jsonBody, err := json.Marshal(body)

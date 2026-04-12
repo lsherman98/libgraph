@@ -42,12 +42,10 @@ func runBatchEmbed(app core.App, job *core.Record, chunks []Chunk) error {
 
 	for i, c := range chunks {
 		requests[i] = EmbedContentRequest{
-			Request: EmbedRequestPayload{
-				Model:    model,
-				Content:  Content{Parts: []Part{{Text: c.Content}}},
-				TaskType: "RETRIEVAL_DOCUMENT",
-				Title:    c.Title,
-			},
+			Model:    model,
+			Content:  Content{Parts: []Part{{Text: c.Content}}},
+			TaskType: "RETRIEVAL_DOCUMENT",
+			Title:    c.Title,
 			Metadata: map[string]any{
 				"chunk_id": c.Record.Id,
 			},

@@ -15,7 +15,7 @@ const (
 )
 
 const (
-	queuePollInterval = 10 * time.Second
+	queuePollInterval = 60 * time.Second
 	embedPollInterval = 120 * time.Second
 )
 

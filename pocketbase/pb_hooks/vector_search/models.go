@@ -11,7 +11,6 @@ import (
 
 const (
 	geminiAPIBase   = "https://generativelanguage.googleapis.com/v1beta"
-	batchSize       = 500
 	bulkSize        = 100
 	pollInterval    = 300 * time.Second
 	embeddingDims   = 3072
@@ -32,19 +31,15 @@ type SearchResult struct {
 }
 
 type BatchEmbedRequest struct {
-	Batch []EmbedContentRequest `json:"batch"`
+	Requests []EmbedContentRequest `json:"requests"`
 }
 
 type EmbedContentRequest struct {
-	Request  EmbedRequestPayload `json:"request"`
-	Metadata map[string]any      `json:"metadata,omitempty"`
-}
-
-type EmbedRequestPayload struct {
-	Model    string  `json:"model,omitempty"`
-	Content  Content `json:"content"`
-	TaskType string  `json:"taskType,omitempty"`
-	Title    string  `json:"title,omitempty"`
+	Model    string         `json:"model,omitempty"`
+	Content  Content        `json:"content"`
+	TaskType string         `json:"taskType,omitempty"`
+	Title    string         `json:"title,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 type Content struct {
@@ -106,6 +101,6 @@ type Chunk struct {
 }
 
 type EmbedPayload struct {
-	ChunkIDs             []string `json:"chunk_ids,omitempty"`
+	ChunkIDs       []string `json:"chunk_ids,omitempty"`
 	EmbeddingJobID string   `json:"embedding_job_id,omitempty"`
 }

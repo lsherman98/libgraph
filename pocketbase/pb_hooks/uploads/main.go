@@ -10,24 +10,15 @@ import (
 )
 
 func Init(app *pocketbase.PocketBase) error {
-	app.OnRecordCreateRequest(collections.Uploads).BindFunc(func(e *core.RecordRequestEvent) error {
+	app.OnRecordAfterCreateSuccess(collections.Uploads).BindFunc(func(e *core.RecordEvent) error {
 		upload := e.Record
 
 		if err := validateTranscript(upload); err != nil {
 			return err
 		}
 
-		if err := e.Next(); err != nil {
-			return err
-		}
-
-		uploadID := upload.Id
-		if uploadID == "" {
-			return nil
-		}
-
 		routine.FireAndForget(func() {
-			upload, err := e.App.FindRecordById(collections.Uploads, uploadID)
+			upload, err := e.App.FindRecordById(collections.Uploads, upload.Id)
 			if err != nil {
 				return
 			}

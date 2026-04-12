@@ -48,7 +48,7 @@ func Enqueue(app core.App, req EnqueueRequest) error {
 		"dedupe_key = {:dedupeKey}",
 		dbx.Params{"dedupeKey": req.DedupeKey},
 	)
-	if err != nil {
+	if existing != nil && err != nil {
 		return err
 	}
 

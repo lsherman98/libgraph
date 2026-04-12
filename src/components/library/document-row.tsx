@@ -75,7 +75,7 @@ export function DocumentRow({
                 </span>
               )}
             </div>
-            {upload.status !== "success" && (
+            {upload.status !== "success" && upload.status !== "processing" && upload.status !== "failed" && (
               <div className="mt-1 flex items-center gap-2">
                 <StatusIcon className={`h-4 w-4 ${status.className}`} />
                 <Badge variant={status.variant}>{status.label}</Badge>
@@ -105,20 +105,27 @@ export function DocumentRow({
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-0.5 justify-end">
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 px-2"
-            onClick={() => {
-              onSelect?.(true);
-              if (isClickable) {
-                navigate({ to: "/workspace", search: { id: upload.id, type: "upload" } });
-              }
-            }}
-            disabled={!isClickable}
-          >
-            Open
-          </Button>
+          {upload.status === "processing" || upload.status === "failed" ? (
+            <div className="mr-1 flex items-center gap-2">
+              <StatusIcon className={`h-4 w-4 ${status.className}`} />
+              <Badge variant={status.variant}>{status.label}</Badge>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 px-2"
+              onClick={() => {
+                onSelect?.(true);
+                if (isClickable) {
+                  navigate({ to: "/workspace", search: { id: upload.id, type: "upload" } });
+                }
+              }}
+              disabled={!isClickable}
+            >
+              Open
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"
