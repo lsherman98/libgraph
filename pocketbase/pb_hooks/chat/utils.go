@@ -3,6 +3,8 @@ package chat
 import (
 	"encoding/json"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 
 	"github.com/google/generative-ai-go/genai"
@@ -14,6 +16,132 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 )
 
+func searchSourcesByFullText(app core.App, query string, uploadIDs []string, limit int, applyUploadFilter bool, userID string) ([]ChatSource, error) {
+	if strings.TrimSpace(query) == "" {
+		return nil, fmt.Errorf("search query cannot be empty")
+	}
+
+	if applyUploadFilter && len(uploadIDs) == 0 {
+		return []ChatSource{}, nil
+	}
+
+	processedQuery := buildFTSMatchQuery(query)
+	if processedQuery == "" {
+		return []ChatSource{}, nil
+	}
+
+	params := dbx.Params{
+		"q":      processedQuery,
+		"limit":  limit,
+		"userID": userID,
+	}
+
+	var stmt strings.Builder
+	stmt.WriteString("SELECT document_chunks_fts.id, document_chunks_fts.content, document_chunks_fts.upload, document_chunks_fts.page_number, u.title, bm25(document_chunks_fts) AS rank ")
+	stmt.WriteString("FROM document_chunks_fts ")
+	stmt.WriteString("JOIN uploads u ON document_chunks_fts.upload = u.id ")
+	stmt.WriteString("WHERE document_chunks_fts MATCH {:q} ")
+	stmt.WriteString("AND u.type != 'transcript' ")
+	stmt.WriteString("AND u.user = {:userID} ")
+
+	if len(uploadIDs) > 0 {
+		placeholders := make([]string, 0, len(uploadIDs))
+		for i, uploadID := range uploadIDs {
+			key := fmt.Sprintf("upload%d", i)
+			params[key] = uploadID
+			placeholders = append(placeholders, "{:"+key+"}")
+		}
+
+		stmt.WriteString("AND document_chunks_fts.upload IN (" + strings.Join(placeholders, ", ") + ") ")
+	}
+
+	stmt.WriteString("ORDER BY rank ASC, CAST(document_chunks_fts.page_number AS INTEGER) ASC ")
+	stmt.WriteString("LIMIT {:limit};")
+
+	results := []dbx.NullStringMap{}
+	err := app.DB().NewQuery(stmt.String()).Bind(params).All(&results)
+	if err != nil {
+		return nil, err
+	}
+
+	sources := make([]ChatSource, 0, len(results))
+	for _, row := range results {
+		rank := getFloatValue(row, "rank")
+		score := 1.0 / (1.0 + math.Max(rank, 0))
+
+		source := ChatSource{
+			NodeID:     getStringValue(row, "id"),
+			UploadID:   getStringValue(row, "upload"),
+			Title:      getStringValue(row, "title"),
+			Text:       getStringValue(row, "content"),
+			PageNumber: getIntValue(row, "page_number"),
+			Score:      score,
+		}
+
+		sources = append(sources, source)
+	}
+
+	return sources, nil
+}
+
+func buildFTSMatchQuery(query string) string {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return ""
+	}
+
+	terms := strings.Fields(query)
+	processedTerms := make([]string, 0, len(terms))
+	for _, term := range terms {
+		escaped := strings.ReplaceAll(term, `"`, `""`)
+		processedTerms = append(processedTerms, `"`+escaped+`"*`)
+	}
+
+	return strings.Join(processedTerms, " AND ")
+}
+
+func getStringValue(row dbx.NullStringMap, key string) string {
+	val, ok := row[key]
+	if !ok {
+		return ""
+	}
+
+	raw, err := val.Value()
+	if err != nil || raw == nil {
+		return ""
+	}
+
+	return fmt.Sprint(raw)
+}
+
+func getFloatValue(row dbx.NullStringMap, key string) float64 {
+	text := getStringValue(row, key)
+	if text == "" {
+		return 0
+	}
+
+	parsed, err := strconv.ParseFloat(text, 64)
+	if err != nil {
+		return 0
+	}
+
+	return parsed
+}
+
+func getIntValue(row dbx.NullStringMap, key string) int {
+	text := getStringValue(row, key)
+	if text == "" {
+		return 0
+	}
+
+	parsed, err := strconv.Atoi(text)
+	if err != nil {
+		return 0
+	}
+
+	return parsed
+}
+
 func buildChatTitle(message, mode string) string {
 	title := strings.TrimSpace(message)
 	if len(title) > 80 {
@@ -22,12 +150,22 @@ func buildChatTitle(message, mode string) string {
 
 	if mode == "search" {
 		title = "Search: " + title
+	} else if mode == vars.ChatTypeFTS || mode == "full_text" {
+		title = "Full text: " + title
 	}
 
 	return title
 }
 
-func resolveFilterUploadIDs(app core.App, filters *MetadataFilters) ([]string, error) {
+func persistedChatType(mode string) string {
+	if mode == "full_text" {
+		return vars.ChatTypeFTS
+	}
+
+	return mode
+}
+
+func resolveFilterUploadIDs(app core.App, filters *MetadataFilters, userID string) ([]string, error) {
 	uploadIDs := filters.Uploads
 
 	for _, collectionID := range filters.Collections {
@@ -47,6 +185,8 @@ func resolveFilterUploadIDs(app core.App, filters *MetadataFilters) ([]string, e
 	if filters.Condition == "and" {
 		condition = "&&"
 	}
+
+	filterParams["filterUserID"] = userID
 
 	if len(filters.Tags) > 0 {
 		parts := make([]string, 0, len(filters.Tags))
@@ -99,7 +239,8 @@ func resolveFilterUploadIDs(app core.App, filters *MetadataFilters) ([]string, e
 	}
 
 	if len(filterGroups) > 0 {
-		filterStr := strings.Join(filterGroups, " "+condition+" ")
+		metaFilter := strings.Join(filterGroups, " "+condition+" ")
+		filterStr := "user = {:filterUserID} && (" + metaFilter + ")"
 		records, err := app.FindRecordsByFilter("uploads", filterStr, "", 0, 0, filterParams)
 		if err != nil {
 			return nil, err
@@ -110,7 +251,34 @@ func resolveFilterUploadIDs(app core.App, filters *MetadataFilters) ([]string, e
 		}
 	}
 
-	return uploadIDs, nil
+	seen := make(map[string]struct{}, len(uploadIDs))
+	deduped := make([]string, 0, len(uploadIDs))
+	for _, id := range uploadIDs {
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		deduped = append(deduped, id)
+	}
+
+	return deduped, nil
+}
+
+func hasActiveMetadataFilters(filters *MetadataFilters) bool {
+	if filters == nil {
+		return false
+	}
+
+	return len(filters.Uploads) > 0 ||
+		len(filters.Collections) > 0 ||
+		len(filters.Tags) > 0 ||
+		len(filters.People) > 0 ||
+		len(filters.Publications) > 0 ||
+		len(filters.Types) > 0 ||
+		len(filters.Topics) > 0
 }
 
 func hasChatContext(app core.App, chatID, userID string) (bool, error) {
@@ -359,10 +527,8 @@ func buildSourcesFromCitations(citations []Citation, searchResults []vector_sear
 }
 
 func buildSourcesForChatResponse(citations []Citation, searchResults []vector_search.SearchResult, maxSources int) []ChatSource {
-	const minRelevantSources = 4
-
 	citedSources := buildSourcesFromCitations(citations, searchResults)
-	if len(citedSources) >= minRelevantSources {
+	if len(citedSources) > 0 {
 		return citedSources
 	}
 

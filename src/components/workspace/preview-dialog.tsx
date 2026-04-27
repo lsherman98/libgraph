@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Highlighter, BookMarked, ExternalLink, FileText, Pencil, ChevronLeft, ChevronRight, Hash } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HighlightsColorOptions, type HighlightsRecord, type BookmarksRecord, type NotesRecord } from "@/lib/pocketbase-types";
-import { usePage, usePageMarkdown, usePageByNumber, usePages } from "@/lib/api/queries";
+import { usePage, usePageMarkdown, usePageByNumber, usePages, useUploadById } from "@/lib/api/queries";
 import { HIGHLIGHT_PREVIEW_CLASSES } from "@/lib/constants/highlight-colors";
 import { Link } from "@tanstack/react-router";
 import type { ChatSource } from "@/lib/types";
@@ -104,6 +104,8 @@ export function PreviewDialog({
 
   const { data: pagesData } = usePages(effectiveUploadId, 1, 1);
   const totalPages = totalPagesProp ?? pagesData?.totalItems;
+  const { data: sourceUpload } = useUploadById(isSource && effectiveUploadId ? effectiveUploadId : undefined);
+  const sourceDocumentTitle = source?.title?.trim() || sourceUpload?.title || "Document";
 
   const needsPageByNumber = isSource || isUpload || !isOnOriginalPage;
   const validPageNumber = currentPageNumber != null && currentPageNumber > 0;
@@ -315,7 +317,7 @@ export function PreviewDialog({
                 <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
                   <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
-                <span className="truncate">{source?.title || "Document"}</span>
+                <span className="truncate">{sourceDocumentTitle}</span>
               </>
             ) : isHighlight ? (
               <>
@@ -356,6 +358,13 @@ export function PreviewDialog({
               {!isSource && !isUpload && <>Page {effectivePageNumber ?? "?"}</>}
             </div>
             {isNote && note?.content && <p className="text-sm text-foreground/80 whitespace-pre-wrap">{note.content}</p>}
+            {isSource && (
+              <div className="flex items-center gap-1.5 text-sm text-foreground/80 min-w-0">
+                <FileText className="h-3.5 w-3.5 shrink-0" />
+                <span className="shrink-0">Source document:</span>
+                <span className="truncate">{sourceDocumentTitle}</span>
+              </div>
+            )}
           </DialogDescription>
         </DialogHeader>
         <div className="flex-1 min-h-0 border rounded-lg bg-card flex flex-col overflow-hidden">
@@ -369,7 +378,11 @@ export function PreviewDialog({
                 <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
               </div>
             ) : markdown ? (
-              <div className="text-sm text-foreground/80 font-serif leading-relaxed whitespace-pre-wrap">{renderPageContent()}</div>
+              <div className="flex justify-center">
+                <div className="w-full max-w-3xl text-left text-sm text-foreground/80 font-serif leading-relaxed whitespace-pre-wrap">
+                  {renderPageContent()}
+                </div>
+              </div>
             ) : (
               <div className="text-sm text-muted-foreground italic">Could not load page content</div>
             )}

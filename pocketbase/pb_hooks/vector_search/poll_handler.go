@@ -34,12 +34,12 @@ func HandleEmbedPollJob(app core.App, job *core.Record) error {
 
 	batch, err := getBatchOperation(context.Background(), batchId)
 	if err != nil {
-		return handlePollError(app, job, embedding, err)
+		return handlePollError(app, job, embedding, payload.ChunkIDs, err)
 	}
 
 	isDone, err := getBatchJobStatus(batch)
 	if err != nil {
-		return handlePollError(app, job, embedding, err)
+		return handlePollError(app, job, embedding, payload.ChunkIDs, err)
 	}
 
 	if isDone {
@@ -58,7 +58,7 @@ func HandleEmbedPollJob(app core.App, job *core.Record) error {
 			return err
 		}
 
-		return reschedulePollJob(app, job, embedding, nextPollAt)
+		return reschedulePollJob(app, job, embedding, payload.ChunkIDs, nextPollAt)
 	}
 
 	result, err := resolveBatchResult(batch)
@@ -89,7 +89,7 @@ func HandleEmbedPollJob(app core.App, job *core.Record) error {
 	return app.Save(embedding)
 }
 
-func handlePollError(app core.App, job *core.Record, embeddingJob *core.Record, err error) error {
+func handlePollError(app core.App, job *core.Record, embeddingJob *core.Record, chunkIDs []string, err error) error {
 	now := time.Now().UTC()
 	nextPollAt := now.Add(pollInterval)
 
@@ -101,10 +101,10 @@ func handlePollError(app core.App, job *core.Record, embeddingJob *core.Record, 
 		return err
 	}
 
-	return reschedulePollJob(app, job, embeddingJob, nextPollAt)
+	return reschedulePollJob(app, job, embeddingJob, chunkIDs, nextPollAt)
 }
 
-func enqueuePollJob(app core.App, embeddingJob *core.Record) error {
+func enqueuePollJob(app core.App, embeddingJob *core.Record, chunkIDs []string) error {
 	embeddingJobID := embeddingJob.Id
 	dedupeKey := fmt.Sprintf("chunk.embed.poll:%s", embeddingJobID)
 	userID := embeddingJob.GetString("user")
@@ -116,6 +116,7 @@ func enqueuePollJob(app core.App, embeddingJob *core.Record) error {
 		DedupeKey: dedupeKey,
 		Payload: map[string]any{
 			"embedding_job_id": embeddingJobID,
+			"chunk_ids":        chunkIDs,
 		},
 		UserID:   userID,
 		UploadID: uploadID,
@@ -123,15 +124,16 @@ func enqueuePollJob(app core.App, embeddingJob *core.Record) error {
 	})
 }
 
-func reschedulePollJob(app core.App, job *core.Record, embeddingJob *core.Record, scheduledAt time.Time) error {
+func reschedulePollJob(app core.App, job *core.Record, embeddingJob *core.Record, chunkIDs []string, scheduledAt time.Time) error {
 	if job == nil {
-		return enqueuePollJob(app, embeddingJob)
+		return enqueuePollJob(app, embeddingJob, chunkIDs)
 	}
 
 	job.Set("status", vars.QueueStatusQueued)
 	job.Set("scheduled_at", scheduledAt)
 	job.Set("payload", map[string]any{
 		"embedding_job_id": embeddingJob.Id,
+		"chunk_ids":        chunkIDs,
 	})
 
 	return app.Save(job)
@@ -164,8 +166,10 @@ func EnqueuePendingPollJobs(app *pocketbase.PocketBase, limit int) error {
 			continue
 		}
 
+		chunkIDs := recoverChunkIDsForEmbeddingJob(app, embeddingJob)
+
 		nextPollAt := time.Now().UTC()
-		if err := enqueuePollJob(app, embeddingJob); err != nil {
+		if err := enqueuePollJob(app, embeddingJob, chunkIDs); err != nil {
 			continue
 		}
 

@@ -719,6 +719,7 @@ export function MarkdownContent({
             onHighlight={handleHighlight}
             onOpenEditor={handleOpenNewHighlightEditor}
             onChatWithText={handleChatWithText}
+            onCopy={() => navigator.clipboard.writeText(selection.text)}
             onDismiss={() => setSelection(null)}
           />
         )}

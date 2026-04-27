@@ -1,4 +1,4 @@
-.PHONY: pb build deploy dev migrate sync types 
+.PHONY: pb build deploy dev migrate sync types docker-prune
 
 pb:
 	cd pocketbase && go run --tags "fts5" . serve --dev
@@ -21,3 +21,7 @@ sync:
 
 types: 
 	pnpm pb:typegen
+
+docker-prune:
+	docker builder prune -af
+	docker system df

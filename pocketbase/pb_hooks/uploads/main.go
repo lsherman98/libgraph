@@ -6,35 +6,37 @@ import (
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
-	"github.com/pocketbase/pocketbase/tools/routine"
 )
 
 func Init(app *pocketbase.PocketBase) error {
-	app.OnRecordAfterCreateSuccess(collections.Uploads).BindFunc(func(e *core.RecordEvent) error {
-		upload := e.Record
+	app.OnRecordCreateRequest(collections.Uploads).BindFunc(func(e *core.RecordRequestEvent) error {
+		transcriptFile, err := findCustomTranscriptFile(e)
+		if err != nil {
+			return e.BadRequestError("invalid transcript_file upload", err)
+		}
 
-		if err := validateTranscript(upload); err != nil {
+		if transcriptFile != nil {
+			if err := attachCustomTranscriptFile(e.App, e.Record, transcriptFile); err != nil {
+				return e.BadRequestError("invalid transcript_file", err)
+			}
+		}
+
+		if err := validateDuplicateUpload(e.App, e.Record); err != nil {
 			return err
 		}
 
-		routine.FireAndForget(func() {
-			upload, err := e.App.FindRecordById(collections.Uploads, upload.Id)
-			if err != nil {
-				return
-			}
+		return e.Next()
+	})
 
-			optimized, err := optimizeAudioUpload(e.App, upload)
-			if err == nil && optimized {
-				return
-			}
+	app.OnRecordAfterCreateSuccess(collections.Uploads).BindFunc(func(e *core.RecordEvent) error {
+		upload := e.Record
 
-			if err := scheduleUploadProcessing(e.App, upload); err != nil {
-				upload.Set("status", vars.UploadStatusFailed)
-				if err := e.App.Save(upload); err != nil {
-					return
-				}
+		if err := scheduleUploadProcessing(e.App, upload); err != nil {
+			upload.Set("status", vars.UploadStatusFailed)
+			if err := e.App.Save(upload); err != nil {
+				return err
 			}
-		})
+		}
 
 		return e.Next()
 	})
@@ -75,6 +77,16 @@ func Init(app *pocketbase.PocketBase) error {
 			}
 
 			deletedSummaries[summaryID] = struct{}{}
+		}
+
+		transcripts, err := findLinkedTranscripts(e.App, upload, 0)
+		if err == nil {
+			for _, transcript := range transcripts {
+				if transcript.Id == uploadID {
+					continue
+				}
+				_ = e.App.Delete(transcript)
+			}
 		}
 
 		return e.Next()

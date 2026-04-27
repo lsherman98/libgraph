@@ -35,6 +35,7 @@ type ChatPayload struct {
 	Mode      string           `json:"mode"`
 	Message   string           `json:"message"`
 	UploadIDs []string         `json:"upload_ids,omitempty"`
+	ApplyUploadFilter bool     `json:"apply_upload_filter,omitempty"`
 	UserID    string           `json:"user_id"`
 	MessageID string           `json:"message_id"`
 	Filters   *MetadataFilters `json:"filters,omitempty"`

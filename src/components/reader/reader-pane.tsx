@@ -1,6 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { usePages, usePageByNumber, usePage, useSummary, useBookmarks, useNotes, useUploadById } from "@/lib/api/queries";
+import {
+  usePages,
+  usePageByNumber,
+  usePage,
+  useSummary,
+  useBookmarks,
+  useNotes,
+  useUploadById,
+  useTranscriptUploadForAudio,
+} from "@/lib/api/queries";
 import { useCreateHighlight, useUpdateHighlight, useDeleteHighlight, useSummarizeUpload, useSummarizePages } from "@/lib/api/mutations";
 import { queryKeys } from "@/lib/api/queryKeys";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +37,7 @@ import { PaginatedReader } from "./paginated-reader";
 import { ScrollReader } from "./scroll-reader";
 import { toast } from "sonner";
 
-const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac", ".wma", ".webm", ".mp4"]);
+const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".ogg", ".opus", ".flac", ".aac", ".wma", ".webm", ".mp4"]);
 
 function isAudioFile(filename: string): boolean {
   const ext = filename.toLowerCase().slice(filename.lastIndexOf("."));
@@ -48,6 +57,9 @@ interface ReaderPaneProps {
 export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, showHeader = true, onPageChange, onTitleLoad }: ReaderPaneProps) {
   const queryClient = useQueryClient();
   const { data: upload } = useUploadById(uploadId);
+  const isAudioUpload = !!(upload?.file && isAudioFile(upload.file));
+  const { data: transcriptUpload } = useTranscriptUploadForAudio(uploadId, { enabled: isAudioUpload });
+  const contentUploadId = transcriptUpload?.id || uploadId;
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isAudioOpen, setIsAudioOpen] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -74,11 +86,11 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
     }
   }, [pageSettingsLoaded, pageSettings.currentPage, onPageChange]);
 
-  const { data: firstPageData } = usePages(uploadId, 1, 1);
+  const { data: firstPageData } = usePages(contentUploadId, 1, 1);
   const totalPages = firstPageData?.totalItems || 0;
   const firstPageId = firstPageData?.items[0]?.id ?? null;
 
-  const { data: currentPageData } = usePageByNumber(uploadId, pageSettings.currentPage);
+  const { data: currentPageData } = usePageByNumber(contentUploadId, pageSettings.currentPage);
   const currentPageId = currentPageData?.id;
   const resolvedCurrentPageId = currentPageData?.page === pageSettings.currentPage ? currentPageData.id : undefined;
 
@@ -94,7 +106,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
     pollUntilSummary: shouldPollCurrentQueuedRangePage,
   });
   const currentBookSummaryRecordId = currentQueuedRangePage?.summary || currentPageData?.summary;
-  const shouldPollForUploadSummary = !isSummaryUpload && !isBookUpload && !!queuedSummaryPageId && queuedSummaryPageId === uploadId;
+  const shouldPollForUploadSummary = !isSummaryUpload && !isBookUpload && !!queuedSummaryPageId && queuedSummaryPageId === contentUploadId;
   const { data: queuedBookSummaryPage } = usePage(queuedBookSummaryPageId || undefined, {
     pollUntilSummary: shouldPollForBookSummary,
   });
@@ -149,13 +161,13 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
       setQueuedBookSummaryPageId(null);
     } else {
       if (!firstPageId || !queuedUploadSummaryRecord?.summary_upload) return;
-      if (!queuedSummaryPageId || queuedSummaryPageId !== uploadId) return;
+      if (!queuedSummaryPageId || queuedSummaryPageId !== contentUploadId) return;
       openSummarySplit(queuedUploadSummaryRecord.summary_upload, firstPageId);
       setQueuedSummaryPageId(null);
     }
   }, [
     isBookUpload,
-    uploadId,
+    contentUploadId,
     queuedSummaryPageId,
     queuedBookSummaryPageId,
     firstPageId,
@@ -183,10 +195,19 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
 
   useEffect(() => {
     if (isActive) {
-      setCurrentUploadId(uploadId ?? null);
+      setCurrentUploadId(contentUploadId ?? null);
       setCurrentPageState(resolvedCurrentPageId, pageSettings.currentPage);
     }
-  }, [uploadId, resolvedCurrentPageId, pageSettings.currentPage, setCurrentUploadId, setCurrentPageState, isActive, upload?.type, currentPageData]);
+  }, [
+    contentUploadId,
+    resolvedCurrentPageId,
+    pageSettings.currentPage,
+    setCurrentUploadId,
+    setCurrentPageState,
+    isActive,
+    upload?.type,
+    currentPageData,
+  ]);
 
   const navigateToPageFromAnnotation = useCallback((pageNumber: number, _blockId?: string) => {
     setCurrentPageRef.current(pageNumber);
@@ -207,8 +228,8 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
     }
   }, [navigateToPageFromAnnotation, setNavigateToPage, isActive]);
 
-  const { data: bookmarksData = [] } = useBookmarks(uploadId);
-  const { data: notesData = [] } = useNotes(uploadId);
+  const { data: bookmarksData = [] } = useBookmarks(contentUploadId);
+  const { data: notesData = [] } = useNotes(contentUploadId);
   const createHighlightMutation = useCreateHighlight();
   const updateHighlightMutation = useUpdateHighlight();
   const deleteHighlightMutation = useDeleteHighlight();
@@ -250,9 +271,9 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
         end_offset: number;
       },
     ) => {
-      if (!uploadId) return;
+      if (!contentUploadId) return;
       createHighlightMutation.mutate({
-        upload: uploadId,
+        upload: contentUploadId,
         page: pageId,
         color: data.color,
         text: data.text,
@@ -263,7 +284,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
         user: getUserId(),
       });
     },
-    [uploadId, createHighlightMutation],
+    [contentUploadId, createHighlightMutation],
   );
 
   const handleUpdateHighlight = useCallback(
@@ -359,7 +380,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
   };
 
   const handleSummarizePageRange = useCallback(async () => {
-    if (!uploadId) return;
+    if (!contentUploadId) return;
 
     const start = Number.parseInt(summaryRangeStart, 10);
     const end = Number.parseInt(summaryRangeEnd, 10);
@@ -383,7 +404,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
 
     try {
       const pagesInRange = await pb.collection(Collections.Pages).getFullList({
-        filter: `upload = "${uploadId}" && page >= ${normalizedStart} && page <= ${normalizedEnd}`,
+        filter: `upload = "${contentUploadId}" && page >= ${normalizedStart} && page <= ${normalizedEnd}`,
         sort: "page",
       });
 
@@ -412,7 +433,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
     } finally {
       setIsRangeSubmitting(false);
     }
-  }, [uploadId, summaryRangeStart, summaryRangeEnd, totalPages, summarizePagesMutation]);
+  }, [contentUploadId, summaryRangeStart, summaryRangeEnd, totalPages, summarizePagesMutation]);
 
   if (!upload) {
     return (
@@ -516,11 +537,11 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
               <Separator orientation="vertical" className="hidden xl:block data-[orientation=vertical]:h-5" />
               {!isSummaryUpload && (
                 <DocumentSearchBar
-                  uploadId={uploadId}
+                  uploadId={contentUploadId}
                   onNavigateToPage={({ pageId, pageNumber }) => {
                     const cachedPage = queryClient.getQueryData(queryKeys.pages.detail(pageId));
                     if (cachedPage) {
-                      queryClient.setQueryData(queryKeys.pages.byNumber(uploadId, pageNumber), cachedPage);
+                      queryClient.setQueryData(queryKeys.pages.byNumber(contentUploadId, pageNumber), cachedPage);
                     }
 
                     handlePageChange(pageNumber);
@@ -653,9 +674,9 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                             return;
                           }
 
-                          summarizeUploadMutation.mutate(uploadId, {
+                          summarizeUploadMutation.mutate(contentUploadId, {
                             onSuccess: () => {
-                              setQueuedSummaryPageId(uploadId);
+                              setQueuedSummaryPageId(contentUploadId);
                             },
                             onError: () => {
                               toast.error("Failed to summarize document.");
@@ -782,7 +803,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
               `}</style>
               {isScrollMode ? (
                 <ScrollReader
-                  uploadId={uploadId}
+                  uploadId={contentUploadId}
                   startPage={pageSettings.currentPage}
                   onPageChange={handlePageChange}
                   bookmarks={bookmarks || []}
@@ -793,7 +814,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                 />
               ) : (
                 <PaginatedReader
-                  uploadId={uploadId}
+                  uploadId={contentUploadId}
                   currentPage={pageSettings.currentPage}
                   onPageChange={handlePageChange}
                   totalPages={totalPages}
@@ -831,7 +852,7 @@ export function ReaderPane({ uploadId, tabId, initialPage, isActive = true, show
                   }, 50);
                 }
               }}
-              uploadId={uploadId}
+              uploadId={contentUploadId}
             />
             <span className="opacity-60">{totalPages}</span>
           </div>

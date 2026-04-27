@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link } from "@tanstack/react-router";
-import { useUploads, useTags, useTopics, usePeople, usePublications, useCollections } from "@/lib/api/queries";
+import { usePaginatedUploads, useTags, useTopics, usePeople, usePublications, useCollections } from "@/lib/api/queries";
 import { useDeleteUpload, useUpdateCollection } from "@/lib/api/mutations";
 import { useCreateCollection } from "@/lib/api/mutations";
 import type { UploadFilters } from "@/lib/api/api";
@@ -13,9 +13,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { FileText, Upload, Search, Library, X } from "lucide-react";
+import { FileText, Upload, Search, Library, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { EditUploadDialog } from "@/components/upload/edit-upload-dialog";
 import { useDebounce } from "@/lib/hooks/use-debounce";
 import { AdvancedFilters } from "./advanced-filters";
@@ -65,11 +66,13 @@ function DocumentsEmptyState() {
 export function DocumentsTab() {
   const [filters, setFilters] = useState<UploadFilters>({});
   const [addingToCollectionUpload, setAddingToCollectionUpload] = useState<UploadsResponse | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(20);
   const debouncedSearch = useDebounce(filters.search, 300);
 
   const queryFilters = useMemo<UploadFilters>(() => ({ ...filters, search: debouncedSearch }), [filters, debouncedSearch]);
 
-  const { data: uploads, isLoading } = useUploads(queryFilters);
+  const { data: uploadsPage, isLoading } = usePaginatedUploads(queryFilters, { page: currentPage, perPage });
   const { data: tags } = useTags();
   const { data: topics } = useTopics();
   const { data: people } = usePeople();
@@ -86,9 +89,19 @@ export function DocumentsTab() {
   const [collectionDescription, setCollectionDescription] = useState("");
   const [collectionSearch, setCollectionSearch] = useState("");
 
-  const hasActiveFilters = Object.keys(filters).filter((k) => k !== "sortBy" && k !== "sortOrder" && filters[k as keyof UploadFilters]).length > 0;
+  useEffect(() => {
+    setCurrentPage(1);
+    setSelectedIds(new Set());
+  }, [queryFilters]);
 
-  const successUploads = uploads?.filter((u) => u.status === "success") || [];
+  const hasActiveFilters = Object.keys(filters).filter((k) => k !== "sortBy" && k !== "sortOrder" && filters[k as keyof UploadFilters]).length > 0;
+  const uploads = uploadsPage?.items ?? [];
+  const totalUploadsCount = uploadsPage?.totalItems ?? 0;
+  const totalPages = uploadsPage?.totalPages ?? 1;
+  const startIndex = totalUploadsCount === 0 ? 0 : (currentPage - 1) * perPage + 1;
+  const endIndex = totalUploadsCount === 0 ? 0 : Math.min(currentPage * perPage, totalUploadsCount);
+
+  const successUploads = uploads.filter((u) => u.status === "success");
   const allSelected = successUploads.length > 0 && successUploads.every((u) => selectedIds.has(u.id));
   const someSelected = successUploads.some((u) => selectedIds.has(u.id));
   const filteredCollections = useMemo(() => {
@@ -176,6 +189,9 @@ export function DocumentsTab() {
           publications={publications || []}
           actions={
             <>
+              <span className="text-sm text-muted-foreground">
+                Showing {startIndex}-{endIndex} of {totalUploadsCount} file{totalUploadsCount !== 1 ? "s" : ""}
+              </span>
               {selectedIds.size > 0 && (
                 <>
                   <span className="text-sm text-muted-foreground">{selectedIds.size} selected</span>
@@ -201,7 +217,7 @@ export function DocumentsTab() {
       </div>
       {isLoading ? (
         <DocumentsTableSkeleton />
-      ) : uploads?.length === 0 ? (
+      ) : uploads.length === 0 ? (
         hasActiveFilters ? (
           <Card>
             <CardContent className="flex flex-col items-center justify-center py-12">
@@ -221,29 +237,29 @@ export function DocumentsTab() {
           <DocumentsEmptyState />
         )
       ) : (
-        <Card className="overflow-hidden flex flex-col min-h-0 flex-1">
-          <div className="overflow-y-auto flex-1 min-h-0">
-            <Table className="w-full">
-              <TableHeader className="sticky top-0 z-10 bg-card">
+        <Card className="overflow-hidden flex flex-col min-h-0 flex-1 py-0 gap-0">
+          <div className="overflow-y-auto overflow-x-hidden flex-1 min-h-0">
+            <Table className="w-full table-fixed">
+              <TableHeader>
                 <TableRow>
-                  <TableHead className="w-10 pr-0">
+                  <TableHead className="w-10 pr-0 sticky top-0 z-20 bg-card">
                     <Checkbox
                       checked={allSelected ? true : someSelected ? "indeterminate" : false}
                       onCheckedChange={toggleSelectAll}
                       aria-label="Select all documents"
                     />
                   </TableHead>
-                  <TableHead>Document</TableHead>
-                  <TableHead className="w-36 hidden lg:table-cell">Author</TableHead>
-                  <TableHead className="w-40 hidden xl:table-cell">People</TableHead>
-                  <TableHead className="w-32 hidden lg:table-cell">Publication</TableHead>
-                  <TableHead className="w-36 hidden xl:table-cell">Tags</TableHead>
-                  <TableHead className="w-28 hidden md:table-cell">Created</TableHead>
-                  <TableHead className="w-36"></TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-card">Document</TableHead>
+                  <TableHead className="w-24 hidden lg:table-cell sticky top-0 z-20 bg-card">Author</TableHead>
+                  <TableHead className="w-24 hidden xl:table-cell sticky top-0 z-20 bg-card">People</TableHead>
+                  <TableHead className="w-24 hidden lg:table-cell sticky top-0 z-20 bg-card">Publication</TableHead>
+                  <TableHead className="w-24 hidden xl:table-cell sticky top-0 z-20 bg-card">Tags</TableHead>
+                  <TableHead className="w-32 hidden md:table-cell sticky top-0 z-20 bg-card">Created</TableHead>
+                  <TableHead className="w-40 sticky top-0 z-20 bg-card"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {uploads?.map((upload) => (
+                {uploads.map((upload) => (
                   <DocumentRow
                     key={upload.id}
                     upload={upload}
@@ -266,6 +282,63 @@ export function DocumentsTab() {
                 ))}
               </TableBody>
             </Table>
+          </div>
+          <div className="border-t px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Rows per page</span>
+              <Select
+                value={String(perPage)}
+                onValueChange={(value) => {
+                  const nextPerPage = Number(value);
+                  setPerPage(nextPerPage);
+                  setCurrentPage(1);
+                  setSelectedIds(new Set());
+                }}
+              >
+                <SelectTrigger className="w-22 h-8">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center justify-between sm:justify-end gap-3">
+              <span className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages}
+              </span>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    setCurrentPage((prev) => Math.max(prev - 1, 1));
+                    setSelectedIds(new Set());
+                  }}
+                  disabled={currentPage <= 1}
+                  aria-label="Previous page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    setCurrentPage((prev) => Math.min(prev + 1, totalPages));
+                    setSelectedIds(new Set());
+                  }}
+                  disabled={currentPage >= totalPages}
+                  aria-label="Next page"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           </div>
         </Card>
       )}

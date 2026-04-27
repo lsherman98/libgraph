@@ -20,7 +20,9 @@ import {
 } from "@/lib/pocketbase-types";
 import { useNavigate } from "@tanstack/react-router";
 
-const USER_UPLOAD_TYPES = Object.values(UploadsTypeOptions).filter((type) => type !== UploadsTypeOptions.summary);
+const USER_UPLOAD_TYPES = Object.values(UploadsTypeOptions).filter(
+  (type) => type !== UploadsTypeOptions.summary && type !== UploadsTypeOptions.transcript,
+);
 
 interface DocumentInfoPanelProps {
   uploadId: string;

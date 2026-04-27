@@ -8,7 +8,7 @@ interface ChatInputProps {
   onChange: (value: string) => void;
   onSubmit: (message: string) => void;
   isPending: boolean;
-  mode: "chat" | "search";
+  mode: "chat" | "search" | "fts";
 }
 
 export function ChatInput({ value, onChange, onSubmit, isPending, mode }: ChatInputProps) {
@@ -51,7 +51,13 @@ export function ChatInput({ value, onChange, onSubmit, isPending, mode }: ChatIn
               value={value}
               onChange={(e) => onChange(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={mode === "chat" ? "Ask a question about your documents..." : "Search for information..."}
+              placeholder={
+                mode === "chat"
+                  ? "Ask a question about your documents..."
+                  : mode === "search"
+                    ? "Search semantically across your library..."
+                    : "Search across all documents with full-text matching..."
+              }
               disabled={isPending}
               rows={1}
               className="min-h-11 max-h-50 resize-none border-0 bg-transparent px-4 py-3 pr-12 text-sm focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"

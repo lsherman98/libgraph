@@ -19,7 +19,7 @@ const (
 	EmbeddingStatusSubmitted = "submitted"
 	EmbeddingStatusPolling   = "polling"
 	EmbeddingStatusSucceeded = "succeeded"
-	EmbeddingStatusFailed   = "failed"
+	EmbeddingStatusFailed    = "failed"
 
 	SummaryStatusProcessing = "processing"
 	SummaryStatusFailed     = "failed"
@@ -28,6 +28,7 @@ const (
 	ChatTypeSearch  = "search"
 	ChatTypeChat    = "chat"
 	ChatTypeContext = "context_chat"
+	ChatTypeFTS     = "fts"
 
 	MessageRoleUser      = "user"
 	MessageRoleAssistant = "assistant"

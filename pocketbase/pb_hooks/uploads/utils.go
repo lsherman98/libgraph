@@ -1,27 +1,162 @@
 package uploads
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/lsherman98/libgraph/pocketbase/collections"
 	"github.com/lsherman98/libgraph/pocketbase/mistral"
 	"github.com/lsherman98/libgraph/pocketbase/pb_hooks/processing"
 	"github.com/lsherman98/libgraph/pocketbase/vars"
+	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/tools/filesystem"
 )
 
+func findCustomTranscriptFile(e *core.RecordRequestEvent) (*filesystem.File, error) {
+	files, err := e.FindUploadedFiles("transcript_file")
+	if err != nil {
+		if errors.Is(err, http.ErrMissingFile) {
+			return nil, nil
+		}
+
+		if strings.Contains(strings.ToLower(err.Error()), "invalid transcript_file") {
+			return nil, nil
+		}
+
+		return nil, err
+	}
+
+	if len(files) == 0 {
+		return nil, nil
+	}
+
+	return files[0], nil
+}
+
+func attachCustomTranscriptFile(app core.App, upload *core.Record, transcriptFile *filesystem.File) error {
+	if transcriptFile == nil {
+		return nil
+	}
+
+	if err := validateCustomTranscriptFile(upload, transcriptFile); err != nil {
+		return err
+	}
+
+	linkedTranscripts, err := findLinkedTranscripts(app, upload, 1)
+	if err != nil {
+		return err
+	}
+	if len(linkedTranscripts) > 0 {
+		return nil
+	}
+
+	uploadsCollection, err := app.FindCollectionByNameOrId(collections.Uploads)
+	if err != nil {
+		return err
+	}
+
+	title := strings.TrimSpace(strings.TrimSuffix(transcriptFile.Name, filepath.Ext(transcriptFile.Name)))
+	if title == "" {
+		title = strings.TrimSpace(upload.GetString("title"))
+	}
+	if title == "" {
+		title = "transcript"
+	}
+	if !strings.HasSuffix(strings.ToLower(title), " transcript") {
+		title += " Transcript"
+	}
+
+	transcriptRecord := core.NewRecord(uploadsCollection)
+	transcriptRecord.Set("title", title)
+	transcriptRecord.Set("type", "transcript")
+	transcriptRecord.Set("status", vars.UploadStatusPending)
+	transcriptRecord.Set("user", upload.GetString("user"))
+	transcriptRecord.Set("file", transcriptFile)
+	transcriptRecord.Set("uploads", []string{upload.Id})
+
+	if err := app.Save(transcriptRecord); err != nil {
+		return err
+	}
+
+	existing := upload.GetStringSlice("uploads")
+	existing = append(existing, transcriptRecord.Id)
+	upload.Set("uploads", uniqueStringValues(existing))
+
+	return nil
+}
+
+func validateCustomTranscriptFile(upload *core.Record, transcriptFile *filesystem.File) error {
+	uploadFile := upload.GetString("file")
+	if !mistral.IsAudioFile(uploadFile) {
+		return fmt.Errorf("transcript_file can only be attached to audio uploads")
+	}
+
+	if transcriptFile == nil || transcriptFile.Name == "" {
+		return fmt.Errorf("transcript_file is empty")
+	}
+
+	ext := strings.ToLower(filepath.Ext(transcriptFile.Name))
+	if !transcriptExt[ext] {
+		return fmt.Errorf("transcript_file must be a .txt, .md, or .markdown file")
+	}
+
+	return nil
+}
+
+func uniqueStringValues(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+
+	return result
+}
+
+func formatCommandError(err error, output []byte, fallback string) error {
+	details := strings.TrimSpace(string(output))
+	if details == "" {
+		return fmt.Errorf("%s: %w", fallback, err)
+	}
+
+	return fmt.Errorf("%s: %w: %s", fallback, err, truncateUploadCommandOutput(details, 1000))
+}
+
+func truncateUploadCommandOutput(s string, maxLen int) string {
+	if maxLen <= 0 || len(s) <= maxLen {
+		return s
+	}
+
+	if maxLen <= 3 {
+		return s[:maxLen]
+	}
+
+	return s[:maxLen-3] + "..."
+}
+
 func RecoverStuckUploads(app *pocketbase.PocketBase) {
-	stuckUploads, err := app.FindRecordsByFilter(
+	recoverableUploads, err := app.FindRecordsByFilter(
 		collections.Uploads,
-		"status = 'processing'",
+		"status = 'pending' || status = 'processing'",
 		"",
 		0,
 		0,
@@ -30,19 +165,26 @@ func RecoverStuckUploads(app *pocketbase.PocketBase) {
 		return
 	}
 
-	if len(stuckUploads) == 0 {
+	if len(recoverableUploads) == 0 {
 		return
 	}
 
-	for _, upload := range stuckUploads {
-		id := upload.Id
-		if err := processing.Enqueue(app, processing.EnqueueRequest{
-			JobType:   processing.JobTypeUploadParseOrTranscribe,
-			DedupeKey: "upload.parse_or_transcribe:" + id,
-			UserID:    upload.GetString("user"),
-			UploadID:  id,
-		}); err != nil {
-			continue
+	for _, upload := range recoverableUploads {
+		switch upload.GetString("status") {
+		case vars.UploadStatusPending:
+			if err := scheduleUploadProcessing(app, upload); err != nil {
+				continue
+			}
+		case vars.UploadStatusProcessing:
+			id := upload.Id
+			if err := processing.Enqueue(app, processing.EnqueueRequest{
+				JobType:   processing.JobTypeUploadParseOrTranscribe,
+				DedupeKey: "upload.parse_or_transcribe:" + id,
+				UserID:    upload.GetString("user"),
+				UploadID:  id,
+			}); err != nil {
+				continue
+			}
 		}
 	}
 }
@@ -128,6 +270,59 @@ func chunkMarkdown(markdown string) []string {
 	return chunks
 }
 
+func getFileBytes(app core.App, record *core.Record, filename string) ([]byte, error) {
+	if filename == "" {
+		return nil, fmt.Errorf("file is empty")
+	}
+
+	fsys, err := app.NewFilesystem()
+	if err != nil {
+		return nil, err
+	}
+	defer fsys.Close()
+
+	filePath := record.BaseFilesPath() + "/" + filename
+	reader, err := fsys.GetReader(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+
+	fileBytes, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(fileBytes) == 0 {
+		return nil, fmt.Errorf("source file is empty")
+	}
+
+	return fileBytes, nil
+}
+
+func getAudioDurationFromBytes(fileBytes []byte, filename string) (float64, error) {
+	if len(fileBytes) == 0 {
+		return 0, fmt.Errorf("source audio file is empty")
+	}
+
+	tempDir, err := os.MkdirTemp("", "libgraph-audio-duration-*")
+	if err != nil {
+		return 0, err
+	}
+	defer os.RemoveAll(tempDir)
+
+	inputExt := strings.ToLower(filepath.Ext(filename))
+	if inputExt == "" {
+		inputExt = ".tmp"
+	}
+	inputPath := filepath.Join(tempDir, "input"+inputExt)
+	if err := os.WriteFile(inputPath, fileBytes, 0o600); err != nil {
+		return 0, err
+	}
+
+	return getAudioDuration(inputPath)
+}
+
 func getAudioDuration(filePath string) (float64, error) {
 	if _, err := exec.LookPath("ffprobe"); err != nil {
 		return 0, err
@@ -143,7 +338,7 @@ func getAudioDuration(filePath string) (float64, error) {
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return 0, err
+		return 0, formatCommandError(err, output, "ffprobe failed")
 	}
 
 	durationValue := strings.TrimSpace(string(output))
@@ -163,14 +358,26 @@ func getAudioDuration(filePath string) (float64, error) {
 	return durationSeconds, nil
 }
 
-func validateDurationLimit(upload *core.Record) error {
+func validateDurationLimit(app core.App, upload *core.Record) error {
 	uploadFile := upload.GetString("file")
 	if uploadFile == "" || !mistral.IsAudioFile(uploadFile) {
 		return nil
 	}
 
-	filePath := upload.BaseFilesPath() + "/" + uploadFile
-	durationSeconds, err := getAudioDuration(filePath)
+	linkedTranscripts, err := findLinkedTranscripts(app, upload, 1)
+	if err != nil {
+		return err
+	}
+	if len(linkedTranscripts) > 0 {
+		return nil
+	}
+
+	fileBytes, err := getFileBytes(app, upload, uploadFile)
+	if err != nil {
+		return err
+	}
+
+	durationSeconds, err := getAudioDurationFromBytes(fileBytes, uploadFile)
 	if err != nil {
 		return err
 	}
@@ -182,20 +389,114 @@ func validateDurationLimit(upload *core.Record) error {
 	return nil
 }
 
-func validateTranscript(upload *core.Record) error {
-	transcript := upload.GetString("transcript_file")
-	if transcript == "" {
+func findLinkedTranscripts(app core.App, upload *core.Record, limit int) ([]*core.Record, error) {
+	uploadID := upload.Id
+	params := dbx.Params{"uploadId": uploadID, "type": "transcript"}
+
+	byUploads, uploadsErr := app.FindRecordsByFilter(
+		collections.Uploads,
+		"uploads ?~ {:uploadId} && type = {:type} && file != ''",
+		"-created",
+		limit,
+		0,
+		params,
+	)
+	if uploadsErr == nil && len(byUploads) > 0 {
+		return byUploads, nil
+	}
+
+	byUpload, uploadErr := app.FindRecordsByFilter(
+		collections.Uploads,
+		"upload = {:uploadId} && type = {:type} && file != ''",
+		"-created",
+		limit,
+		0,
+		params,
+	)
+	if uploadErr == nil {
+		if len(byUpload) > 0 {
+			return byUpload, nil
+		}
+		if uploadsErr == nil {
+			return byUploads, nil
+		}
+		return byUpload, nil
+	}
+
+	if uploadsErr != nil {
+		return nil, uploadsErr
+	}
+
+	referencedIDs := upload.GetStringSlice("uploads")
+	if len(referencedIDs) > 0 {
+		referencedMatches := make([]*core.Record, 0, limit)
+		for _, id := range referencedIDs {
+			if id == "" {
+				continue
+			}
+
+			record, err := app.FindRecordById(collections.Uploads, id)
+			if err != nil {
+				continue
+			}
+
+			if record.GetString("type") != "transcript" || record.GetString("file") == "" {
+				continue
+			}
+
+			referencedMatches = append(referencedMatches, record)
+			if len(referencedMatches) >= limit {
+				return referencedMatches, nil
+			}
+		}
+
+		if len(referencedMatches) > 0 {
+			return referencedMatches, nil
+		}
+	}
+
+	return byUploads, nil
+}
+func validateDuplicateUpload(app core.App, upload *core.Record) error {
+	if upload.GetString("type") == vars.UploadTypeSummary {
 		return nil
 	}
 
-	uploadFile := upload.GetString("file")
-	if !mistral.IsAudioFile(uploadFile) {
-		return fmt.Errorf("transcript_file can only be attached to audio uploads")
+	userID := upload.GetString("user")
+	title := upload.GetString("title")
+	authorID := upload.GetString("author")
+	if userID == "" || title == "" {
+		return nil
 	}
 
-	ext := strings.ToLower(filepath.Ext(transcript))
-	if !transcriptExt[ext] {
-		return fmt.Errorf("transcript_file must be a .txt, .md, or .markdown file")
+	params := dbx.Params{
+		"user":  userID,
+		"title": title,
+		"id":    upload.Id,
+	}
+
+	filter := "user = {:user} && title = {:title} && id != {:id}"
+	if authorID == "" {
+		filter += " && (author = '' || author = null)"
+	} else {
+		params["author"] = authorID
+		filter += " && author = {:author}"
+	}
+
+	duplicate, err := app.FindRecordsByFilter(
+		collections.Uploads,
+		filter,
+		"",
+		1,
+		0,
+		params,
+	)
+	if err != nil {
+		return err
+	}
+
+	if len(duplicate) > 0 {
+		return fmt.Errorf("duplicate upload already exists for this user, author, and title")
 	}
 
 	return nil
@@ -219,6 +520,9 @@ func scheduleUploadProcessing(app core.App, uploadRecord *core.Record) error {
 		UploadID:  uploadID,
 	})
 }
+
+// ffmpegMu ensures only one ffmpeg conversion runs at a time to avoid excessive CPU usage.
+var ffmpegMu sync.Mutex
 
 func optimizeAudioUpload(app core.App, upload *core.Record) (bool, error) {
 	source := upload.GetString("file")
@@ -244,20 +548,9 @@ func optimizeAudioUpload(app core.App, upload *core.Record) (bool, error) {
 	}
 	defer fsys.Close()
 
-	sourcePath := upload.BaseFilesPath() + "/" + source
-	reader, err := fsys.GetReader(sourcePath)
+	inputBytes, err := getFileBytes(app, upload, source)
 	if err != nil {
 		return false, err
-	}
-	defer reader.Close()
-
-	inputBytes, err := io.ReadAll(reader)
-	if err != nil {
-		return false, err
-	}
-
-	if len(inputBytes) == 0 {
-		return false, fmt.Errorf("source audio file is empty")
 	}
 
 	tempDir, err := os.MkdirTemp("", "libgraph-audio-opt-*")
@@ -277,6 +570,7 @@ func optimizeAudioUpload(app core.App, upload *core.Record) (bool, error) {
 		return false, err
 	}
 
+	ffmpegMu.Lock()
 	cmd := exec.Command(
 		"ffmpeg",
 		"-y",
@@ -288,8 +582,10 @@ func optimizeAudioUpload(app core.App, upload *core.Record) (bool, error) {
 		"-b:a", "48k",
 		outputPath,
 	)
-	if _, err := cmd.CombinedOutput(); err != nil {
-		return false, err
+	output, err := cmd.CombinedOutput()
+	ffmpegMu.Unlock()
+	if err != nil {
+		return false, formatCommandError(err, output, "ffmpeg audio optimization failed")
 	}
 
 	optimizedBytes, err := os.ReadFile(outputPath)
@@ -317,14 +613,10 @@ func optimizeAudioUpload(app core.App, upload *core.Record) (bool, error) {
 		return false, err
 	}
 
-	if err := scheduleUploadProcessing(app, upload); err != nil {
-		return false, err
-	}
-
 	return true, nil
 }
 
 func isOptimized(filename string) bool {
 	base := strings.ToLower(filepath.Base(filename))
-	return strings.HasSuffix(base, ".ogg")
+	return strings.HasSuffix(base, ".ogg") || strings.HasSuffix(base, ".opus")
 }

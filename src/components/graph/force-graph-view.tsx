@@ -54,17 +54,22 @@ export interface GraphTuningSettings {
 export const defaultGraphTuningSettings: GraphTuningSettings = {
   linkDistance: 320,
   chargeStrength: -1000,
-  collisionPadding: 40,
+  collisionPadding: 12,
   centerStrength: 0.05,
   radialStrength: 0.05,
   radialRadiusFactor: 0.5,
-  minZoom: 0.25,
+  minZoom: 0.05,
   maxZoom: 4,
   fitPadding: 120,
   fitDuration: 350,
   warmupTicks: 90,
-  focusZoom: 1.35,
+  focusZoom: 1.0,
 };
+
+// Performance thresholds
+const LARGE_GRAPH_THRESHOLD = 200;
+const HUGE_GRAPH_THRESHOLD = 500;
+const MASSIVE_GRAPH_THRESHOLD = 1500;
 
 function formatLabel(value: string): string {
   return value
@@ -449,6 +454,23 @@ export function ForceGraphView({
   hiddenNodeTypesRef.current = hiddenNodeTypes;
   hiddenEdgeTypesRef.current = hiddenEdgeTypes;
 
+  // Stable refs so simulation effect doesn't depend on fast-changing props
+  const selectedNodeIdRef = useRef<string | null>(selectedNodeId);
+  selectedNodeIdRef.current = selectedNodeId;
+  const onSelectNodeRef = useRef(onSelectNode);
+  onSelectNodeRef.current = onSelectNode;
+  const onPreviewNodeRef = useRef(onPreviewNode);
+  onPreviewNodeRef.current = onPreviewNode;
+  const tuningRef = useRef(tuning);
+  tuningRef.current = tuning;
+  const graphDataRef = useRef(graphData);
+  graphDataRef.current = graphData;
+
+  // Expanded card foreignObject element (tracked for removal on deselect)
+  const expandedCardRef = useRef<d3.Selection<any, any, any, any> | null>(null);
+  // Function set by the main simulation effect; called cheaply on selection changes
+  const applySelectionRef = useRef<((selId: string | null) => void) | null>(null);
+
   useEffect(() => {
     nodeDataMapRef.current = new Map(nodes.map((n) => [n.id, n]));
   }, [nodes]);
@@ -536,30 +558,55 @@ export function ForceGraphView({
     const width = containerRef.current.clientWidth;
     const height = containerRef.current.clientHeight;
     const isDark = theme === "dark";
-    const getRadius = (d: GraphNode) => (d.id === selectedNodeId ? 30 : 22);
+    const nodeCount = graphData.nodes.length;
+    const isLarge = nodeCount > LARGE_GRAPH_THRESHOLD;
+    const isHuge = nodeCount > HUGE_GRAPH_THRESHOLD;
+    const isMassive = nodeCount > MASSIVE_GRAPH_THRESHOLD;
+    const NODE_RADIUS = isMassive ? 14 : isHuge ? 18 : 22;
 
     const svg = d3.select(svgRef.current);
     svg.selectAll("*").remove();
 
+    // Use CSS containment and GPU compositing hints for performance
+    svg.style("contain", "strict");
+
     const defs = svg.append("defs");
-    Object.entries(edgeTypeConfig).forEach(([type, cfg]) => {
-      defs
-        .append("marker")
-        .attr("id", `force-arrow-${type}`)
-        .attr("viewBox", "0 0 10 10")
-        .attr("refX", 28)
-        .attr("refY", 5)
-        .attr("markerWidth", 5)
-        .attr("markerHeight", 5)
-        .attr("orient", "auto-start-reverse")
-        .append("path")
-        .attr("d", "M 0 0 L 10 5 L 0 10 z")
-        .attr("fill", cfg.color);
-    });
+    // For massive graphs, skip arrow markers entirely (expensive per-edge)
+    if (!isMassive) {
+      Object.entries(edgeTypeConfig).forEach(([type, cfg]) => {
+        defs
+          .append("marker")
+          .attr("id", `force-arrow-${type}`)
+          .attr("viewBox", "0 0 10 10")
+          .attr("refX", 28)
+          .attr("refY", 5)
+          .attr("markerWidth", 5)
+          .attr("markerHeight", 5)
+          .attr("orient", "auto-start-reverse")
+          .append("path")
+          .attr("d", "M 0 0 L 10 5 L 0 10 z")
+          .attr("fill", isDark ? cfg.darkColor : cfg.color);
+      });
+    }
 
     const g = svg.append("g");
 
     const visibleHiddenIds = computeHiddenNodeIds(hiddenNodeTypesRef.current, nodeTypeMapRef.current, adjacencyMapRef.current);
+
+    // Level-of-Detail: aggressively hide labels/icons at low zoom, especially for large graphs
+    const applyLOD = (k: number) => {
+      const labelThreshold = isMassive ? 1.2 : isHuge ? 0.8 : isLarge ? 0.6 : 0.5;
+      const sublabelThreshold = isMassive ? 1.5 : isHuge ? 1.0 : isLarge ? 0.8 : 0.65;
+      const iconThreshold = isMassive ? 1.0 : isHuge ? 0.7 : isLarge ? 0.5 : 0.4;
+
+      const showLabel = k >= labelThreshold;
+      const showSublabel = k >= sublabelThreshold;
+      const showIcon = k >= iconThreshold;
+
+      g.selectAll<SVGTextElement, GraphNode>(".node-label").style("display", () => (showLabel ? null : "none"));
+      g.selectAll<SVGTextElement, GraphNode>(".node-sublabel").style("display", () => (showSublabel ? null : "none"));
+      g.selectAll<SVGGElement, GraphNode>(".node-icon").style("display", () => (showIcon ? null : "none"));
+    };
 
     const fitToView = (animate: boolean) => {
       const visibleNodes = graphData.nodes.filter((n) => !visibleHiddenIds.has(n.id) && Number.isFinite(n.x) && Number.isFinite(n.y));
@@ -575,14 +622,13 @@ export function ForceGraphView({
       const centerX = (minX + maxX) / 2;
       const centerY = (minY + maxY) / 2;
 
-      const scale = Math.max(
-        tuning.minZoom,
-        Math.min(tuning.maxZoom, Math.min((width - tuning.fitPadding) / graphWidth, (height - tuning.fitPadding) / graphHeight)),
-      );
+      const t = tuningRef.current;
+      const scale = Math.max(t.minZoom, Math.min(t.maxZoom, Math.min((width - t.fitPadding) / graphWidth, (height - t.fitPadding) / graphHeight)));
       const transform = d3.zoomIdentity.translate(width / 2 - centerX * scale, height / 2 - centerY * scale).scale(scale);
 
-      if (animate) {
-        svg.transition().duration(tuning.fitDuration).call(zoom.transform, transform);
+      // Skip animation for large graphs to avoid expensive transitions
+      if (animate && !isLarge) {
+        svg.transition().duration(t.fitDuration).call(zoom.transform, transform);
       } else {
         svg.call(zoom.transform, transform);
       }
@@ -592,8 +638,10 @@ export function ForceGraphView({
       .zoom<SVGSVGElement, unknown>()
       .scaleExtent([tuning.minZoom, tuning.maxZoom])
       .on("zoom", (event) => {
+        const k = event.transform.k;
         zoomTransformRef.current = event.transform;
         g.attr("transform", event.transform);
+        applyLOD(k);
       });
 
     svg.call(zoom);
@@ -613,25 +661,75 @@ export function ForceGraphView({
       n.vy = 0;
     });
 
+    // Scale simulation parameters for large graphs.
+    // Charge must stay strong so nodes repel each other and spread out.
+    // We scale it up (more negative) for larger graphs, capped to keep CPU reasonable.
+    const effectiveChargeStrength = isMassive
+      ? Math.min(tuning.chargeStrength * 2.5, -2500)
+      : isHuge
+        ? Math.min(tuning.chargeStrength * 2, -2000)
+        : isLarge
+          ? Math.min(tuning.chargeStrength * 1.5, -1500)
+          : tuning.chargeStrength;
+    const alphaDecay = isMassive ? 0.025 : isHuge ? 0.022 : isLarge ? 0.02 : 0.0228;
+    const effectiveWarmupTicks = isMassive
+      ? Math.min(tuning.warmupTicks, 20)
+      : isHuge
+        ? Math.min(tuning.warmupTicks, 30)
+        : isLarge
+          ? Math.min(tuning.warmupTicks, 50)
+          : tuning.warmupTicks;
+    // Higher theta = faster Barnes-Hut approximation (less accuracy, more speed)
+    const chargeTheta = isMassive ? 1.4 : isHuge ? 1.2 : isLarge ? 1.0 : 0.9;
+    // Longer link distance spreads connected nodes further apart
+    const effectiveLinkDistance = isMassive
+      ? tuning.linkDistance * 0.6
+      : isHuge
+        ? tuning.linkDistance * 0.75
+        : isLarge
+          ? tuning.linkDistance * 0.9
+          : tuning.linkDistance;
+    const effectiveCollisionRadius = isMassive
+      ? NODE_RADIUS * 2.5
+      : isHuge
+        ? NODE_RADIUS * 2.2
+        : isLarge
+          ? NODE_RADIUS * 2.0
+          : NODE_RADIUS + tuning.collisionPadding;
+
+    const chargeForce = d3
+      .forceManyBody<GraphNode>()
+      .strength(effectiveChargeStrength)
+      .theta(chargeTheta)
+      // Allow charge to act over a longer range so nodes spread across the whole canvas
+      .distanceMax(Math.max(width, height) * 1.5);
+
     const simulation = d3
       .forceSimulation<GraphNode>(graphData.nodes)
       .randomSource(d3.randomLcg(0.42))
+      .alphaDecay(alphaDecay)
+      .alphaMin(0.005)
+      .velocityDecay(isMassive ? 0.55 : 0.5)
       .force(
         "link",
         d3
           .forceLink<GraphNode, GraphEdge>(graphData.edges)
           .id((d) => d.id)
-          .distance(tuning.linkDistance),
+          .distance(effectiveLinkDistance),
       )
-      .force("charge", d3.forceManyBody().strength(tuning.chargeStrength))
-      .force("center", d3.forceCenter(width / 2, height / 2))
+      .force("charge", chargeForce)
+      // Collision prevents overlap but is lighter than charge
+      .force("collide", d3.forceCollide<GraphNode>().radius(effectiveCollisionRadius).iterations(1))
+      // Weak centering — just enough to keep disconnected nodes from flying off
+      .force("x", d3.forceX(width / 2).strength(isLarge ? 0.02 : tuning.centerStrength))
+      .force("y", d3.forceY(height / 2).strength(isLarge ? 0.02 : tuning.centerStrength))
+      // Radial force organizes nodes into a circular layout around the center
       .force(
-        "collide",
-        d3.forceCollide().radius((d) => getRadius(d as GraphNode) + tuning.collisionPadding),
-      )
-      .force("x", d3.forceX(width / 2).strength(tuning.centerStrength))
-      .force("y", d3.forceY(height / 2).strength(tuning.centerStrength))
-      .force("radial", d3.forceRadial(Math.min(width, height) * tuning.radialRadiusFactor, width / 2, height / 2).strength(tuning.radialStrength));
+        "radial",
+        d3
+          .forceRadial<GraphNode>(Math.min(width, height) * tuning.radialRadiusFactor, width / 2, height / 2)
+          .strength(isMassive ? 0 : isHuge ? tuning.radialStrength * 0.4 : isLarge ? tuning.radialStrength * 0.6 : tuning.radialStrength),
+      );
 
     const tooltip = d3
       .select(containerRef.current)
@@ -643,17 +741,37 @@ export function ForceGraphView({
       .style("opacity", "0")
       .style("z-index", "20");
 
+    // Default stroke opacity per edge — managed here, NOT on the parent <g>,
+    // so that the selection handler can override per-element without multiplicative issues.
+    const defaultEdgeOpacity = isMassive ? 0.35 : isHuge ? 0.55 : 0.75;
+    const defaultEdgeWidth = isMassive ? 0.8 : isHuge ? 1.5 : 2;
+
     const link = g
       .append("g")
       .attr("fill", "none")
-      .attr("stroke-opacity", 0.5)
       .selectAll("path")
       .data(graphData.edges)
       .join("path")
-      .attr("stroke", (d) => edgeTypeConfig[d.type as EdgesTypeOptions]?.color || "#999")
-      .attr("stroke-width", 1.5)
+      .attr("class", "graph-edge")
+      .attr("stroke", (d) => {
+        const cfg = edgeTypeConfig[d.type as EdgesTypeOptions];
+        return cfg ? (isDark ? cfg.darkColor : cfg.color) : isDark ? "#94a3b8" : "#475569";
+      })
+      .attr("stroke-width", defaultEdgeWidth)
+      .attr("stroke-opacity", defaultEdgeOpacity)
       .attr("d", (d) => buildLinkPath(d))
-      .attr("marker-end", (d) => `url(#force-arrow-${d.type})`);
+      .attr("marker-end", isMassive ? null : (d) => `url(#force-arrow-${d.type})`);
+
+    // Throttled tooltip position update
+    let tooltipRafId: number | null = null;
+    const throttledTooltipMove = (event: MouseEvent) => {
+      if (tooltipRafId !== null) return;
+      tooltipRafId = requestAnimationFrame(() => {
+        tooltipRafId = null;
+        const [x, y] = d3.pointer(event, containerRef.current);
+        tooltip.style("left", `${x + 12}px`).style("top", `${y + 12}px`);
+      });
+    };
 
     const node = g
       .append("g")
@@ -675,36 +793,45 @@ export function ForceGraphView({
         tooltip.style("left", `${x + 12}px`).style("top", `${y + 12}px`);
       })
       .on("mousemove", (event) => {
-        const [x, y] = d3.pointer(event, containerRef.current);
-        tooltip.style("left", `${x + 12}px`).style("top", `${y + 12}px`);
+        throttledTooltipMove(event);
       })
       .on("mouseleave", () => {
         tooltip.style("opacity", "0");
+        if (tooltipRafId !== null) {
+          cancelAnimationFrame(tooltipRafId);
+          tooltipRafId = null;
+        }
       })
       .on("click", (event, d) => {
         event.stopPropagation();
-        onSelectNode(d.id);
+        onSelectNodeRef.current(d.id);
+        const t = tuningRef.current;
         const currentScale = zoomTransformRef.current.k || 1;
-        const targetScale = Math.max(currentScale, tuning.focusZoom);
+        const targetScale = Math.max(currentScale, t.focusZoom);
         const nodeX = d.x ?? width / 2;
         const nodeY = d.y ?? height / 2;
         const transform = d3.zoomIdentity.translate(width / 2 - nodeX * targetScale, height / 2 - nodeY * targetScale).scale(targetScale);
-        svg.transition().duration(tuning.fitDuration).call(zoom.transform, transform);
+        // Skip zoom animation for large graphs
+        if (isLarge) {
+          svg.call(zoom.transform, transform);
+        } else {
+          svg.transition().duration(t.fitDuration).call(zoom.transform, transform);
+        }
       });
 
     node
       .append("circle")
       .attr("class", "node-ring")
-      .attr("r", (d) => getRadius(d) + 3)
+      .attr("r", NODE_RADIUS + 3)
       .attr("fill", "none")
-      .attr("stroke", (d) => (d.id === selectedNodeId ? (isDark ? "#e2e8f0" : "#1e293b") : "none"))
+      .attr("stroke", "none")
       .attr("stroke-width", 2)
       .attr("stroke-dasharray", "4 2");
 
     node
       .append("circle")
       .attr("class", "node-body")
-      .attr("r", (d) => getRadius(d))
+      .attr("r", NODE_RADIUS)
       .attr("fill", (d) => {
         if (d.type === NodesTypeOptions.upload && d.uploadType) {
           return isDark ? uploadTypeConfig[d.uploadType]?.darkColor || "#60a5fa" : uploadTypeConfig[d.uploadType]?.color || "#3b82f6";
@@ -713,191 +840,80 @@ export function ForceGraphView({
         return isDark ? cfg?.darkColor || "#6b7280" : cfg?.color || "#6b7280";
       })
       .attr("stroke", isDark ? "#1e293b" : "#ffffff")
-      .attr("stroke-width", 2);
+      .attr("stroke-width", isMassive ? 1 : 2);
 
-    node.each(function (d) {
-      const iconPath = getIconPath(d);
-      if (!iconPath) return;
-      const iconGroup = d3.select(this).append("g").attr("transform", "translate(-8.4, -8.4) scale(0.7)");
+    // Skip icons for huge+ graphs — each icon is a complex SVG path that adds to paint cost
+    if (!isHuge) {
+      node.each(function (d) {
+        const iconPath = getIconPath(d);
+        if (!iconPath) return;
+        const iconGroup = d3.select(this).append("g").attr("class", "node-icon").attr("transform", "translate(-8.4, -8.4) scale(0.7)");
 
-      iconGroup
-        .append("path")
-        .attr("d", iconPath)
-        .attr("fill", "none")
-        .attr("stroke", "#ffffff")
-        .attr("stroke-width", 2)
-        .attr("stroke-linecap", "round")
-        .attr("stroke-linejoin", "round");
-    });
-
-    node
-      .append("text")
-      .text((d) => d.displayLabel)
-      .attr("x", 0)
-      .attr("y", (d) => getRadius(d) + 14)
-      .attr("text-anchor", "middle")
-      .attr("dominant-baseline", "central")
-      .attr("font-size", "12px")
-      .attr("font-weight", "600")
-      .attr("fill", isDark ? "#e2e8f0" : "#334155")
-      .attr("stroke", isDark ? "#0f172a" : "#ffffff")
-      .attr("stroke-width", 3)
-      .attr("paint-order", "stroke")
-      .style("pointer-events", "none");
-
-    node
-      .append("text")
-      .text((d) => {
-        if (d.type === NodesTypeOptions.upload && d.uploadType) {
-          return getUploadTypeLabel(d.uploadType) || formatLabel(d.uploadType);
-        }
-        return formatLabel(d.type);
-      })
-      .attr("x", 0)
-      .attr("y", (d) => getRadius(d) + 26)
-      .attr("text-anchor", "middle")
-      .attr("dominant-baseline", "central")
-      .attr("font-size", "9px")
-      .attr("font-weight", "500")
-      .attr("fill", (d) => {
-        if (d.type === NodesTypeOptions.upload && d.uploadType) {
-          return isDark ? uploadTypeConfig[d.uploadType]?.darkColor || "#93c5fd" : uploadTypeConfig[d.uploadType]?.color || "#3b82f6";
-        }
-        const cfg = nodeTypeConfig[d.type];
-        return isDark ? cfg?.darkColor || "#9ca3af" : cfg?.color || "#6b7280";
-      })
-      .attr("stroke", isDark ? "#020617" : "#ffffff")
-      .attr("stroke-width", 2.2)
-      .attr("paint-order", "stroke")
-      .style("pointer-events", "none");
-
-    const connectedNodeIds = new Set<string>();
-    const connectedEdgeKeys = new Set<string>();
-    if (selectedNodeId) {
-      connectedNodeIds.add(selectedNodeId);
-      for (const edge of graphData.edges) {
-        const sourceId = typeof edge.source === "string" ? edge.source : edge.source.id;
-        const targetId = typeof edge.target === "string" ? edge.target : edge.target.id;
-        if (sourceId === selectedNodeId || targetId === selectedNodeId) {
-          connectedNodeIds.add(sourceId);
-          connectedNodeIds.add(targetId);
-          connectedEdgeKeys.add(`${sourceId}:${targetId}`);
-          connectedEdgeKeys.add(`${targetId}:${sourceId}`);
-        }
-      }
+        iconGroup
+          .append("path")
+          .attr("d", iconPath)
+          .attr("fill", "none")
+          .attr("stroke", "#ffffff")
+          .attr("stroke-width", 2)
+          .attr("stroke-linecap", "round")
+          .attr("stroke-linejoin", "round");
+      });
     }
 
-    const inactiveOpacity = 0.18;
-
-    link
-      .style("opacity", (d) => {
-        if (!selectedNodeId) return 0.5;
-        const sourceId = typeof d.source === "string" ? d.source : d.source.id;
-        const targetId = typeof d.target === "string" ? d.target : d.target.id;
-        return connectedEdgeKeys.has(`${sourceId}:${targetId}`) ? 0.95 : inactiveOpacity;
-      })
-      .attr("stroke-width", (d) => {
-        if (!selectedNodeId) return 1.5;
-        const sourceId = typeof d.source === "string" ? d.source : d.source.id;
-        const targetId = typeof d.target === "string" ? d.target : d.target.id;
-        return connectedEdgeKeys.has(`${sourceId}:${targetId}`) ? 2.8 : 1.2;
-      });
-
-    node
-      .style("opacity", (d) => {
-        if (!selectedNodeId) return 1;
-        return connectedNodeIds.has(d.id) ? 1 : inactiveOpacity;
-      })
-      .each(function (d) {
-        const body = d3.select(this).select<SVGCircleElement>(".node-body");
-        const ring = d3.select(this).select<SVGCircleElement>(".node-ring");
-        if (!selectedNodeId) {
-          body.attr("stroke-width", 2);
-          ring.attr("stroke", "none");
-          return;
-        }
-        if (d.id === selectedNodeId) {
-          body.attr("stroke-width", 3);
-          ring.attr("stroke", isDark ? "#f8fafc" : "#0f172a").attr("stroke-width", 2.5);
-          return;
-        }
-        if (connectedNodeIds.has(d.id)) {
-          body.attr("stroke-width", 2.5);
-          ring.attr("stroke", isDark ? "#94a3b8" : "#475569").attr("stroke-width", 1.5);
-          return;
-        }
-        body.attr("stroke-width", 1.5);
-        ring.attr("stroke", "none");
-      });
-
-    if (selectedNodeId) {
-      link
-        .filter((d) => {
-          const sourceId = typeof d.source === "string" ? d.source : d.source.id;
-          const targetId = typeof d.target === "string" ? d.target : d.target.id;
-          return connectedEdgeKeys.has(`${sourceId}:${targetId}`);
-        })
-        .raise();
-
-      node.filter((d) => connectedNodeIds.has(d.id) && d.id !== selectedNodeId).raise();
-    }
-
-    if (selectedNodeId) {
+    // Skip labels entirely for massive graphs at initial render (LOD will show them when zoomed in)
+    if (!isMassive) {
       node
-        .filter((d) => d.id === selectedNodeId)
-        .raise()
-        .each(function (d) {
-          const enrichedNode = nodeDataMapRef.current.get(d.id);
-          if (!enrichedNode) return;
-
-          const r = getRadius(d);
-          const cardWidth = 220;
-          const fo = d3
-            .select(this)
-            .append("foreignObject")
-            .attr("x", -(cardWidth / 2))
-            .attr("y", r + 32)
-            .attr("width", cardWidth)
-            .attr("height", 300)
-            .style("overflow", "visible");
-
-          const foDiv = fo
-            .append("xhtml:div")
-            .html(buildExpandedHTML(enrichedNode, isDark))
-            .on("click", (event: MouseEvent) => {
-              event.stopPropagation();
-            });
-
-          foDiv.select("[data-preview-action]").on("click", (event: MouseEvent) => {
-            event.stopPropagation();
-            event.preventDefault();
-            if (!onPreviewNode) return;
-            const rd = enrichedNode.record_data as Record<string, unknown> | undefined;
-            const nodeType = enrichedNode.type as NodesTypeOptions;
-            const request: NodePreviewRequest = {
-              nodeId: enrichedNode.id,
-              nodeType,
-              recordData: rd || undefined,
-            };
-            if (nodeType === NodesTypeOptions.upload) {
-              request.uploadId = enrichedNode.record_id;
-              request.uploadTitle = (rd?.title as string) || enrichedNode.label || "Document";
-            } else if (rd?.upload) {
-              request.uploadId = rd.upload as string;
-              request.pageNumber = rd.page_number as number | undefined;
-            }
-            onPreviewNode(request);
-          });
-        });
-
-      node.filter((d) => d.id === selectedNodeId).raise();
+        .append("text")
+        .attr("class", "node-label")
+        .text((d) => d.displayLabel)
+        .attr("x", 0)
+        .attr("y", NODE_RADIUS + 14)
+        .attr("text-anchor", "middle")
+        .attr("dominant-baseline", "central")
+        .attr("font-size", isHuge ? "10px" : "12px")
+        .attr("font-weight", "600")
+        .attr("fill", isDark ? "#e2e8f0" : "#334155")
+        .attr("stroke", isDark ? "#0f172a" : "#ffffff")
+        .attr("stroke-width", isHuge ? 2 : 3)
+        .attr("paint-order", "stroke")
+        .style("pointer-events", "none");
     }
 
-    // Store refs for filter visibility updates
+    // Skip sublabels for large+ graphs — reduces DOM elements significantly
+    if (!isLarge) {
+      node
+        .append("text")
+        .attr("class", "node-sublabel")
+        .text((d) => {
+          if (d.type === NodesTypeOptions.upload && d.uploadType) {
+            return getUploadTypeLabel(d.uploadType) || formatLabel(d.uploadType);
+          }
+          return formatLabel(d.type);
+        })
+        .attr("x", 0)
+        .attr("y", NODE_RADIUS + 26)
+        .attr("text-anchor", "middle")
+        .attr("dominant-baseline", "central")
+        .attr("font-size", "9px")
+        .attr("font-weight", "500")
+        .attr("fill", (d) => {
+          if (d.type === NodesTypeOptions.upload && d.uploadType) {
+            return isDark ? uploadTypeConfig[d.uploadType]?.darkColor || "#93c5fd" : uploadTypeConfig[d.uploadType]?.color || "#3b82f6";
+          }
+          const cfg = nodeTypeConfig[d.type];
+          return isDark ? cfg?.darkColor || "#9ca3af" : cfg?.color || "#6b7280";
+        })
+        .attr("stroke", isDark ? "#020617" : "#ffffff")
+        .attr("stroke-width", 2.2)
+        .attr("paint-order", "stroke")
+        .style("pointer-events", "none");
+    }
+
+    // Store refs for filter-visibility updates and the selection effect
     nodeSelectionRef.current = node;
     linkSelectionRef.current = link;
 
-    // Apply current filter visibility without affecting simulation
+    // Apply current filter visibility
     const hiddenIds = visibleHiddenIds;
     node.style("display", (d: GraphNode) => (hiddenIds.has(d.id) ? "none" : null));
     link.style("display", (d: GraphEdge) => {
@@ -914,18 +930,24 @@ export function ForceGraphView({
     const autoFitKey = `${graphData.nodes.length}:${graphData.edges.length}:${hiddenNodeKey}:${hiddenEdgeKey}`;
     const shouldAutoFit = lastAutoFitKeyRef.current !== autoFitKey;
 
+    // Warmup: tick handler is not registered yet so no DOM updates happen here
     simulation.stop();
-    const warmupTicks = Math.max(0, Math.floor(tuning.warmupTicks));
-    for (let i = 0; i < warmupTicks; i++) {
+    const warmupCount = Math.max(0, Math.floor(effectiveWarmupTicks));
+    for (let i = 0; i < warmupCount; i++) {
       simulation.tick();
     }
 
-    link
-      .attr("x1", (d) => (d.source as GraphNode).x!)
-      .attr("y1", (d) => (d.source as GraphNode).y!)
-      .attr("x2", (d) => (d.target as GraphNode).x!)
-      .attr("y2", (d) => (d.target as GraphNode).y!);
-
+    // Initial DOM render after warmup positions are computed
+    if (isMassive) {
+      link.attr("d", (d) => {
+        const source = typeof d.source === "string" ? undefined : d.source;
+        const target = typeof d.target === "string" ? undefined : d.target;
+        if (!source || !target) return "";
+        return `M ${source.x ?? 0} ${source.y ?? 0} L ${target.x ?? 0} ${target.y ?? 0}`;
+      });
+    } else {
+      link.attr("d", (d) => buildLinkPath(d));
+    }
     node.attr("transform", (d) => `translate(${d.x},${d.y})`);
 
     if (shouldAutoFit) {
@@ -935,18 +957,192 @@ export function ForceGraphView({
       svg.call(zoom.transform, zoomTransformRef.current);
     }
 
-    simulation.alpha(0.7).restart();
+    // Apply LOD based on current zoom after fit
+    applyLOD(zoomTransformRef.current.k);
+
+    // Build the selection-state function, closed over isDark and local D3 selections.
+    // Called immediately below and again cheaply from the selection effect on node clicks.
+    applySelectionRef.current = (selId: string | null) => {
+      // Build adjacency from the selected node
+      const connectedNodeIds = new Set<string>();
+      const connectedEdgeKeys = new Set<string>();
+      if (selId) {
+        connectedNodeIds.add(selId);
+        // Use adjacency map for O(degree) lookup instead of scanning all edges
+        const neighbors = adjacencyMapRef.current.get(selId);
+        if (neighbors) {
+          for (const nid of neighbors) {
+            connectedNodeIds.add(nid);
+            connectedEdgeKeys.add(`${selId}:${nid}`);
+            connectedEdgeKeys.add(`${nid}:${selId}`);
+          }
+        }
+      }
+
+      // Remove previous expanded card if any
+      if (expandedCardRef.current) {
+        expandedCardRef.current.remove();
+        expandedCardRef.current = null;
+      }
+
+      const inactiveNodeOpacity = 0.12;
+      const inactiveEdgeOpacity = 0.04;
+
+      link
+        .attr("stroke-opacity", (d) => {
+          if (!selId) return defaultEdgeOpacity;
+          const sourceId = typeof d.source === "string" ? d.source : (d.source as GraphNode).id;
+          const targetId = typeof d.target === "string" ? d.target : (d.target as GraphNode).id;
+          return connectedEdgeKeys.has(`${sourceId}:${targetId}`) ? 0.9 : inactiveEdgeOpacity;
+        })
+        .attr("stroke-width", (d) => {
+          if (!selId) return defaultEdgeWidth;
+          const sourceId = typeof d.source === "string" ? d.source : (d.source as GraphNode).id;
+          const targetId = typeof d.target === "string" ? d.target : (d.target as GraphNode).id;
+          return connectedEdgeKeys.has(`${sourceId}:${targetId}`) ? 2.8 : defaultEdgeWidth;
+        });
+
+      node
+        .style("opacity", (d) => {
+          if (!selId) return 1;
+          return connectedNodeIds.has(d.id) ? 1 : inactiveNodeOpacity;
+        })
+        .each(function (d) {
+          const nodeGroup = d3.select(this);
+          const body = nodeGroup.select<SVGCircleElement>(".node-body");
+          const ring = nodeGroup.select<SVGCircleElement>(".node-ring");
+          if (!selId) {
+            body.attr("r", NODE_RADIUS).attr("stroke-width", 2);
+            ring.attr("stroke", "none");
+            return;
+          }
+          if (d.id === selId) {
+            body.attr("r", NODE_RADIUS + 4).attr("stroke-width", 3);
+            ring
+              .attr("r", NODE_RADIUS + 7)
+              .attr("stroke", isDark ? "#f8fafc" : "#0f172a")
+              .attr("stroke-width", 2.5);
+            return;
+          }
+          if (connectedNodeIds.has(d.id)) {
+            body.attr("r", NODE_RADIUS).attr("stroke-width", 2.5);
+            ring
+              .attr("r", NODE_RADIUS + 3)
+              .attr("stroke", isDark ? "#94a3b8" : "#475569")
+              .attr("stroke-width", 1.5);
+            return;
+          }
+          body.attr("r", NODE_RADIUS).attr("stroke-width", 1.5);
+          ring.attr("stroke", "none");
+        });
+
+      if (selId) {
+        if (!isLarge) {
+          link
+            .filter((d) => {
+              const sourceId = typeof d.source === "string" ? d.source : (d.source as GraphNode).id;
+              const targetId = typeof d.target === "string" ? d.target : (d.target as GraphNode).id;
+              return connectedEdgeKeys.has(`${sourceId}:${targetId}`);
+            })
+            .raise();
+
+          node.filter((d) => connectedNodeIds.has(d.id) && d.id !== selId).raise();
+        }
+
+        node
+          .filter((d) => d.id === selId)
+          .raise()
+          .each(function (d) {
+            const enrichedNode = nodeDataMapRef.current.get(d.id);
+            if (!enrichedNode) return;
+
+            const cardWidth = 220;
+            const fo = d3
+              .select(this)
+              .append("foreignObject")
+              .attr("x", -(cardWidth / 2))
+              .attr("y", NODE_RADIUS + 32)
+              .attr("width", cardWidth)
+              .attr("height", 300)
+              .style("overflow", "visible");
+
+            expandedCardRef.current = fo;
+
+            const foDiv = fo
+              .append("xhtml:div")
+              .html(buildExpandedHTML(enrichedNode, isDark))
+              .on("click", (event: MouseEvent) => {
+                event.stopPropagation();
+              });
+
+            foDiv.select("[data-preview-action]").on("click", (event: MouseEvent) => {
+              event.stopPropagation();
+              event.preventDefault();
+              const onPreview = onPreviewNodeRef.current;
+              if (!onPreview) return;
+              const rd = enrichedNode.record_data as Record<string, unknown> | undefined;
+              const nodeType = enrichedNode.type as NodesTypeOptions;
+              const request: NodePreviewRequest = {
+                nodeId: enrichedNode.id,
+                nodeType,
+                recordData: rd || undefined,
+              };
+              if (nodeType === NodesTypeOptions.upload) {
+                request.uploadId = enrichedNode.record_id;
+                request.uploadTitle = (rd?.title as string) || enrichedNode.label || "Document";
+              } else if (rd?.upload) {
+                request.uploadId = rd.upload as string;
+                request.pageNumber = rd.page_number as number | undefined;
+              }
+              onPreview(request);
+            });
+          });
+
+        node.filter((d) => d.id === selId).raise();
+      }
+    };
+
+    // Apply current selection state immediately (no re-render needed)
+    applySelectionRef.current(selectedNodeIdRef.current);
+
+    simulation.alpha(isLarge ? 0.5 : 0.7).restart();
+
+    // Throttle DOM updates — for large graphs, skip frames more aggressively
+    let rafId: number | null = null;
+    let ticksSinceRender = 0;
+    // For large graphs, only render every Nth tick to reduce DOM thrashing
+    const renderEveryNTicks = isMassive ? 4 : isHuge ? 3 : isLarge ? 2 : 1;
 
     simulation.on("tick", () => {
-      link.attr("d", (d) => buildLinkPath(d));
-
-      node.attr("transform", (d) => `translate(${d.x},${d.y})`);
-
+      // Always update position cache so drag/zoom restore is accurate
       for (const n of graphData.nodes) {
         if (Number.isFinite(n.x) && Number.isFinite(n.y)) {
           nodePositionsRef.current.set(n.id, { x: n.x as number, y: n.y as number });
         }
       }
+
+      ticksSinceRender++;
+
+      // Skip DOM update if a frame is already pending or we haven't accumulated enough ticks
+      if (rafId !== null) return;
+      if (ticksSinceRender < renderEveryNTicks) return;
+
+      ticksSinceRender = 0;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        // For massive graphs, use simple line paths instead of curves during simulation
+        if (isMassive) {
+          link.attr("d", (d) => {
+            const source = typeof d.source === "string" ? undefined : d.source;
+            const target = typeof d.target === "string" ? undefined : d.target;
+            if (!source || !target) return "";
+            return `M ${source.x ?? 0} ${source.y ?? 0} L ${target.x ?? 0} ${target.y ?? 0}`;
+          });
+        } else {
+          link.attr("d", (d) => buildLinkPath(d));
+        }
+        node.attr("transform", (d) => `translate(${d.x},${d.y})`);
+      });
     });
 
     function dragstarted(event: d3.D3DragEvent<any, GraphNode, any>, d: GraphNode) {
@@ -964,16 +1160,23 @@ export function ForceGraphView({
       if (!event.active) simulation.alphaTarget(0);
       d.fx = null;
       d.fy = null;
-      simulation.alpha(0.3).restart();
     }
 
     return () => {
       simulation.stop();
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      if (tooltipRafId !== null) cancelAnimationFrame(tooltipRafId);
       tooltip.remove();
       nodeSelectionRef.current = null;
       linkSelectionRef.current = null;
+      applySelectionRef.current = null;
     };
-  }, [graphData, onSelectNode, theme, selectedNodeId, tuning]);
+  }, [graphData, theme, tuning]);
+
+  // Cheap selection effect: mutate existing D3 selections without rebuilding the SVG
+  useEffect(() => {
+    applySelectionRef.current?.(selectedNodeId);
+  }, [selectedNodeId]);
 
   return (
     <div ref={containerRef} className="w-full h-full bg-background relative overflow-hidden">

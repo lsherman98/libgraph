@@ -158,11 +158,50 @@ func (p *Parser) parseEPUB(fileBytes []byte, filename string, onPage func(Page) 
 	pdfName := strings.TrimSuffix(safeFilename, filepath.Ext(safeFilename)) + ".pdf"
 	pdfPath := filepath.Join(tmpDir, pdfName)
 
-	cmd := exec.Command("ebook-convert", inputPath, pdfPath)
+	ebookConvertCmd, err := findEbookConvertCommand()
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := exec.Command(ebookConvertCmd, inputPath, pdfPath)
+	cmd.Env = append(os.Environ(),
+		"QT_QPA_PLATFORM=offscreen",
+		"QT_OPENGL=software",
+		"QT_QUICK_BACKEND=software",
+		"LIBGL_ALWAYS_SOFTWARE=1",
+	)
+
+	if os.Geteuid() == 0 {
+		runtimeDir := filepath.Join(tmpDir, "xdg-runtime")
+		if err := os.MkdirAll(runtimeDir, 0700); err != nil {
+			return nil, err
+		}
+
+		cmd.Env = append(cmd.Env,
+			"XDG_RUNTIME_DIR="+runtimeDir,
+			"QTWEBENGINE_DISABLE_SANDBOX=1",
+			"QTWEBENGINE_CHROMIUM_FLAGS=--no-sandbox --disable-gpu --disable-gpu-compositing",
+		)
+	}
+
+	var stdout bytes.Buffer
 	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return nil, err
+		stderrMsg := strings.TrimSpace(stderr.String())
+		stdoutMsg := strings.TrimSpace(stdout.String())
+
+		details := stderrMsg
+		if details == "" {
+			details = stdoutMsg
+		}
+
+		if details == "" {
+			return nil, fmt.Errorf("epub conversion failed: %w", err)
+		}
+
+		return nil, fmt.Errorf("epub conversion failed: %w: %s", err, truncateCommandOutput(details, 1000))
 	}
 
 	pdfBytes, err := os.ReadFile(pdfPath)
@@ -171,6 +210,14 @@ func (p *Parser) parseEPUB(fileBytes []byte, filename string, onPage func(Page) 
 	}
 
 	return p.parsePDF(pdfBytes, pdfName, onPage)
+}
+
+func findEbookConvertCommand() (string, error) {
+	if path, err := exec.LookPath("ebook-convert"); err == nil {
+		return path, nil
+	}
+
+	return "", fmt.Errorf("epub parsing requires calibre CLI: install calibre (provides 'ebook-convert')")
 }
 
 func (p *Parser) parsePlainText(fileBytes []byte, onPage func(Page) error) (*ParseResult, error) {
@@ -285,6 +332,18 @@ func findLiteParseCommand() (string, error) {
 	}
 
 	return "", fmt.Errorf("pdf parsing requires liteparse CLI: install @llamaindex/liteparse (provides 'lit')")
+}
+
+func truncateCommandOutput(s string, maxLen int) string {
+	if maxLen <= 0 || len(s) <= maxLen {
+		return s
+	}
+
+	if maxLen <= 3 {
+		return s[:maxLen]
+	}
+
+	return s[:maxLen-3] + "..."
 }
 
 func sanitizeFilename(name string) string {

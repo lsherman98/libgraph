@@ -36,6 +36,7 @@ var audioExtensions = map[string]bool{
 	".wav":  true,
 	".m4a":  true,
 	".ogg":  true,
+	".opus": true,
 	".flac": true,
 	".aac":  true,
 	".wma":  true,

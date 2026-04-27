@@ -43,9 +43,17 @@ func Init(app *pocketbase.PocketBase) error {
 	return nil
 }
 
-func Search(app core.App, query string, uploadIDs []string, k int) ([]SearchResult, error) {
+func Search(app core.App, query string, uploadIDs []string, k int, applyUploadFilter bool, userID string) ([]SearchResult, error) {
 	if query == "" {
 		return nil, fmt.Errorf("vector_search: query cannot be empty")
+	}
+
+	if userID == "" {
+		return nil, fmt.Errorf("vector_search: userID is required")
+	}
+
+	if applyUploadFilter && len(uploadIDs) == 0 {
+		return []SearchResult{}, nil
 	}
 
 	vector, err := embedContent(client, genai.TaskTypeRetrievalQuery, "", genai.Text(query))
@@ -60,34 +68,32 @@ func Search(app core.App, query string, uploadIDs []string, k int) ([]SearchResu
 
 	params := dbx.Params{
 		"embedding": string(json),
+		"userID":    userID,
 	}
 
 	var stmt strings.Builder
 
+	placeholders := make([]string, 0, len(uploadIDs))
 	if len(uploadIDs) > 0 {
-		placeholders := make([]string, len(uploadIDs))
 		for i, uid := range uploadIDs {
 			key := fmt.Sprintf("uid%d", i)
-			placeholders[i] = "{:" + key + "}"
+			placeholders = append(placeholders, "{:"+key+"}")
 			params[key] = uid
 		}
-
-		fmt.Fprintf(&stmt, "SELECT dc.id, dc.content, dc.upload, dc.page_number, dc.chunk_index, u.title, "+
-			"vec_distance_cosine((SELECT e.embedding FROM %s e WHERE e.id = dc.vector_id), {:embedding}) as distance ",
-			embeddingsTable)
-		stmt.WriteString("FROM document_chunks dc ")
-		stmt.WriteString("JOIN uploads u ON dc.upload = u.id ")
-		stmt.WriteString("WHERE dc.vector_id IS NOT NULL AND dc.vector_id != 0 ")
-		stmt.WriteString("AND dc.upload IN (" + strings.Join(placeholders, ", ") + ") ")
-		fmt.Fprintf(&stmt, "ORDER BY distance ASC LIMIT %d;", k)
-	} else {
-		fmt.Fprintf(&stmt, "WITH sub(id, distance) AS MATERIALIZED (SELECT id, distance FROM %s WHERE embedding MATCH {:embedding} AND k = %d) ", embeddingsTable, k)
-		stmt.WriteString("SELECT dc.id, sub.distance, dc.content, dc.upload, dc.page_number, dc.chunk_index, u.title ")
-		stmt.WriteString("FROM sub ")
-		stmt.WriteString("JOIN document_chunks dc ON dc.vector_id = sub.id ")
-		stmt.WriteString("JOIN uploads u ON dc.upload = u.id ")
-		stmt.WriteString("ORDER BY sub.distance ASC;")
 	}
+
+	// Calculate distance manually by joining document_chunks to vec0 table.
+	// This ensures we only load embeddings for the filtered user/uploads,
+	// avoiding a full-table scan on the vector table which can be slow for millions of rows.
+	stmt.WriteString("SELECT dc.id, vec_distance_cosine(v.embedding, {:embedding}) as distance, dc.content, dc.upload, dc.page_number, dc.chunk_index, u.title ")
+	stmt.WriteString("FROM document_chunks dc ")
+	stmt.WriteString("JOIN uploads u ON dc.upload = u.id ")
+	fmt.Fprintf(&stmt, "JOIN %s v ON v.id = dc.vector_id ", embeddingsTable)
+	stmt.WriteString("WHERE u.user = {:userID} AND dc.vector_id IS NOT NULL AND dc.vector_id != 0 AND u.type != 'transcript'")
+	if len(uploadIDs) > 0 {
+		stmt.WriteString(" AND dc.upload IN (" + strings.Join(placeholders, ", ") + ")")
+	}
+	fmt.Fprintf(&stmt, " ORDER BY distance ASC LIMIT %d;", k)
 
 	finalSQL := stmt.String()
 

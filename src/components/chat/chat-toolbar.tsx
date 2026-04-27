@@ -1,11 +1,11 @@
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PanelLeftClose, MessagesSquare, SlidersHorizontal, MessageSquare, Search, RotateCcw } from "lucide-react";
+import { PanelLeftClose, MessagesSquare, SlidersHorizontal, MessageSquare, Search, RotateCcw, FileSearch } from "lucide-react";
 
 interface ChatToolbarProps {
-  mode: "chat" | "search";
-  onModeChange: (mode: "chat" | "search") => void;
+  mode: "chat" | "search" | "fts";
+  onModeChange: (mode: "chat" | "search" | "fts") => void;
   isSidebarOpen: boolean;
   onToggleSidebar: () => void;
   isFiltersPanelOpen: boolean;
@@ -58,7 +58,7 @@ export function ChatToolbar({
         )}
       </div>
       <div className="flex-1 flex justify-center">
-        <Tabs value={mode} onValueChange={(v) => onModeChange(v as "chat" | "search")} className="h-8">
+        <Tabs value={mode} onValueChange={(v) => onModeChange(v as "chat" | "search" | "fts")} className="h-8">
           <TabsList className="h-8 bg-transparent p-0 gap-1">
             <TabsTrigger value="chat" className="h-7 px-2.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">
               <MessageSquare className="h-3 w-3 mr-1.5" />
@@ -67,6 +67,10 @@ export function ChatToolbar({
             <TabsTrigger value="search" className="h-7 px-2.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">
               <Search className="h-3 w-3 mr-1.5" />
               Search
+            </TabsTrigger>
+            <TabsTrigger value="fts" className="h-7 px-2.5 text-xs data-[state=active]:bg-muted data-[state=active]:shadow-none">
+              <FileSearch className="h-3 w-3 mr-1.5" />
+              Full text
             </TabsTrigger>
           </TabsList>
         </Tabs>

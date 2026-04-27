@@ -15,8 +15,8 @@ const (
 )
 
 const (
-	queuePollInterval = 60 * time.Second
-	embedPollInterval = 120 * time.Second
+	queuePollInterval = 10 * time.Second
+	embedPollInterval = 10 * time.Second
 )
 
 type Worker struct {
@@ -29,11 +29,12 @@ type Worker struct {
 type JobHandler func(app core.App, job *core.Record) error
 
 type Handlers struct {
-	UploadParse      JobHandler
-	ChunkGenerate    JobHandler
-	PageSummarize    JobHandler
-	ChunkEmbedSubmit JobHandler
-	ChunkEmbedPoll   JobHandler
+	UploadParse          JobHandler
+	ChunkGenerate        JobHandler
+	ChunkGenerateSuccess JobHandler
+	PageSummarize        JobHandler
+	ChunkEmbedSubmit     JobHandler
+	ChunkEmbedPoll       JobHandler
 }
 
 type EnqueueRequest struct {

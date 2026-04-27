@@ -75,8 +75,8 @@ export function ProjectsTab() {
   };
 
   return (
-    <>
-      <div className="flex items-center justify-end mb-4">
+    <div className="flex flex-col min-h-0 flex-1">
+      <div className="flex items-center justify-end mb-4 shrink-0">
         <Dialog open={newProjectOpen} onOpenChange={setNewProjectOpen}>
           <DialogTrigger asChild>
             <Button>
@@ -119,74 +119,76 @@ export function ProjectsTab() {
       ) : projects?.length === 0 ? (
         <ProjectsEmptyState onCreateClick={() => setNewProjectOpen(true)} />
       ) : (
-        <Card>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[40%]">Project</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Updated</TableHead>
-                <TableHead className="w-12.5"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {projects?.map((project) => (
-                <TableRow
-                  key={project.id}
-                  className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => navigate({ to: "/workspace", search: { id: project.id, type: "project" } })}
-                >
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
-                        <PenLine className="h-5 w-5 text-muted-foreground" />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{project.title || "Untitled"}</span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Select
-                      value={project.status}
-                      onValueChange={(value: WritingProjectsStatusOptions) => {
-                        updateProject.mutate({ id: project.id, data: { status: value } });
-                      }}
-                    >
-                      <SelectTrigger className="w-30 h-8 capitalize" onClick={(e) => e.stopPropagation()}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent onClick={(e) => e.stopPropagation()}>
-                        {Object.values(WritingProjectsStatusOptions).map((status) => (
-                          <SelectItem key={status} value={status} className="capitalize">
-                            {status}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{formatDistanceToNow(new Date(project.updated), { addSuffix: true })}</TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm("Are you sure you want to delete this project?")) {
-                          deleteProject.mutate(project.id);
-                        }
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
+        <Card className="flex flex-col flex-1 min-h-0 overflow-hidden py-0 gap-0">
+          <div className="overflow-y-auto overflow-x-hidden flex-1 min-h-0">
+            <Table className="w-full table-fixed">
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[40%] sticky top-0 z-20 bg-card">Project</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-card">Status</TableHead>
+                  <TableHead className="sticky top-0 z-20 bg-card">Updated</TableHead>
+                  <TableHead className="w-12 sticky top-0 z-20 bg-card"></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {projects?.map((project) => (
+                  <TableRow
+                    key={project.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => navigate({ to: "/workspace", search: { id: project.id, type: "project" } })}
+                  >
+                    <TableCell className="overflow-hidden">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted shrink-0">
+                          <PenLine className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                        <div className="flex flex-col min-w-0 overflow-hidden flex-1">
+                          <span className="font-medium truncate block w-full text-left">{project.title || "Untitled"}</span>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={project.status}
+                        onValueChange={(value: WritingProjectsStatusOptions) => {
+                          updateProject.mutate({ id: project.id, data: { status: value } });
+                        }}
+                      >
+                        <SelectTrigger className="w-30 h-8 capitalize" onClick={(e) => e.stopPropagation()}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent onClick={(e) => e.stopPropagation()}>
+                          {Object.values(WritingProjectsStatusOptions).map((status) => (
+                            <SelectItem key={status} value={status} className="capitalize">
+                              {status}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{formatDistanceToNow(new Date(project.updated), { addSuffix: true })}</TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm("Are you sure you want to delete this project?")) {
+                            deleteProject.mutate(project.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </Card>
       )}
-    </>
+    </div>
   );
 }

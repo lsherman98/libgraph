@@ -16,8 +16,11 @@ import { ForceGraphView, defaultGraphTuningSettings, type NodePreviewRequest } f
 import { PreviewDialog } from "@/components/workspace/preview-dialog";
 import { GraphFiltersPanel } from "./graph-filters-panel";
 import { edgeTypeConfig, nodeTypeConfig, uploadTypeConfig } from "./graph-style-config";
+import { useTheme } from "next-themes";
 
 export function GraphCanvas() {
+  const { theme } = useTheme();
+  const isDark = theme === "dark";
   const { data: graphData, isLoading, error } = useGraphData();
 
   const [uploadFilters, setUploadFilters] = useState<UploadFilters>({});
@@ -26,7 +29,7 @@ export function GraphCanvas() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [hiddenNodeTypes, setHiddenNodeTypes] = useState<Set<NodesTypeOptions>>(new Set());
   const [hiddenEdgeTypes, setHiddenEdgeTypes] = useState<Set<EdgesTypeOptions>>(new Set());
-  const [hiddenUploadTypes, setHiddenUploadTypes] = useState<Set<UploadsTypeOptions>>(new Set());
+  const [hiddenUploadTypes, setHiddenUploadTypes] = useState<Set<UploadsTypeOptions>>(new Set([UploadsTypeOptions.transcript]));
   const [showNodeFilters, setShowNodeFilters] = useState(true);
   const [showUploadTypeFilters, setShowUploadTypeFilters] = useState(true);
   const [showEdgeFilters, setShowEdgeFilters] = useState(false);
@@ -266,6 +269,7 @@ export function GraphCanvas() {
       [UploadsTypeOptions.youtube]: 0,
       [UploadsTypeOptions.essay]: 0,
       [UploadsTypeOptions.summary]: 0,
+      [UploadsTypeOptions.transcript]: 0,
     };
 
     for (const node of filteredNodes) {
@@ -518,7 +522,7 @@ export function GraphCanvas() {
                           isHidden && "opacity-40",
                         )}
                       >
-                        <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: cfg.color }} />
+                        <div className="h-2.5 w-2.5 rounded-full shrink-0" style={{ backgroundColor: isDark ? cfg.darkColor : cfg.color }} />
                         <span className="flex-1 text-left truncate">{cfg.label}</span>
                         <Badge variant="secondary" className="text-[10px] h-4 px-1 min-w-5 justify-center">
                           {count}

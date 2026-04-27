@@ -24,8 +24,12 @@ export async function getPageUrl(id: string) {
     return pb.files.getURL(record, record.markdown, { "token": token });
 }
 
-export const upload = async (upload: Create<Collections.Uploads>) => {
-    return await pb.collection(Collections.Uploads).create(upload)
+export type UploadCreateInput = Omit<Create<Collections.Uploads>, "type"> & {
+    type: string
+}
+
+export const upload = async (upload: UploadCreateInput) => {
+    return await pb.collection(Collections.Uploads).create(upload, { requestKey: null })
 }
 
 export const getUpload = async (id: string) => {
@@ -80,14 +84,20 @@ export interface UploadFilters {
     status?: string[];
     sortBy?: string;
     sortOrder?: 'asc' | 'desc';
+    author?: string[];
     tags?: string[];
     topics?: string[];
     people?: string[];
     publication?: string;
 }
 
-export const getUploads = async (filters?: UploadFilters) => {
-    const filterParts: string[] = ['type != "summary"'];
+export interface UploadPaginationOptions {
+    page: number;
+    perPage: number;
+}
+
+const buildUploadsFilter = (filters?: UploadFilters) => {
+    const filterParts: string[] = ['type != "summary" && type != "transcript"'];
 
     if (filters?.type && filters.type.length > 0) {
         const typeFilters = filters.type.map(t => `type = "${t}"`).join(' || ');
@@ -97,6 +107,11 @@ export const getUploads = async (filters?: UploadFilters) => {
     if (filters?.status && filters.status.length > 0) {
         const statusFilters = filters.status.map(s => `status = "${s}"`).join(' || ');
         filterParts.push(`(${statusFilters})`);
+    }
+
+    if (filters?.author && filters.author.length > 0) {
+        const authorFilters = filters.author.map(a => `author = "${a}"`).join(' || ');
+        filterParts.push(`(${authorFilters})`);
     }
 
     if (filters?.tags && filters.tags.length > 0) {
@@ -122,13 +137,27 @@ export const getUploads = async (filters?: UploadFilters) => {
         filterParts.push(`(title ~ "${filters.search.trim()}" || file ~ "${filters.search.trim()}")`);
     }
 
-    const sort = filters?.sortBy
+    return filterParts.length > 0 ? filterParts.join(' && ') : undefined;
+}
+
+const getUploadsSort = (filters?: UploadFilters) => {
+    return filters?.sortBy
         ? `${filters.sortOrder === 'asc' ? '+' : '-'}${filters.sortBy}`
         : '-created';
+}
 
+export const getUploads = async (filters?: UploadFilters) => {
     return await pb.collection(Collections.Uploads).getFullList({
-        sort,
-        filter: filterParts.length > 0 ? filterParts.join(' && ') : undefined,
+        sort: getUploadsSort(filters),
+        filter: buildUploadsFilter(filters),
+        expand: 'people,publication,topics,tags,uploads'
+    })
+}
+
+export const getUploadsPage = async (filters: UploadFilters | undefined, pagination: UploadPaginationOptions) => {
+    return await pb.collection(Collections.Uploads).getList(pagination.page, pagination.perPage, {
+        sort: getUploadsSort(filters),
+        filter: buildUploadsFilter(filters),
         expand: 'people,publication,topics,tags,uploads'
     })
 }
@@ -338,7 +367,7 @@ export const getWorkspaceMaterials = async () => {
     const [uploads, highlights, bookmarks, notes] = await Promise.all([
         pb.collection(Collections.Uploads).getFullList({
             sort: '-created',
-            filter: 'type != "summary"',
+            filter: 'type != "summary" && type != "transcript"',
             expand: 'subjects,publication,tags'
         }),
         pb.collection(Collections.Highlights).getFullList({
@@ -356,6 +385,37 @@ export const getWorkspaceMaterials = async () => {
     ]);
 
     return { uploads, highlights, bookmarks, notes };
+}
+
+export const getTranscriptUploadForAudio = async (audioUploadId: string) => {
+    const escapeFilterValue = (value: string) => value.replace(/\\/g, "\\\\").replace(/\"/g, '\\\"');
+
+    try {
+        const audioUpload = await pb.collection(Collections.Uploads).getOne(audioUploadId);
+        const linkedTranscriptIds = Array.isArray((audioUpload as { uploads?: string[] }).uploads)
+            ? ((audioUpload as { uploads?: string[] }).uploads ?? []).filter((id): id is string => typeof id === "string" && id.length > 0)
+            : [];
+
+        if (linkedTranscriptIds.length > 0) {
+            const idFilter = linkedTranscriptIds.map((id) => `id = "${escapeFilterValue(id)}"`).join(" || ");
+
+            try {
+                return await pb.collection(Collections.Uploads).getFirstListItem(
+                    `(${idFilter}) && type = "transcript"`,
+                    { sort: '-created' },
+                );
+            } catch {
+                // Fall through to legacy relation query.
+            }
+        }
+
+        return await pb.collection(Collections.Uploads).getFirstListItem(
+            `upload = "${escapeFilterValue(audioUploadId)}" && type = "transcript"`,
+            { sort: '-created' },
+        );
+    } catch {
+        return null;
+    }
 }
 
 export const getCollections = async () => {
@@ -383,7 +443,7 @@ export const deleteCollection = async (id: string) => {
     return await pb.collection(Collections.Collections).delete(id);
 }
 
-export const getChats = async (type: "chat" | "search") => {
+export const getChats = async (type: "chat" | "search" | "fts") => {
     return await pb.collection(Collections.Chats).getFullList({
         sort: '-updated',
         ...(type ? { filter: `type = "${type}"` } : {}),
@@ -419,7 +479,7 @@ export const createMessage = async (data: Create<Collections.Messages>) => {
 
 export const sendChatMessage = async (
     message: string,
-    mode: "chat" | "search",
+    mode: "chat" | "search" | "fts" | "full_text",
     chatId?: string,
     filters?: ChatFilters,
 ) => {

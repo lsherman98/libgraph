@@ -12,7 +12,7 @@ import (
 const (
 	geminiAPIBase   = "https://generativelanguage.googleapis.com/v1beta"
 	bulkSize        = 100
-	pollInterval    = 300 * time.Second
+	pollInterval    = 120 * time.Second
 	embeddingDims   = 3072
 	embeddingsTable = collections.DocumentChunksEmbeddings
 )

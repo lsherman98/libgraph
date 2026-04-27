@@ -8,7 +8,9 @@ import { Search, X, ArrowUpDown } from "lucide-react";
 import { UploadsTypeOptions } from "@/lib/pocketbase-types";
 import { CreatableCombobox } from "@/components/creatable-combobox";
 
-const USER_UPLOAD_TYPES = Object.values(UploadsTypeOptions).filter((type) => type !== UploadsTypeOptions.summary);
+const USER_UPLOAD_TYPES = Object.values(UploadsTypeOptions).filter(
+  (type) => type !== UploadsTypeOptions.summary && type !== UploadsTypeOptions.transcript,
+);
 
 function FilterBadge({ label, onRemove }: { label: string; onRemove: () => void }) {
   return (
@@ -46,6 +48,7 @@ export function AdvancedFilters({
 }) {
   const activeFilterCount = [
     (filters.type?.length || 0) > 0,
+    (filters.author?.length || 0) > 0,
     (filters.tags?.length || 0) > 0,
     (filters.topics?.length || 0) > 0,
     (filters.people?.length || 0) > 0,
@@ -155,11 +158,11 @@ export function AdvancedFilters({
         />
         <FilterDropdown
           label="Authors"
-          values={filters.people}
+          values={filters.author}
           placeholder="Authors"
           searchable
           options={filterPeopleOptions}
-          onToggle={(value) => toggleArrayFilter("people", value)}
+          onToggle={(value) => toggleArrayFilter("author", value)}
           className="w-32"
         />
         <div className="min-w-0 shrink-0 w-40">
@@ -185,6 +188,9 @@ export function AdvancedFilters({
           ))}
           {filters.topics?.map((t) => (
             <FilterBadge key={`topic-${t}`} label={getTopicName(t)} onRemove={() => toggleArrayFilter("topics", t)} />
+          ))}
+          {filters.author?.map((p) => (
+            <FilterBadge key={`author-${p}`} label={getPersonName(p)} onRemove={() => toggleArrayFilter("author", p)} />
           ))}
           {filters.people?.map((p) => (
             <FilterBadge key={`person-${p}`} label={getPersonName(p)} onRemove={() => toggleArrayFilter("people", p)} />

@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { MessageSquarePlus, Bot } from "lucide-react";
+import { MessageSquarePlus, Bot, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { HighlightsColorOptions } from "@/lib/pocketbase-types";
 import { HIGHLIGHT_COLORS } from "@/lib/constants/highlight-colors";
@@ -21,6 +21,7 @@ interface HighlightPopoverProps {
   onHighlight: (color: HighlightsColorOptions, note?: string, tags?: string[]) => void;
   onOpenEditor: () => void;
   onChatWithText?: () => void;
+  onCopy?: () => void;
   onDismiss: () => void;
 }
 
@@ -31,6 +32,7 @@ export function HighlightPopover({
   onHighlight,
   onOpenEditor,
   onChatWithText,
+  onCopy,
   onDismiss,
 }: HighlightPopoverProps) {
   const popoverRef = useDismissPopover<HTMLDivElement>(onDismiss);
@@ -96,6 +98,21 @@ export function HighlightPopover({
               title="Chat with selected text"
             >
               <Bot className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {onCopy && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={onCopy}
+              title="Copy selected text"
+            >
+              <Copy className="h-3.5 w-3.5" />
             </Button>
           )}
         </div>

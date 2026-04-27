@@ -5,6 +5,8 @@ export const queryKeys = {
     uploads: {
         all: ["uploads"] as const,
         list: (filters?: UploadFilters) => [...queryKeys.uploads.all, "list", filters] as const,
+        paginatedList: (filters: UploadFilters | undefined, page: number, perPage: number) =>
+            [...queryKeys.uploads.all, "paginated-list", filters, page, perPage] as const,
         detail: (id?: string) => [...queryKeys.uploads.all, "detail", id] as const,
     },
     people: {
@@ -90,7 +92,7 @@ export const queryKeys = {
     },
     chats: {
         all: ["chats"] as const,
-        list: (type?: "chat" | "search") =>
+        list: (type?: "chat" | "search" | "fts") =>
             [...queryKeys.chats.all, "list", type] as const,
         detail: (id?: string) =>
             [...queryKeys.chats.all, "detail", id] as const,

@@ -21,7 +21,7 @@ import (
 
 var geminiClient *genai.Client
 
-const chatSearchTopK = 6
+const chatSearchTopK = 10
 const searchModeTopK = 10
 
 func Init(app *pocketbase.PocketBase) error {
@@ -50,8 +50,10 @@ func Init(app *pocketbase.PocketBase) error {
 			}
 
 			var uploadIDs []string
+			applyUploadFilter := false
 			if body.Filters != nil {
-				uploadIDs, err = resolveFilterUploadIDs(e.App, body.Filters)
+				applyUploadFilter = hasActiveMetadataFilters(body.Filters)
+				uploadIDs, err = resolveFilterUploadIDs(e.App, body.Filters, userID)
 				if err != nil {
 					return e.InternalServerError("failed to resolve filter upload IDs", err)
 				}
@@ -73,7 +75,7 @@ func Init(app *pocketbase.PocketBase) error {
 				chatRecord := core.NewRecord(chatsCollection)
 				chatRecord.Set("title", title)
 				chatRecord.Set("user", userID)
-				chatRecord.Set("type", body.Mode)
+				chatRecord.Set("type", persistedChatType(body.Mode))
 				if err := e.App.Save(chatRecord); err != nil {
 					return e.InternalServerError("failed to create chat", err)
 				}
@@ -97,13 +99,14 @@ func Init(app *pocketbase.PocketBase) error {
 			}
 
 			payload := ChatPayload{
-				ChatID:    chatID,
-				Mode:      body.Mode,
-				Message:   body.Message,
-				UploadIDs: uploadIDs,
-				UserID:    userID,
-				MessageID: userMsgID,
-				Filters:   body.Filters,
+				ChatID:            chatID,
+				Mode:              body.Mode,
+				Message:           body.Message,
+				UploadIDs:         uploadIDs,
+				ApplyUploadFilter: applyUploadFilter,
+				UserID:            userID,
+				MessageID:         userMsgID,
+				Filters:           body.Filters,
 			}
 
 			routine.FireAndForget(func() {
@@ -135,7 +138,7 @@ func processChatResponse(app core.App, payload ChatPayload) (string, error) {
 	}
 
 	if mode == vars.ChatTypeSearch {
-		results, err := vector_search.Search(app, payload.Message, payload.UploadIDs, searchModeTopK)
+		results, err := vector_search.Search(app, payload.Message, payload.UploadIDs, searchModeTopK, payload.ApplyUploadFilter, payload.UserID)
 		if err != nil {
 			_, err := persistMessage(app, payload, "Sorry, something went wrong.", nil, "search request failed")
 			if err != nil {
@@ -146,6 +149,25 @@ func processChatResponse(app core.App, payload ChatPayload) (string, error) {
 		}
 
 		sources := sourcesFromSearchResults(results)
+		messageID, err := persistMessage(app, payload, "", sources, "")
+		if err != nil {
+			return "", err
+		}
+
+		return messageID, nil
+	}
+
+	if mode == vars.ChatTypeFTS || mode == "full_text" {
+		sources, err := searchSourcesByFullText(app, payload.Message, payload.UploadIDs, searchModeTopK, payload.ApplyUploadFilter, payload.UserID)
+		if err != nil {
+			_, err := persistMessage(app, payload, "Sorry, something went wrong.", nil, "full text search request failed")
+			if err != nil {
+				return "", err
+			}
+
+			return "", err
+		}
+
 		messageID, err := persistMessage(app, payload, "", sources, "")
 		if err != nil {
 			return "", err
@@ -215,8 +237,9 @@ func processChatResponse(app core.App, payload ChatPayload) (string, error) {
 		return messageID, nil
 	}
 
-	searchResults, err := vector_search.Search(app, payload.Message, payload.UploadIDs, chatSearchTopK)
+	searchResults, err := vector_search.Search(app, payload.Message, payload.UploadIDs, chatSearchTopK, payload.ApplyUploadFilter, payload.UserID)
 	if err != nil {
+		app.Logger().Error("vector search failed", "error", err)
 		searchResults = nil
 	}
 

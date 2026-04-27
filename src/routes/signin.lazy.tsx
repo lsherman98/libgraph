@@ -89,6 +89,23 @@ const UserLoginForm = () => {
       <Button type="submit" className="w-full">
         Sign in
       </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        onClick={async () => {
+          try {
+            await pb.collection("users").authWithPassword("demo@demo.com", "password");
+            toast.success("Successfully signed in!");
+            navigate({ to: "/" });
+          } catch (error: any) {
+            console.error(error);
+            toast.error("Failed to sign in with demo account.");
+          }
+        }}
+      >
+        Demo login
+      </Button>
     </form>
   );
 };

@@ -2,7 +2,9 @@ package uploads
 
 import (
 	"crypto/sha1"
+	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -33,32 +35,38 @@ func HandleUploadJob(app core.App, job *core.Record) error {
 		return err
 	}
 
-	pages, err := app.FindRecordsByFilter(
-		collections.Pages,
-		"upload = {:uploadId}",
-		"+page",
-		0,
-		0,
-		dbx.Params{"uploadId": upload.Id},
-	)
-	if err != nil {
-		return err
-	}
-
-	if len(pages) == 0 {
-		if mistral.IsAudioFile(upload.GetString("file")) {
-			pages, err = getPagesFromAudio(app, upload)
-		} else {
-			pages, err = getPagesFromDocument(app, upload)
-		}
+	if mistral.IsAudioFile(upload.GetString("file")) {
+		optimized, err := optimizeAudioUpload(app, upload)
 		if err != nil {
 			upload.Set("status", vars.UploadStatusFailed)
-			if err := app.Save(upload); err != nil {
-				return err
+			if saveErr := app.Save(upload); saveErr != nil {
+				return saveErr
 			}
 
 			return err
 		}
+
+		if optimized {
+			upload, err = app.FindRecordById(collections.Uploads, job.GetString("upload"))
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	var pages []*core.Record
+	if mistral.IsAudioFile(upload.GetString("file")) {
+		pages, err = getPagesFromAudio(app, upload)
+	} else {
+		pages, err = getPagesFromDocument(app, upload)
+	}
+	if err != nil {
+		upload.Set("status", vars.UploadStatusFailed)
+		if err := app.Save(upload); err != nil {
+			return err
+		}
+
+		return err
 	}
 
 	for _, page := range pages {
@@ -74,10 +82,6 @@ func HandleUploadJob(app core.App, job *core.Record) error {
 
 func getPagesFromAudio(app core.App, upload *core.Record) ([]*core.Record, error) {
 	title := upload.GetString("title")
-	if err := validateDurationLimit(upload); err != nil {
-		return nil, err
-	}
-
 	md, err := getTranscriptMarkdown(app, upload)
 	if err != nil {
 		return nil, err
@@ -90,6 +94,10 @@ func getPagesFromAudio(app core.App, upload *core.Record) ([]*core.Record, error
 		}
 
 		return []*core.Record{page}, nil
+	}
+
+	if err := validateDurationLimit(app, upload); err != nil {
+		return nil, err
 	}
 
 	mistralClient, err := mistral.New(app)
@@ -119,8 +127,25 @@ func getPagesFromAudio(app core.App, upload *core.Record) ([]*core.Record, error
 }
 
 func getTranscriptMarkdown(app core.App, upload *core.Record) (string, error) {
-	transcript := upload.GetString("transcript_file")
-	if transcript == "" {
+	linkedTranscripts, err := findLinkedTranscripts(app, upload, 1)
+	if err != nil {
+		return "", err
+	}
+	if len(linkedTranscripts) == 0 {
+		return "", nil
+	}
+	linkedTranscript := linkedTranscripts[0]
+
+	linkedTranscriptFile := linkedTranscript.GetString("file")
+	if linkedTranscriptFile == "" {
+		return "", nil
+	}
+
+	return readTranscriptMarkdown(app, linkedTranscript, linkedTranscriptFile)
+}
+
+func readTranscriptMarkdown(app core.App, sourceUpload *core.Record, transcriptFilename string) (string, error) {
+	if transcriptFilename == "" {
 		return "", nil
 	}
 
@@ -130,7 +155,7 @@ func getTranscriptMarkdown(app core.App, upload *core.Record) (string, error) {
 	}
 	defer fsys.Close()
 
-	transcriptPath := upload.BaseFilesPath() + "/" + transcript
+	transcriptPath := sourceUpload.BaseFilesPath() + "/" + transcriptFilename
 	blob, err := fsys.GetReader(transcriptPath)
 	if err != nil {
 		return "", err
@@ -147,7 +172,7 @@ func getTranscriptMarkdown(app core.App, upload *core.Record) (string, error) {
 		return "", fmt.Errorf("transcript file is empty")
 	}
 
-	ext := strings.ToLower(filepath.Ext(transcript))
+	ext := strings.ToLower(filepath.Ext(transcriptFilename))
 	if ext == ".md" || ext == ".markdown" {
 		return text, nil
 	}
@@ -158,27 +183,16 @@ func getTranscriptMarkdown(app core.App, upload *core.Record) (string, error) {
 func getPagesFromDocument(app core.App, upload *core.Record) ([]*core.Record, error) {
 	title := upload.GetString("title")
 	docParser := parser.New(app)
-	pagesCollection, _ := app.FindCollectionByNameOrId(collections.Pages)
 
 	persistedPages := make([]*core.Record, 0)
 
 	onPage := func(page parser.Page) error {
-		newPage := core.NewRecord(pagesCollection)
-		newPage.Set("upload", upload.Id)
-		newPage.Set("page", page.PageNumber)
-		newPage.Set("user", upload.GetString("user"))
-
-		f, err := filesystem.NewFileFromBytes([]byte(page.Markdown), fmt.Sprintf("%s_page_%d.md", title, page.PageNumber))
+		persistedPage, err := createPageRecord(app, upload, page.PageNumber, fmt.Sprintf("%s_page_%d.md", title, page.PageNumber), page.Markdown)
 		if err != nil {
 			return err
 		}
-		newPage.Set("markdown", f.Name)
-		newPage.Set("markdown", f)
-		if err = app.Save(newPage); err != nil {
-			return err
-		}
 
-		persistedPages = append(persistedPages, newPage)
+		persistedPages = append(persistedPages, persistedPage)
 		return nil
 	}
 
@@ -190,24 +204,46 @@ func getPagesFromDocument(app core.App, upload *core.Record) ([]*core.Record, er
 }
 
 func createPageRecord(app core.App, upload *core.Record, pageNumber int, filename string, markdown string) (*core.Record, error) {
-	pagesCollection, _ := app.FindCollectionByNameOrId(collections.Pages)
+	pageRecord, err := findPageRecord(app, upload.Id, pageNumber)
+	if err != nil {
+		return nil, err
+	}
+	if pageRecord == nil {
+		pagesCollection, _ := app.FindCollectionByNameOrId(collections.Pages)
+		pageRecord = core.NewRecord(pagesCollection)
+	}
 
-	newPage := core.NewRecord(pagesCollection)
-	newPage.Set("upload", upload.Id)
-	newPage.Set("page", pageNumber)
-	newPage.Set("user", upload.GetString("user"))
+	pageRecord.Set("upload", upload.Id)
+	pageRecord.Set("page", pageNumber)
+	pageRecord.Set("user", upload.GetString("user"))
 
 	f, err := filesystem.NewFileFromBytes([]byte(markdown), filename)
 	if err != nil {
 		return nil, err
 	}
 
-	newPage.Set("markdown", f.Name)
-	newPage.Set("markdown", f)
-	if err := app.Save(newPage); err != nil {
+	pageRecord.Set("markdown", f.Name)
+	pageRecord.Set("markdown", f)
+	if err := app.Save(pageRecord); err != nil {
 		return nil, err
 	}
-	return newPage, nil
+	return pageRecord, nil
+}
+
+func findPageRecord(app core.App, uploadID string, pageNumber int) (*core.Record, error) {
+	page, err := app.FindFirstRecordByFilter(
+		collections.Pages,
+		"upload = {:uploadId} && page = {:pageNumber}",
+		dbx.Params{"uploadId": uploadID, "pageNumber": pageNumber},
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return page, nil
 }
 
 func enqueueChunkJob(app core.App, upload *core.Record, page *core.Record) error {
@@ -250,9 +286,26 @@ func HandleChunkJob(app core.App, job *core.Record) error {
 	}
 
 	chunksCollection, _ := app.FindCollectionByNameOrId(collections.DocumentChunks)
+	existingChunks, err := app.FindRecordsByFilter(
+		collections.DocumentChunks,
+		"upload = {:uploadId} && page = {:pageId}",
+		"chunk_index",
+		0,
+		0,
+		dbx.Params{"uploadId": job.GetString("upload"), "pageId": job.GetString("page")},
+	)
+	if err != nil {
+		return err
+	}
+
+	existingByIndex := make(map[int]*core.Record, len(existingChunks))
+	for _, existing := range existingChunks {
+		existingByIndex[existing.GetInt("chunk_index")] = existing
+	}
 
 	chunks := chunkMarkdown(markdown)
 	chunkIndex := 1
+	seenChunkIndexes := make(map[int]bool, len(chunks))
 
 	for _, chunk := range chunks {
 		trimmed := strings.TrimSpace(chunk)
@@ -265,45 +318,59 @@ func HandleChunkJob(app core.App, job *core.Record) error {
 			continue
 		}
 
-		record := core.NewRecord(chunksCollection)
+		record := existingByIndex[chunkIndex]
+		if record == nil {
+			record = core.NewRecord(chunksCollection)
+		}
 		record.Set("upload", job.GetString("upload"))
 		record.Set("page", job.GetString("page"))
 		record.Set("page_number", payload.PageNumber)
 		record.Set("chunk_index", chunkIndex)
 		record.Set("content", content)
 		record.Set("user", job.GetString("user"))
-		err := app.Save(record)
-		if err != nil {
+		if err := app.Save(record); err != nil {
 			return err
 		}
 
+		seenChunkIndexes[chunkIndex] = true
 		chunkIndex++
 	}
 
-	if hasPendingChunkJobs(app, job.GetString("upload"), job.Id) {
-		return nil
+	for _, existing := range existingChunks {
+		if seenChunkIndexes[existing.GetInt("chunk_index")] {
+			continue
+		}
+		if err := app.Delete(existing); err != nil {
+			return err
+		}
 	}
 
+	return nil
+}
+
+func HandleChunkJobSuccess(app core.App, job *core.Record) error {
 	return enqueueEmbedJob(app, job.GetString("upload"), job.GetString("user"))
 }
 
-func hasPendingChunkJobs(app core.App, uploadID string, currentJobID string) bool {
-	records, err := app.FindRecordsByFilter(
+func enqueueEmbedJob(app core.App, uploadID string, userID string) error {
+	// Only enqueue embed jobs once all chunk.generate jobs for this upload are done.
+	// This is called after the current chunk job has already been marked success.
+	// Only block on queued/running jobs — failed/cancelled jobs should not prevent embed job creation.
+	activeChunkJobs, err := app.FindRecordsByFilter(
 		collections.Queue,
-		"upload = {:uploadId} && job_type = {:jobType} && (status = 'queued' || status = 'running') && id != {:jobId}",
+		"upload = {:uploadId} && job_type = {:jobType} && (status = {:queued} || status = {:running})",
 		"",
-		1,
 		0,
-		dbx.Params{"uploadId": uploadID, "jobType": processing.JobTypeChunkGenerate, "jobId": currentJobID},
+		0,
+		dbx.Params{"uploadId": uploadID, "jobType": processing.JobTypeChunkGenerate, "queued": vars.QueueStatusQueued, "running": vars.QueueStatusRunning},
 	)
 	if err != nil {
-		return false
+		return err
+	}
+	if len(activeChunkJobs) > 0 {
+		return nil
 	}
 
-	return len(records) > 0
-}
-
-func enqueueEmbedJob(app core.App, uploadID string, userID string) error {
 	chunks, err := app.FindRecordsByFilter(
 		collections.DocumentChunks,
 		"upload = {:uploadId} && (vector_id = 0 || vector_id = null)",

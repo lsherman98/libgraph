@@ -382,7 +382,7 @@ export function useCreateMessage() {
 }
 
 interface SendChatMessageOptions {
-    mode: "chat" | "search";
+    mode: "chat" | "search" | "fts" | "full_text";
     filters: ChatFilters;
     activeChatId: string | undefined;
     setActiveChatId: (id: string) => void;
@@ -401,15 +401,15 @@ export function useSendChatMessage({
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async (message: string) => {
+        mutationFn: async ({ message, newChat }: { message: string; newChat?: boolean }) => {
             return sendChatMessage(
                 message,
                 mode,
-                activeChatId,
+                newChat ? undefined : activeChatId,
                 filters,
             );
         },
-        onMutate: async (message) => {
+        onMutate: async ({ message, newChat }) => {
             setInput("");
             const optimisticMessage = {
                 id: "optimistic-user-" + Date.now(),
@@ -418,8 +418,10 @@ export function useSendChatMessage({
                 created: new Date().toISOString(),
             };
 
-            if (activeChatId) {
-                const messagesKey = queryKeys.messages.byChat(activeChatId);
+            const effectiveChatId = newChat ? undefined : activeChatId;
+
+            if (effectiveChatId) {
+                const messagesKey = queryKeys.messages.byChat(effectiveChatId);
                 await queryClient.cancelQueries({ queryKey: messagesKey });
                 const previousMessages = queryClient.getQueryData(messagesKey);
                 queryClient.setQueryData(messagesKey, (old: any[] | null) => [
@@ -427,13 +429,13 @@ export function useSendChatMessage({
                     optimisticMessage,
                 ]);
 
-                return { previousMessages, chatId: activeChatId, optimisticMessage };
+                return { previousMessages, chatId: effectiveChatId, optimisticMessage };
             }
 
             return { previousMessages: null, chatId: null, optimisticMessage };
         },
-        onSuccess: (data, _message, context) => {
-            const shouldSwitchChat = !activeChatId || activeChatId !== data.chat_id;
+        onSuccess: (data, { newChat }, context) => {
+            const shouldSwitchChat = newChat || !activeChatId || activeChatId !== data.chat_id;
 
             if (shouldSwitchChat) {
                 queryClient.setQueryData(queryKeys.messages.byChat(data.chat_id), (old: any[] | undefined) => {

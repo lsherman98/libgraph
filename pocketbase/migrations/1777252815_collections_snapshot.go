@@ -830,7 +830,8 @@ func init() {
 							"lecture",
 							"youtube",
 							"essay",
-							"summary"
+							"summary",
+							"transcript"
 						]
 					},
 					{
@@ -1446,7 +1447,8 @@ func init() {
 				"indexes": [
 					"CREATE INDEX ` + "`" + `idx_19Ztvt6cUB` + "`" + ` ON ` + "`" + `edges` + "`" + ` (` + "`" + `source` + "`" + `)",
 					"CREATE INDEX ` + "`" + `idx_z12qw6IEaZ` + "`" + ` ON ` + "`" + `edges` + "`" + ` (` + "`" + `target` + "`" + `)",
-					"CREATE INDEX ` + "`" + `idx_SWhcRdMtMB` + "`" + ` ON ` + "`" + `edges` + "`" + ` (\n  ` + "`" + `user` + "`" + `,\n  ` + "`" + `type` + "`" + `\n)"
+					"CREATE INDEX ` + "`" + `idx_SWhcRdMtMB` + "`" + ` ON ` + "`" + `edges` + "`" + ` (\n  ` + "`" + `user` + "`" + `,\n  ` + "`" + `type` + "`" + `\n)",
+					"CREATE UNIQUE INDEX ` + "`" + `idx_gE3cK1NYmJ` + "`" + ` ON ` + "`" + `edges` + "`" + ` (\n  ` + "`" + `source` + "`" + `,\n  ` + "`" + `target` + "`" + `,\n  ` + "`" + `type` + "`" + `\n)"
 				],
 				"listRule": "@request.auth.id = user.id",
 				"name": "edges",
@@ -2366,7 +2368,8 @@ func init() {
 						"values": [
 							"search",
 							"chat",
-							"context_chat"
+							"context_chat",
+							"fts"
 						]
 					},
 					{
@@ -3129,6 +3132,18 @@ func init() {
 					},
 					{
 						"hidden": false,
+						"id": "number2129530235",
+						"max": null,
+						"min": null,
+						"name": "retry_count",
+						"onlyInt": false,
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "number"
+					},
+					{
+						"hidden": false,
 						"id": "autodate2990389176",
 						"name": "created",
 						"onCreate": true,
@@ -3146,6 +3161,17 @@ func init() {
 						"presentable": false,
 						"system": false,
 						"type": "autodate"
+					},
+					{
+						"hidden": false,
+						"id": "date1234567890",
+						"max": "",
+						"min": "",
+						"name": "run_after",
+						"presentable": false,
+						"required": false,
+						"system": false,
+						"type": "date"
 					}
 				],
 				"id": "pbc_85348442",
@@ -3388,16 +3414,6 @@ func init() {
 							"succeeded",
 							"failed"
 						]
-					},
-					{
-						"hidden": false,
-						"id": "json2193354422",
-						"maxSize": 0,
-						"name": "chunk_ids",
-						"presentable": false,
-						"required": false,
-						"system": false,
-						"type": "json"
 					},
 					{
 						"autogeneratePattern": "",

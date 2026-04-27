@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { TableRow, TableCell } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FileText, Pencil, Trash2, Link2, Library } from "lucide-react";
 import type { UploadsResponse } from "@/lib/pocketbase-types";
 import { typeIcons, statusConfig } from "./constants";
@@ -59,14 +60,21 @@ export function DocumentRow({
           />
         </TableCell>
       )}
-      <TableCell className="max-w-0 overflow-hidden">
+      <TableCell className="overflow-hidden">
         <div className="flex items-center gap-3 min-w-0">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted shrink-0">
             <TypeIcon className="h-5 w-5 text-muted-foreground" />
           </div>
-          <div className="flex flex-col min-w-0 overflow-hidden">
-            <span className="font-medium truncate block">{upload.title || "Untitled"}</span>
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col min-w-0 overflow-hidden flex-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="font-medium truncate block w-full text-left">{upload.title || "Untitled"}</span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-sm">
+                {upload.title || "Untitled"}
+              </TooltipContent>
+            </Tooltip>
+            <div className="flex items-center gap-2 mt-0.5">
               <span className="text-xs text-muted-foreground capitalize">{upload.type}</span>
               {linkedCount > 0 && (
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -94,9 +102,16 @@ export function DocumentRow({
         <span className="block text-sm truncate text-muted-foreground">{publicationName}</span>
       </TableCell>
       <TableCell className="hidden xl:table-cell">
-        <span className="block text-sm truncate text-muted-foreground">{formatNames(upload.tags, tagTitlesById)}</span>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="block text-sm truncate text-muted-foreground text-left">{formatNames(upload.tags, tagTitlesById)}</span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs break-words">
+            {upload.tags?.length ? upload.tags.map((id) => tagTitlesById.get(id) || id).join(", ") : "—"}
+          </TooltipContent>
+        </Tooltip>
       </TableCell>
-      <TableCell className="text-muted-foreground hidden md:table-cell">
+      <TableCell className="text-muted-foreground hidden md:table-cell pr-6">
         {new Date(upload.created).toLocaleDateString(undefined, {
           year: "numeric",
           month: "short",

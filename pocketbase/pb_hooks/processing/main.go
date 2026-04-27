@@ -1,6 +1,9 @@
 package processing
 
 import (
+	"database/sql"
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/lsherman98/libgraph/pocketbase/collections"
@@ -11,19 +14,22 @@ import (
 	"github.com/pocketbase/pocketbase/tools/routine"
 )
 
+func isDedupeKeyUniqueError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "dedupe_key") && strings.Contains(message, "unique")
+}
+
 func Init(app *pocketbase.PocketBase, h Handlers) error {
 	handlers = h
 
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
 		recoverHangingJobs(se.App)
 
-		workers := []Worker{
-			{name: "parse", jobType: JobTypeUploadParseOrTranscribe, limit: getWorkerCount("PROCESSING_PARSE_WORKERS"), interval: queuePollInterval},
-			{name: "chunk", jobType: JobTypeChunkGenerate, limit: getWorkerCount("PROCESSING_CHUNK_WORKERS"), interval: queuePollInterval},
-			{name: "summarize", jobType: JobTypePageSummarize, limit: getWorkerCount("PROCESSING_SUMMARIZE_WORKERS"), interval: queuePollInterval},
-			{name: "embed-submit", jobType: JobTypeChunkEmbedSubmit, limit: getWorkerCount("PROCESSING_EMBED_SUBMIT_WORKERS"), interval: queuePollInterval},
-			{name: "embed-poll", jobType: JobTypeChunkEmbedPoll, limit: getWorkerCount("PROCESSING_EMBED_POLL_WORKERS"), interval: embedPollInterval},
-		}
+		workers := configuredWorkers()
 
 		for _, worker := range workers {
 			routine.FireAndForget(func() {
@@ -42,13 +48,23 @@ func Init(app *pocketbase.PocketBase, h Handlers) error {
 	return nil
 }
 
+func configuredWorkers() []Worker {
+	return []Worker{
+		{name: "parse", jobType: JobTypeUploadParseOrTranscribe, limit: getWorkerCount("PROCESSING_PARSE_WORKERS"), interval: queuePollInterval},
+		{name: "chunk", jobType: JobTypeChunkGenerate, limit: getWorkerCount("PROCESSING_CHUNK_WORKERS"), interval: queuePollInterval},
+		{name: "summarize", jobType: JobTypePageSummarize, limit: getWorkerCount("PROCESSING_SUMMARIZE_WORKERS"), interval: queuePollInterval},
+		{name: "embed-submit", jobType: JobTypeChunkEmbedSubmit, limit: 20, interval: queuePollInterval},
+		{name: "embed-poll", jobType: JobTypeChunkEmbedPoll, limit: 20, interval: embedPollInterval},
+	}
+}
+
 func Enqueue(app core.App, req EnqueueRequest) error {
 	existing, err := app.FindFirstRecordByFilter(
 		collections.Queue,
 		"dedupe_key = {:dedupeKey}",
 		dbx.Params{"dedupeKey": req.DedupeKey},
 	)
-	if existing != nil && err != nil {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 
@@ -81,6 +97,17 @@ func Enqueue(app core.App, req EnqueueRequest) error {
 	record.Set("upload", req.UploadID)
 	record.Set("page", req.PageID)
 	if err = app.Save(record); err != nil {
+		if isDedupeKeyUniqueError(err) {
+			existing, findErr := app.FindFirstRecordByFilter(
+				collections.Queue,
+				"dedupe_key = {:dedupeKey}",
+				dbx.Params{"dedupeKey": req.DedupeKey},
+			)
+			if findErr == nil && existing != nil {
+				return nil
+			}
+		}
+
 		return err
 	}
 
@@ -88,13 +115,24 @@ func Enqueue(app core.App, req EnqueueRequest) error {
 }
 
 func processDueJobs(app core.App, worker Worker) error {
+	runningJobs := countRunningJobsByType(app, worker.jobType)
+	availableSlots := worker.limit - runningJobs
+	if availableSlots <= 0 {
+		return nil
+	}
+
+	if worker.jobType == JobTypeChunkEmbedSubmit && runningJobs > 0 {
+		availableSlots = 0
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
 	jobs, err := app.FindRecordsByFilter(
 		collections.Queue,
-		"status = 'queued' && job_type = {:jobType}",
+		"status = 'queued' && job_type = {:jobType} && (run_after = '' || run_after = null || run_after <= {:now})",
 		"created",
-		worker.limit,
+		availableSlots,
 		0,
-		dbx.Params{"jobType": worker.jobType},
+		dbx.Params{"jobType": worker.jobType, "now": now},
 	)
 	if err != nil {
 		return err
@@ -105,21 +143,30 @@ func processDueJobs(app core.App, worker Worker) error {
 			continue
 		}
 
-		err := executeJob(app, job)
-		if err != nil {
-			handleJobFailure(app, job, err)
-			continue
-		}
+		routine.FireAndForget(func() {
+			err := executeJob(app, job)
+			if err != nil {
+				handleJobFailure(app, job, err)
+				return
+			}
 
-		job.Set("status", vars.QueueStatusSuccess)
-		job.Set("finished_at", time.Now().UTC())
-		if err := app.Save(job); err != nil {
-			continue
-		}
+			job.Set("status", vars.QueueStatusSuccess)
+			job.Set("finished_at", time.Now().UTC())
+			if err := app.Save(job); err != nil {
+				return
+			}
 
-		if err := markUploadSuccess(app, job); err != nil {
-			continue
-		}
+			if job.GetString("job_type") == JobTypeChunkGenerate && handlers.ChunkGenerateSuccess != nil {
+				if err := handlers.ChunkGenerateSuccess(app, job); err != nil {
+					handleJobFailure(app, job, err)
+					return
+				}
+			}
+
+			if err := markUploadSuccess(app, job); err != nil {
+				return
+			}
+		})
 	}
 
 	return nil

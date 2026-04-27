@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery, useInfiniteQuery, skipToken } from "@tanstack/react-query";
-import { getPeople, getPublications, getFirstPage, getPageByNumber, getPage, getSummary, getPages, getPageUrl, getTags, getTopics, getUploads, getUpload, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection, fullTextSearch, getPreferences, getReadingProgress, getSidebarChats, getChatContexts } from "./api";
-import type { UploadFilters } from "./api";
+import { getPeople, getPublications, getFirstPage, getPageByNumber, getPage, getSummary, getPages, getPageUrl, getTags, getTopics, getUploads, getUploadsPage, getUpload, getTranscriptUploadForAudio, getHighlights, getHighlightsForPage, getBookmarks, getNotes, getNodes, getNodeById, getEdges, getEdgeById, getGraphData, getWritingProjects, getWritingProject, getWorkspaceMaterials, getChats, getChat, getMessages, getCollections, getCollection, fullTextSearch, getPreferences, getReadingProgress, getSidebarChats, getChatContexts } from "./api";
+import type { UploadFilters, UploadPaginationOptions } from "./api";
 import type { MessagesResponse, NodesTypeOptions } from "../pocketbase-types";
 import { queryKeys } from "./queryKeys";
 
@@ -61,10 +61,30 @@ export function useUploads(filters?: UploadFilters, options?: QueryEnableOptions
     });
 }
 
+export function usePaginatedUploads(filters: UploadFilters | undefined, pagination: UploadPaginationOptions, options?: QueryEnableOptions) {
+    const enabled = options?.enabled ?? true;
+
+    return useQuery({
+        queryKey: queryKeys.uploads.paginatedList(filters, pagination.page, pagination.perPage),
+        queryFn: enabled ? () => getUploadsPage(filters, pagination) : skipToken,
+        placeholderData: keepPreviousData,
+    });
+}
+
 export function useUploadById(id?: string) {
     return useQuery({
         queryKey: queryKeys.uploads.detail(id),
         queryFn: id ? () => getUpload(id) : skipToken,
+        placeholderData: keepPreviousData,
+    });
+}
+
+export function useTranscriptUploadForAudio(audioUploadId?: string, options?: QueryEnableOptions) {
+    const enabled = options?.enabled ?? true;
+
+    return useQuery({
+        queryKey: ["uploads", "transcript", audioUploadId],
+        queryFn: enabled && audioUploadId ? () => getTranscriptUploadForAudio(audioUploadId) : skipToken,
         placeholderData: keepPreviousData,
     });
 }
@@ -260,7 +280,7 @@ export function useCollection(id?: string) {
     });
 }
 
-export function useChats(type?: "chat" | "search") {
+export function useChats(type?: "chat" | "search" | "fts") {
     return useQuery({
         queryKey: queryKeys.chats.list(type),
         queryFn: type ? () => getChats(type) : skipToken,

@@ -40,6 +40,8 @@ type DraftContextSelection =
   | { type: "range"; uploadId: string; pageFrom: number; pageTo: number; title?: string }
   | { type: "text"; text: string };
 
+const SIDEBAR_CHAT_POLL_TIMEOUT_MS = 90_000;
+
 export function ReaderAiChatPanel() {
   const [activeChatId, setActiveChatId] = useState<string | undefined>();
   const [pendingMessages, setPendingMessages] = useState<LocalMessage[]>([]);
@@ -74,7 +76,7 @@ export function ReaderAiChatPanel() {
   );
 
   const { data: sidebarChats = [] } = useSidebarChats();
-  const canToggleChatList = sidebarChats.length > 1;
+  const canToggleChatList = sidebarChats.length > 1 || (!activeChatId && sidebarChats.length > 0);
 
   const { data: dbMessages, isLoading: isLoadingMessages } = useMessages(activeChatId);
   const { data: chatContexts = [] } = useChatContexts(activeChatId);
@@ -102,11 +104,26 @@ export function ReaderAiChatPanel() {
         id: m.id,
         role: m.role as "user" | "assistant",
         content: m.content || "",
+        created: m.created,
         sources: m.sources || undefined,
       }));
     }
     return pendingMessages;
   }, [activeChatId, dbMessages, pendingMessages]);
+
+  const showAssistantLoadingIndicator = useMemo(() => {
+    if (displayMessages.length === 0) return false;
+
+    const lastMessage = displayMessages[displayMessages.length - 1];
+    if (!lastMessage || lastMessage.role !== "user") return false;
+
+    if (sendMessage.isPending) return true;
+
+    const createdAt = Date.parse(lastMessage.created || "");
+    if (Number.isNaN(createdAt)) return true;
+
+    return Date.now() - createdAt < SIDEBAR_CHAT_POLL_TIMEOUT_MS;
+  }, [displayMessages, sendMessage.isPending]);
 
   const activeChatContexts = useMemo(
     () => (activeChatId ? chatContexts.filter((ctx: ChatContextsResponse) => ctx.chat === activeChatId) : []),
@@ -115,7 +132,7 @@ export function ReaderAiChatPanel() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [displayMessages]);
+  }, [displayMessages, showAssistantLoadingIndicator]);
 
   useEffect(() => {
     if (activeChatId) setPendingMessages([]);
@@ -638,8 +655,8 @@ export function ReaderAiChatPanel() {
   const currentDocTitle = useMemo(() => {
     if (!currentUploadId) return null;
     const tab = tabs.find((t): t is ReaderTab => t.type === "reader" && t.uploadId === currentUploadId);
-    return tab?.title || "Current document";
-  }, [currentUploadId, tabs]);
+    return tab?.title || currentUpload?.title || "Current document";
+  }, [currentUploadId, tabs, currentUpload?.title]);
 
   const getUploadTitleById = (uploadId?: string) => {
     if (!uploadId) return "Document";
@@ -830,8 +847,11 @@ export function ReaderAiChatPanel() {
         ) : displayMessages.length > 0 ? (
           <div className="p-3 space-y-4">
             {displayMessages.map((message) => (
-              <MessageBubble key={message.id} message={message} mode="chat" onSourceClick={handleSourceClick} />
+              <MessageBubble key={message.id} message={message} mode="chat" onSourceClick={handleSourceClick} contentClassName="pr-3" />
             ))}
+            {showAssistantLoadingIndicator && (
+              <MessageBubble message={{ id: "assistant-loading-indicator", role: "assistant", content: "", isLoading: true }} mode="chat" />
+            )}
             <div ref={messagesEndRef} />
           </div>
         ) : null}

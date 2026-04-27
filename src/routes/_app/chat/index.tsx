@@ -17,14 +17,16 @@ const CHAT_POLL_TIMEOUT_MS = 90_000;
 const CHAT_MODE_STORAGE_KEY = "libgraph.chat.mode";
 const CHAT_ACTIVE_IDS_STORAGE_KEY = "libgraph.chat.activeByMode";
 
-type ChatMode = "chat" | "search";
+type ChatMode = "chat" | "search" | "fts";
 type ActiveChatByMode = Partial<Record<ChatMode, string>>;
 
 function readStoredMode(): ChatMode {
   if (typeof window === "undefined") return "chat";
 
   const raw = window.localStorage.getItem(CHAT_MODE_STORAGE_KEY);
-  return raw === "search" ? "search" : "chat";
+  if (raw === "search" || raw === "fts") return raw;
+  if (raw === "full_text") return "fts";
+  return "chat";
 }
 
 function readStoredActiveChats(): ActiveChatByMode {
@@ -139,11 +141,22 @@ function ChatPage() {
   }, [mode, activeChatId]);
 
   const handleSendMessage = (message: string) => {
+    const isFts = mode === "fts";
+    const hasExistingResults = isFts && (activeChatId !== undefined || pendingMessages.length > 0);
+
+    if (hasExistingResults) {
+      const now = Date.now();
+      setActiveChatId(undefined);
+      setPendingMessages([{ id: `pending-user-${now}`, role: "user", content: message, created: new Date(now).toISOString() }]);
+      chatMutation.mutate({ message, newChat: true });
+      return;
+    }
+
     if (!activeChatId) {
       const now = Date.now();
       setPendingMessages((prev) => [...prev, { id: `pending-user-${now}`, role: "user", content: message, created: new Date(now).toISOString() }]);
     }
-    chatMutation.mutate(message);
+    chatMutation.mutate({ message });
   };
 
   const deleteChat = useDeleteChat();
@@ -167,7 +180,7 @@ function ChatPage() {
     setInput("");
   };
 
-  const handleModeChange = (newMode: "chat" | "search") => {
+  const handleModeChange = (newMode: ChatMode) => {
     setMode(newMode);
     setActiveChatId(getStoredActiveChatId(newMode));
     setPendingMessages([]);
@@ -219,8 +232,21 @@ function ChatPage() {
           ) : (
             <div className="max-w-3xl mx-auto py-6 px-4">
               <div className="space-y-6">
-                {displayMessages.map((message) => (
-                  <MessageBubble key={message.id} message={message} mode={mode} onSourceClick={handleSourceClick} />
+                {displayMessages.map((message, index) => (
+                  <MessageBubble
+                    key={message.id}
+                    message={message}
+                    mode={mode}
+                    onSourceClick={handleSourceClick}
+                    searchQuery={
+                      message.role === "assistant"
+                        ? [...displayMessages]
+                            .slice(0, index)
+                            .reverse()
+                            .find((m) => m.role === "user")?.content
+                        : undefined
+                    }
+                  />
                 ))}
                 {showAssistantLoadingIndicator && (
                   <MessageBubble

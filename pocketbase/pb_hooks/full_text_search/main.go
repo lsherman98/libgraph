@@ -6,6 +6,7 @@ import (
 
 	"github.com/pocketbase/dbx"
 	"github.com/pocketbase/pocketbase"
+	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 )
 
@@ -74,17 +75,35 @@ func Init(app *pocketbase.PocketBase, collections ...string) error {
 			}
 
 			uploadFilter := e.Request.URL.Query().Get("upload")
+			userID := e.Auth.Id
 
 			processedQuery := processSearchQuery(q)
 
 			var query strings.Builder
-			params := dbx.Params{"q": processedQuery}
-			query.WriteString("SELECT * ")
-			query.WriteString("FROM " + tbl + "_fts ")
-			query.WriteString("WHERE " + tbl + "_fts MATCH {:q} ")
-			if uploadFilter != "" {
-				query.WriteString("AND upload = {:upload} ")
-				params["upload"] = uploadFilter
+			params := dbx.Params{
+				"q":      processedQuery,
+				"userID": userID,
+			}
+
+			if target == "document_chunks" {
+				query.WriteString("SELECT dc_fts.* ")
+				query.WriteString("FROM " + tbl + "_fts dc_fts ")
+				query.WriteString("JOIN uploads u ON dc_fts.upload = u.id ")
+				query.WriteString("WHERE " + tbl + "_fts MATCH {:q} ")
+				query.WriteString("AND u.user = {:userID} ")
+				if uploadFilter != "" {
+					query.WriteString("AND dc_fts.upload = {:upload} ")
+					params["upload"] = uploadFilter
+				}
+			} else {
+				query.WriteString("SELECT * ")
+				query.WriteString("FROM " + tbl + "_fts ")
+				query.WriteString("WHERE " + tbl + "_fts MATCH {:q} ")
+				query.WriteString("AND user = {:userID} ")
+				if uploadFilter != "" {
+					query.WriteString("AND upload = {:upload} ")
+					params["upload"] = uploadFilter
+				}
 			}
 			query.WriteString("ORDER BY CAST(page_number AS INTEGER) ASC, CAST(chunk_index AS INTEGER) ASC;")
 
@@ -116,7 +135,7 @@ func Init(app *pocketbase.PocketBase, collections ...string) error {
 
 			e.JSON(200, items)
 			return nil
-		})
+		}).Bind(apis.RequireAuth())
 
 		return se.Next()
 	})
@@ -151,8 +170,8 @@ func createCollectionFts(app *pocketbase.PocketBase, target string) error {
 
 	stmt.Reset()
 	stmt.WriteString("CREATE TRIGGER  " + target + "_fts_insert AFTER INSERT ON " + tbl + " BEGIN ")
-	stmt.WriteString("  INSERT INTO " + target + "_fts(" + strings.Join(fields, ", ") + ")")
-	stmt.WriteString("  VALUES (" + strings.Join(surround(fields, "new.", ""), ", ") + ");")
+	stmt.WriteString("  INSERT INTO " + target + "_fts(rowid, " + strings.Join(fields, ", ") + ")")
+	stmt.WriteString("  VALUES (new.rowid, " + strings.Join(surround(fields, "new.", ""), ", ") + ");")
 	stmt.WriteString("END;")
 	if _, err := app.DB().NewQuery(stmt.String()).Execute(); err != nil {
 		return fmt.Errorf("failed to create FTS insert trigger for %s: %w", target, err)
@@ -160,10 +179,10 @@ func createCollectionFts(app *pocketbase.PocketBase, target string) error {
 
 	stmt.Reset()
 	stmt.WriteString("CREATE TRIGGER  " + target + "_fts_update AFTER UPDATE ON " + tbl + " BEGIN ")
-	stmt.WriteString("  INSERT INTO " + target + "_fts(" + target + "_fts, " + strings.Join(fields, ", ") + ")")
-	stmt.WriteString("  VALUES ('delete', " + strings.Join(surround(fields, "old.", ""), ", ") + ");")
-	stmt.WriteString("  INSERT INTO " + target + "_fts(" + strings.Join(fields, ", ") + ")")
-	stmt.WriteString("  VALUES (" + strings.Join(surround(fields, "new.", ""), ", ") + ");")
+	stmt.WriteString("  INSERT INTO " + target + "_fts(" + target + "_fts, rowid, " + strings.Join(fields, ", ") + ")")
+	stmt.WriteString("  VALUES ('delete', old.rowid, " + strings.Join(surround(fields, "old.", ""), ", ") + ");")
+	stmt.WriteString("  INSERT INTO " + target + "_fts(rowid, " + strings.Join(fields, ", ") + ")")
+	stmt.WriteString("  VALUES (new.rowid, " + strings.Join(surround(fields, "new.", ""), ", ") + ");")
 	stmt.WriteString("END;")
 	if _, err := app.DB().NewQuery(stmt.String()).Execute(); err != nil {
 		return fmt.Errorf("failed to create FTS update trigger for %s: %w", target, err)
@@ -171,8 +190,8 @@ func createCollectionFts(app *pocketbase.PocketBase, target string) error {
 
 	stmt.Reset()
 	stmt.WriteString("CREATE TRIGGER  " + target + "_fts_delete AFTER DELETE ON " + tbl + " BEGIN ")
-	stmt.WriteString("  INSERT INTO " + target + "_fts(" + target + "_fts, " + strings.Join(fields, ", ") + ")")
-	stmt.WriteString("  VALUES ('delete', " + strings.Join(surround(fields, "old.", ""), ", ") + ");")
+	stmt.WriteString("  INSERT INTO " + target + "_fts(" + target + "_fts, rowid, " + strings.Join(fields, ", ") + ")")
+	stmt.WriteString("  VALUES ('delete', old.rowid, " + strings.Join(surround(fields, "old.", ""), ", ") + ");")
 	stmt.WriteString("END;")
 	if _, err := app.DB().NewQuery(stmt.String()).Execute(); err != nil {
 		return fmt.Errorf("failed to create FTS delete trigger for %s: %w", target, err)

@@ -39,6 +39,7 @@ func startEmbeddingOperation(app core.App, job *core.Record, chunkRecords []*cor
 func runBatchEmbed(app core.App, job *core.Record, chunks []Chunk) error {
 	model := fmt.Sprintf("models/%s", getEmbeddingModel())
 	requests := make([]EmbedContentRequest, len(chunks))
+	chunkIDs := make([]string, len(chunks))
 
 	for i, c := range chunks {
 		requests[i] = EmbedContentRequest{
@@ -50,6 +51,7 @@ func runBatchEmbed(app core.App, job *core.Record, chunks []Chunk) error {
 				"chunk_id": c.Record.Id,
 			},
 		}
+		chunkIDs[i] = c.Record.Id
 	}
 
 	batchEmbed, err := postBatchEmbed(context.Background(), requests, getEmbeddingModel())
@@ -62,7 +64,7 @@ func runBatchEmbed(app core.App, job *core.Record, chunks []Chunk) error {
 		return err
 	}
 
-	return enqueuePollJob(app, embeddingJob)
+	return enqueuePollJob(app, embeddingJob, chunkIDs)
 }
 
 func runBulkEmbed(app core.App, job *core.Record, chunks []Chunk) error {

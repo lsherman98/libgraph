@@ -41,6 +41,20 @@ func deleteEmbeddingForRecord(app *pocketbase.PocketBase, record *core.Record) e
 }
 
 func createEmbeddingJob(app core.App, job *core.Record, providerOperationID string) (*core.Record, error) {
+	existing, _ := app.FindFirstRecordByFilter(
+		collections.EmbeddingJobs,
+		"batch_id = {:batchId}",
+		dbx.Params{"batchId": providerOperationID},
+	)
+	if existing != nil {
+		existing.Set("status", "submitted")
+		existing.Set("error_message", "")
+		if err := app.Save(existing); err != nil {
+			return nil, err
+		}
+		return existing, nil
+	}
+
 	embeddingJobs, _ := app.FindCollectionByNameOrId(collections.EmbeddingJobs)
 	embeddingJob := core.NewRecord(embeddingJobs)
 	embeddingJob.Set("job", job.Id)
@@ -50,6 +64,19 @@ func createEmbeddingJob(app core.App, job *core.Record, providerOperationID stri
 	embeddingJob.Set("batch_id", providerOperationID)
 	embeddingJob.Set("status", "submitted")
 	if err := app.Save(embeddingJob); err != nil {
+		raceExisting, findErr := app.FindFirstRecordByFilter(
+			collections.EmbeddingJobs,
+			"batch_id = {:batchId}",
+			dbx.Params{"batchId": providerOperationID},
+		)
+		if findErr == nil && raceExisting != nil {
+			raceExisting.Set("status", "submitted")
+			raceExisting.Set("error_message", "")
+			if saveErr := app.Save(raceExisting); saveErr != nil {
+				return nil, saveErr
+			}
+			return raceExisting, nil
+		}
 		return nil, err
 	}
 
@@ -68,4 +95,23 @@ func loadChunkRecords(app core.App, chunkIDs []string) ([]*core.Record, error) {
 	}
 
 	return chunks, nil
+}
+
+func recoverChunkIDsForEmbeddingJob(app core.App, embeddingJob *core.Record) []string {
+	submitJobID := embeddingJob.GetString("job")
+	if submitJobID == "" {
+		return nil
+	}
+
+	submitJob, err := app.FindRecordById(collections.Queue, submitJobID)
+	if err != nil {
+		return nil
+	}
+
+	payload := EmbedPayload{}
+	if err := submitJob.UnmarshalJSONField("payload", &payload); err != nil {
+		return nil
+	}
+
+	return payload.ChunkIDs
 }

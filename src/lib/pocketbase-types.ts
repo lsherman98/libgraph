@@ -144,6 +144,7 @@ export enum ChatsTypeOptions {
 	"search" = "search",
 	"chat" = "chat",
 	"context_chat" = "context_chat",
+	"fts" = "fts",
 }
 export type ChatsRecord = {
 	created: IsoAutoDateString
@@ -361,6 +362,8 @@ export type QueueRecord<Tpayload = unknown> = {
 	job_type: QueueJobTypeOptions
 	page?: RecordIdString
 	payload?: null | Tpayload
+	retry_count?: number
+	run_after?: IsoDateString
 	started_at?: IsoDateString
 	status: QueueStatusOptions
 	updated: IsoAutoDateString
@@ -425,6 +428,7 @@ export enum UploadsTypeOptions {
 	"youtube" = "youtube",
 	"essay" = "essay",
 	"summary" = "summary",
+	"transcript" = "transcript",
 }
 
 export enum UploadsStatusOptions {

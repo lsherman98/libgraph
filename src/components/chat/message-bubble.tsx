@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { User, Bot, FileText, Search } from "lucide-react";
+import { User, Bot, FileText, Search, SearchX } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -19,13 +19,15 @@ export interface LocalMessage extends ChatMessage {
 
 interface MessageBubbleProps {
   message: LocalMessage;
-  mode?: "chat" | "search";
+  mode?: "chat" | "search" | "fts" | "full_text";
   onSourceClick?: (source: ChatSource) => void;
+  contentClassName?: string;
+  searchQuery?: string;
 }
 
-export function MessageBubble({ message, mode = "chat", onSourceClick }: MessageBubbleProps) {
+export function MessageBubble({ message, mode = "chat", onSourceClick, contentClassName, searchQuery }: MessageBubbleProps) {
   const isUser = message.role === "user";
-  const isSearch = mode === "search";
+  const isSearch = mode === "search" || mode === "fts" || mode === "full_text";
   const hasCitations = !isUser && message.content?.includes("[citation:");
 
   const citationMap = useMemo(
@@ -51,18 +53,29 @@ export function MessageBubble({ message, mode = "chat", onSourceClick }: Message
       <MessageAvatar role={message.role} isSearch={isSearch} />
       <div className="flex-1 min-w-0 space-y-3 pt-1">
         <div className="text-sm font-medium text-muted-foreground">{isUser ? "You" : isSearch ? "Search Results" : "Assistant"}</div>
-        <div className="text-sm leading-relaxed">
+        <div className={cn("text-sm leading-relaxed", contentClassName)}>
           {hasCitations && message.sources ? (
             <CitationContent content={message.content} sources={message.sources} citationMap={citationMap} onSourceClick={onSourceClick} />
-          ) : (
+          ) : message.content ? (
             <SharedMarkdownRenderer content={message.content} />
-          )}
+          ) : null}
         </div>
+        {!isUser && isSearch && message.sources && message.sources.length === 0 && (
+          <div className="flex items-center gap-2.5 py-3 text-sm text-muted-foreground">
+            <SearchX className="h-4 w-4 shrink-0" />
+            <span>No results found for this query.</span>
+          </div>
+        )}
         {!isUser &&
           message.sources &&
           message.sources.length > 0 &&
           (isSearch ? (
-            <SearchResultSources sources={message.sources} onSourceClick={onSourceClick} />
+            <SearchResultSources
+              sources={message.sources}
+              onSourceClick={onSourceClick}
+              query={mode === "fts" || mode === "full_text" ? searchQuery : undefined}
+              highlightEnabled={mode === "fts" || mode === "full_text"}
+            />
           ) : (
             <SourceList sources={message.sources} citationMap={citationMap} onSourceClick={onSourceClick} />
           ))}

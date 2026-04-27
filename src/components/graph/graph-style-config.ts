@@ -22,17 +22,17 @@ export const nodeTypeConfig: Record<NodesTypeOptions, { icon: LucideIcon; color:
     [NodesTypeOptions.note]: { icon: MessageSquare, color: "#6366f1", darkColor: "#818cf8", label: "Notes" },
 };
 
-export const edgeTypeConfig: Record<EdgesTypeOptions, { color: string; label: string }> = {
-    [EdgesTypeOptions.authored_by]: { color: "#9333ea", label: "Authored by" },
-    [EdgesTypeOptions.tagged_with]: { color: "#22c55e", label: "Tagged with" },
-    [EdgesTypeOptions.belongs_to]: { color: "#f97316", label: "Belongs to" },
-    [EdgesTypeOptions.highlight_of]: { color: "#eab308", label: "Highlight of" },
-    [EdgesTypeOptions.bookmark_of]: { color: "#ef4444", label: "Bookmark of" },
-    [EdgesTypeOptions.note_of]: { color: "#6366f1", label: "Note of" },
-    [EdgesTypeOptions.published_by]: { color: "#0ea5e9", label: "Published by" },
-    [EdgesTypeOptions.about_person]: { color: "#d946ef", label: "About person" },
-    [EdgesTypeOptions.links_to]: { color: "#14b8a6", label: "Links to" },
-    [EdgesTypeOptions.summary_of]: { color: "#8b5cf6", label: "Summary of" },
+export const edgeTypeConfig: Record<EdgesTypeOptions, { color: string; darkColor: string; label: string }> = {
+    [EdgesTypeOptions.authored_by]: { color: "#7e22ce", darkColor: "#a855f7", label: "Authored by" },
+    [EdgesTypeOptions.tagged_with]: { color: "#15803d", darkColor: "#4ade80", label: "Tagged with" },
+    [EdgesTypeOptions.belongs_to]: { color: "#c2410c", darkColor: "#fb923c", label: "Belongs to" },
+    [EdgesTypeOptions.highlight_of]: { color: "#92400e", darkColor: "#fbbf24", label: "Highlight of" },
+    [EdgesTypeOptions.bookmark_of]: { color: "#b91c1c", darkColor: "#f87171", label: "Bookmark of" },
+    [EdgesTypeOptions.note_of]: { color: "#3730a3", darkColor: "#818cf8", label: "Note of" },
+    [EdgesTypeOptions.published_by]: { color: "#0369a1", darkColor: "#38bdf8", label: "Published by" },
+    [EdgesTypeOptions.about_person]: { color: "#a21caf", darkColor: "#e879f9", label: "About person" },
+    [EdgesTypeOptions.links_to]: { color: "#0f766e", darkColor: "#2dd4bf", label: "Links to" },
+    [EdgesTypeOptions.summary_of]: { color: "#5b21b6", darkColor: "#a78bfa", label: "Summary of" },
 };
 
 export const uploadTypeConfig: Record<UploadsTypeOptions, { color: string; darkColor: string; icon: string; label: string }> = {
@@ -77,5 +77,11 @@ export const uploadTypeConfig: Record<UploadsTypeOptions, { color: string; darkC
         darkColor: "#a78bfa",
         label: "Summary",
         icon: "M6 4h12v16H6z M9 8h6 M9 12h6 M9 16h3",
+    },
+    [UploadsTypeOptions.transcript]: {
+        color: "#6366f1",
+        darkColor: "#818cf8",
+        label: "Transcript",
+        icon: "M4 6h16v12H4z M7 9h10 M7 13h8 M7 17h6",
     },
 };
