@@ -165,6 +165,15 @@ export function AdvancedFilters({
           onToggle={(value) => toggleArrayFilter("author", value)}
           className="w-32"
         />
+        <FilterDropdown
+          label="People"
+          values={filters.people}
+          placeholder="People"
+          searchable
+          options={filterPeopleOptions}
+          onToggle={(value) => toggleArrayFilter("people", value)}
+          className="w-32"
+        />
         <div className="min-w-0 shrink-0 w-40">
           <CreatableCombobox
             options={filterPublicationOptions}
