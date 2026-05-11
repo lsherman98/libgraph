@@ -5,8 +5,16 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { TableRow, TableCell } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FileText, Pencil, Trash2, Link2, Library } from "lucide-react";
+import { DownloadButton } from "@/components/reader/download-button";
 import type { UploadsResponse } from "@/lib/pocketbase-types";
 import { typeIcons, statusConfig } from "./constants";
+
+const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".ogg", ".opus", ".flac", ".aac", ".wma", ".webm", ".mp4"]);
+
+function isAudioFile(filename: string): boolean {
+  const ext = filename.toLowerCase().slice(filename.lastIndexOf("."));
+  return AUDIO_EXTENSIONS.has(ext);
+}
 
 export function DocumentRow({
   upload,
@@ -141,6 +149,7 @@ export function DocumentRow({
               Open
             </Button>
           )}
+          <DownloadButton upload={upload} isAudioFile={upload.file ? isAudioFile(upload.file) : false} />
           <Button
             variant="ghost"
             size="icon"

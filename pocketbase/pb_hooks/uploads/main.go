@@ -9,6 +9,14 @@ import (
 )
 
 func Init(app *pocketbase.PocketBase) error {
+	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		if err := registerDownloadRoutes(app, se); err != nil {
+			return err
+		}
+
+		return se.Next()
+	})
+
 	app.OnRecordCreateRequest(collections.Uploads).BindFunc(func(e *core.RecordRequestEvent) error {
 		transcriptFile, err := findCustomTranscriptFile(e)
 		if err != nil {
