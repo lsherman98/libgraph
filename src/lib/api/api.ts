@@ -137,7 +137,7 @@ const buildUploadsFilter = (filters?: UploadFilters) => {
         filterParts.push(`(title ~ "${filters.search.trim()}" || file ~ "${filters.search.trim()}")`);
     }
 
-    return filterParts.length > 0 ? filterParts.join(' || ') : undefined;
+    return filterParts.length > 0 ? filterParts.join(' && ') : undefined;
 }
 
 const getUploadsSort = (filters?: UploadFilters) => {
