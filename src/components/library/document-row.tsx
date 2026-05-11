@@ -92,14 +92,6 @@ export function DocumentRow({
                 </span>
               )}
             </div>
-            {isProcessing && (
-              <div className="mt-1 flex items-center gap-2 min-w-0 flex-shrink-0">
-                <StatusIcon className={`h-4 w-4 ${status.className} flex-shrink-0`} />
-                <Badge variant={status.variant} className="whitespace-nowrap text-xs">
-                  {status.label}
-                </Badge>
-              </div>
-            )}
           </div>
         </div>
       </TableCell>
@@ -129,7 +121,7 @@ export function DocumentRow({
           day: "numeric",
         })}
       </TableCell>
-      <TableCell>
+      <TableCell className="w-64">
         <div className="flex items-center justify-end gap-1 whitespace-nowrap">
           {upload.status === "processing" || upload.status === "failed" ? (
             <div className="mr-1 flex items-center gap-1.5 whitespace-nowrap shrink-0">
