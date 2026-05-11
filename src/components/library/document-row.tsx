@@ -43,6 +43,7 @@ export function DocumentRow({
   const StatusIcon = status.icon;
 
   const isClickable = upload.status === "success";
+  const isProcessing = upload.status === "processing" || upload.status === "failed";
   const linkedCount = upload.uploads?.length || 0;
   const formatNames = (ids?: string[], lookup?: Map<string, string>) => {
     if (!ids?.length || !lookup) return "—";
@@ -57,7 +58,7 @@ export function DocumentRow({
   const publicationName = upload.publication ? publicationNamesById.get(upload.publication) || upload.publication : "—";
 
   return (
-    <TableRow className={isClickable ? "hover:bg-muted/50" : "opacity-75"}>
+    <TableRow className={`${isClickable ? "hover:bg-muted/50" : ""} ${isProcessing ? "bg-blue-50/50 dark:bg-blue-950/20" : ""}`}>
       {onSelect !== undefined && (
         <TableCell className="w-10 pr-0">
           <Checkbox
@@ -82,7 +83,7 @@ export function DocumentRow({
                 {upload.title || "Untitled"}
               </TooltipContent>
             </Tooltip>
-            <div className="flex items-center gap-2 mt-0.5">
+            <div className="flex items-center gap-2 mt-0.5 min-w-0 flex-wrap">
               <span className="text-xs text-muted-foreground capitalize">{upload.type}</span>
               {linkedCount > 0 && (
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">
@@ -91,10 +92,12 @@ export function DocumentRow({
                 </span>
               )}
             </div>
-            {upload.status !== "success" && upload.status !== "processing" && upload.status !== "failed" && (
-              <div className="mt-1 flex items-center gap-2">
-                <StatusIcon className={`h-4 w-4 ${status.className}`} />
-                <Badge variant={status.variant}>{status.label}</Badge>
+            {isProcessing && (
+              <div className="mt-1 flex items-center gap-2 min-w-0 flex-shrink-0">
+                <StatusIcon className={`h-4 w-4 ${status.className} flex-shrink-0`} />
+                <Badge variant={status.variant} className="whitespace-nowrap text-xs">
+                  {status.label}
+                </Badge>
               </div>
             )}
           </div>

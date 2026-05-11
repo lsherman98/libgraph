@@ -24,9 +24,9 @@ Required for startup:
 - `GEMINI_API_KEY`: Google Gemini API key used by chat, embeddings, and summarization hooks.
 
 Optional with defaults:
-- `PROCESSING_PARSE_WORKERS`: Worker count for parse/transcribe jobs. Defaults to `1` when unset/invalid.
-- `PROCESSING_CHUNK_WORKERS`: Worker count for chunk generation jobs. Defaults to `1` when unset/invalid.
-- `PROCESSING_SUMMARIZE_WORKERS`: Worker count for summarize jobs. Defaults to `1` when unset/invalid.
+- `PROCESSING_PARSE_WORKERS`: Worker count for parse/transcribe jobs. Defaults to `1`.
+- `PROCESSING_CHUNK_WORKERS`: Worker count for chunk generation jobs. Defaults to `1`.
+- `PROCESSING_SUMMARIZE_WORKERS`: Worker count for summarize jobs. Defaults to `1`.
 
 Optional by feature:
 - `MISTRAL_API_KEY`: Required only if you use audio transcription.
