@@ -4,6 +4,7 @@ import type { UploadFilters } from "@/lib/api/api";
 import type { EdgesResponse } from "@/lib/pocketbase-types";
 import { NodesTypeOptions, EdgesTypeOptions, UploadsTypeOptions } from "@/lib/pocketbase-types";
 import type { HighlightsRecord, BookmarksRecord, NotesRecord } from "@/lib/pocketbase-types";
+import { Collections } from "@/lib/pocketbase-types";
 import type { EnrichedNodesResponse, UploadNodeData } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import { PreviewDialog } from "@/components/workspace/preview-dialog";
 import { GraphFiltersPanel } from "./graph-filters-panel";
 import { edgeTypeConfig, nodeTypeConfig, uploadTypeConfig } from "./graph-style-config";
 import { useTheme } from "next-themes";
+import { pb } from "@/lib/pocketbase";
 
 export function GraphCanvas() {
   const { theme } = useTheme();
@@ -50,8 +52,8 @@ export function GraphCanvas() {
     });
   }, []);
 
-  const handlePreviewNode = useCallback((request: NodePreviewRequest) => {
-    const { nodeType, uploadId, uploadTitle, pageNumber, recordData } = request;
+  const handlePreviewNode = useCallback(async (request: NodePreviewRequest) => {
+    const { nodeType, recordId, uploadId, uploadTitle, pageNumber, recordData } = request;
 
     if (nodeType === NodesTypeOptions.upload) {
       setPreviewType("upload");
@@ -60,11 +62,34 @@ export function GraphCanvas() {
       setPreviewUploadTitle(uploadTitle);
       setPreviewPageNumber(1);
     } else if (nodeType === NodesTypeOptions.highlight || nodeType === NodesTypeOptions.bookmark || nodeType === NodesTypeOptions.note) {
+      let resolvedItem = (recordData as HighlightsRecord | BookmarksRecord | NotesRecord) ?? null;
+
+      if (recordId) {
+        try {
+          if (nodeType === NodesTypeOptions.highlight) {
+            resolvedItem = (await pb.collection(Collections.Highlights).getOne(recordId)) as HighlightsRecord;
+          } else if (nodeType === NodesTypeOptions.bookmark) {
+            resolvedItem = (await pb.collection(Collections.Bookmarks).getOne(recordId)) as BookmarksRecord;
+          } else if (nodeType === NodesTypeOptions.note) {
+            resolvedItem = (await pb.collection(Collections.Notes).getOne(recordId)) as NotesRecord;
+          }
+        } catch {
+          // Fall back to node record_data if the annotation record fetch fails.
+        }
+      }
+
+      const resolvedPageNumberFromItem =
+        resolvedItem && typeof (resolvedItem as { page_number?: number }).page_number === "number"
+          ? (resolvedItem as { page_number: number }).page_number
+          : undefined;
+      const resolvedUploadIdFromItem =
+        resolvedItem && typeof (resolvedItem as { upload?: string }).upload === "string" ? (resolvedItem as { upload: string }).upload : undefined;
+
       setPreviewType(nodeType as "highlight" | "bookmark" | "note");
-      setPreviewItem((recordData as HighlightsRecord | BookmarksRecord | NotesRecord) ?? null);
-      setPreviewUploadId(uploadId);
+      setPreviewItem(resolvedItem);
+      setPreviewUploadId(uploadId ?? resolvedUploadIdFromItem);
       setPreviewUploadTitle(undefined);
-      setPreviewPageNumber(pageNumber);
+      setPreviewPageNumber(pageNumber ?? resolvedPageNumberFromItem);
     } else {
       return;
     }

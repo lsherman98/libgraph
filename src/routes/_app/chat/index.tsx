@@ -200,6 +200,14 @@ function ChatPage() {
     [filters],
   );
 
+  const filtersLocked = mode === "chat" && displayMessages.length > 0;
+
+  useEffect(() => {
+    if (filtersLocked && isFiltersPanelOpen) {
+      setIsFiltersPanelOpen(false);
+    }
+  }, [filtersLocked, isFiltersPanelOpen]);
+
   return (
     <div className="flex h-full w-full">
       {isSidebarOpen && (
@@ -221,6 +229,7 @@ function ChatPage() {
           isFiltersPanelOpen={isFiltersPanelOpen}
           onOpenFilters={() => setIsFiltersPanelOpen(true)}
           activeFilterCount={activeFilterCount}
+          filtersDisabled={filtersLocked}
           hasMessages={displayMessages.length > 0}
           onNewChat={handleNewChat}
         />

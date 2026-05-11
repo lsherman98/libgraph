@@ -255,7 +255,7 @@ export function DocumentsTab() {
                   <TableHead className="w-24 hidden lg:table-cell sticky top-0 z-20 bg-card">Publication</TableHead>
                   <TableHead className="w-24 hidden xl:table-cell sticky top-0 z-20 bg-card">Tags</TableHead>
                   <TableHead className="w-32 hidden md:table-cell sticky top-0 z-20 bg-card">Created</TableHead>
-                  <TableHead className="w-40 sticky top-0 z-20 bg-card"></TableHead>
+                  <TableHead className="w-48 sticky top-0 z-20 bg-card"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

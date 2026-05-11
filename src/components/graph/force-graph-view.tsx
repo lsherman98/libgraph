@@ -19,6 +19,7 @@ const nodeTypeIconPaths: Record<NodesTypeOptions, string> = {
 export interface NodePreviewRequest {
   nodeId: string;
   nodeType: NodesTypeOptions;
+  recordId?: string;
   uploadId?: string;
   uploadTitle?: string;
   pageNumber?: number;
@@ -180,20 +181,16 @@ function buildExpandedHTML(enrichedNode: EnrichedNodesResponse, isDark: boolean)
         const comment = rd.comment as string | undefined;
         if (comment) details.push(comment.length > 60 ? comment.slice(0, 60) + "\u2026" : comment);
         if (rd.created) details.push(formatDateShort(rd.created as string));
-        if (rd.upload) {
-          hasAction = true;
-          actionLabel = "Preview";
-        }
+        hasAction = true;
+        actionLabel = "Preview";
         break;
       }
       case NodesTypeOptions.bookmark: {
         title = (rd.comment as string) || "Bookmark";
         if (rd.page_number) details.push(`Page ${rd.page_number}`);
         if (rd.created) details.push(formatDateShort(rd.created as string));
-        if (rd.upload) {
-          hasAction = true;
-          actionLabel = "Preview";
-        }
+        hasAction = true;
+        actionLabel = "Preview";
         break;
       }
       case NodesTypeOptions.note: {
@@ -201,10 +198,8 @@ function buildExpandedHTML(enrichedNode: EnrichedNodesResponse, isDark: boolean)
         title = content ? (content.length > 80 ? content.slice(0, 80) + "\u2026" : content) : "Note";
         if (rd.page_number) details.push(`Page ${rd.page_number}`);
         if (rd.created) details.push(formatDateShort(rd.created as string));
-        if (rd.upload) {
-          hasAction = true;
-          actionLabel = "Preview";
-        }
+        hasAction = true;
+        actionLabel = "Preview";
         break;
       }
       case NodesTypeOptions.person: {
@@ -231,20 +226,30 @@ function buildExpandedHTML(enrichedNode: EnrichedNodesResponse, isDark: boolean)
     actionLabel = "Preview";
   }
 
+  if (!hasAction && (type === NodesTypeOptions.highlight || type === NodesTypeOptions.bookmark || type === NodesTypeOptions.note)) {
+    hasAction = true;
+    actionLabel = "Preview";
+  }
+
   const truncTitle = title.length > 50 ? title.slice(0, 50) + "\u2026" : title;
 
   const detailsHtml = details.map((d) => `<div style="font-size:11px;color:${mutedColor};line-height:1.4">${escapeHtml(d)}</div>`).join("");
 
   const actionHtml = externalHref
     ? `<a href="${escapeHtml(externalHref)}"
-         style="display:block;text-align:center;padding:5px 8px;background:${color};color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:500;text-decoration:none;margin-top:8px;cursor:pointer;"
+         style="display:inline-flex;align-items:center;justify-content:center;padding:2px 8px;background:${color};color:#fff;border:none;border-radius:999px;font-size:10px;font-weight:600;text-decoration:none;cursor:pointer;white-space:nowrap;"
          target="_blank" rel="noopener noreferrer"
        >${escapeHtml(actionLabel)}</a>`
     : hasAction
       ? `<button data-preview-action="true"
-           style="display:block;width:100%;text-align:center;padding:5px 8px;background:${color};color:#fff;border:none;border-radius:5px;font-size:11px;font-weight:500;margin-top:8px;cursor:pointer;"
+           style="display:inline-flex;align-items:center;justify-content:center;padding:2px 8px;background:${color};color:#fff;border:none;border-radius:999px;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap;"
          >${escapeHtml(actionLabel)}</button>`
       : "";
+
+  const metaRowHtml = `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;">
+    <span style="display:inline-block;font-size:9px;padding:1px 6px;border-radius:3px;background:${color}22;color:${color};font-weight:500;letter-spacing:0.2px;white-space:nowrap;">${escapeHtml(formatLabel(type))}${uploadTypeLabel ? ` \u00B7 ${escapeHtml(uploadTypeLabel)}` : ""}</span>
+    ${actionHtml}
+  </div>`;
 
   return `<div xmlns="http://www.w3.org/1999/xhtml" style="
     background:${bgColor};
@@ -256,9 +261,8 @@ function buildExpandedHTML(enrichedNode: EnrichedNodesResponse, isDark: boolean)
     max-width:220px;
   ">
     <div style="font-size:12px;font-weight:600;color:${textColor};line-height:1.3;margin-bottom:4px;word-wrap:break-word;" title="${escapeHtml(title)}">${escapeHtml(truncTitle)}</div>
-    <span style="display:inline-block;font-size:9px;padding:1px 6px;border-radius:3px;background:${color}22;color:${color};font-weight:500;letter-spacing:0.2px;margin-bottom:6px;">${escapeHtml(formatLabel(type))}${uploadTypeLabel ? ` \u00B7 ${escapeHtml(uploadTypeLabel)}` : ""}</span>
+    ${metaRowHtml}
     ${detailsHtml ? `<div style="margin-top:4px;">${detailsHtml}</div>` : ""}
-    ${actionHtml}
   </div>`;
 }
 
@@ -351,6 +355,65 @@ interface GraphEdge extends d3.SimulationLinkDatum<GraphNode> {
   target: string | GraphNode;
   type?: EdgesTypeOptions;
   curveOffset: number;
+}
+
+function getEdgeNodeId(endpoint: string | GraphNode): string {
+  return typeof endpoint === "string" ? endpoint : endpoint.id;
+}
+
+function findConnectedUploadId(nodeId: string, graphEdges: GraphEdge[], graphNodesById: Map<string, EnrichedNodesResponse>): string | undefined {
+  for (const edge of graphEdges) {
+    const sourceId = getEdgeNodeId(edge.source);
+    const targetId = getEdgeNodeId(edge.target);
+    if (sourceId !== nodeId && targetId !== nodeId) continue;
+
+    const neighborId = sourceId === nodeId ? targetId : sourceId;
+    const neighborNode = graphNodesById.get(neighborId);
+    if (neighborNode?.type === NodesTypeOptions.upload && typeof neighborNode.record_id === "string" && neighborNode.record_id.length > 0) {
+      return neighborNode.record_id;
+    }
+  }
+
+  return undefined;
+}
+
+function buildPreviewRequest(
+  enrichedNode: EnrichedNodesResponse,
+  graphEdges: GraphEdge[],
+  graphNodesById: Map<string, EnrichedNodesResponse>,
+): NodePreviewRequest | null {
+  const nodeType = enrichedNode.type as NodesTypeOptions;
+  const recordData = (enrichedNode.record_data as Record<string, unknown> | undefined) ?? undefined;
+
+  if (nodeType === NodesTypeOptions.upload) {
+    if (!enrichedNode.record_id) return null;
+    return {
+      nodeId: enrichedNode.id,
+      nodeType,
+      recordId: enrichedNode.record_id,
+      uploadId: enrichedNode.record_id,
+      uploadTitle: (recordData?.title as string) || enrichedNode.label || "Document",
+      recordData,
+    };
+  }
+
+  if (nodeType !== NodesTypeOptions.highlight && nodeType !== NodesTypeOptions.bookmark && nodeType !== NodesTypeOptions.note) {
+    return null;
+  }
+
+  const pageNumberRaw = recordData?.page_number;
+  const pageNumber = typeof pageNumberRaw === "number" && pageNumberRaw > 0 ? pageNumberRaw : undefined;
+  const uploadIdFromRecord = typeof recordData?.upload === "string" ? recordData.upload : undefined;
+  const uploadId = uploadIdFromRecord ?? findConnectedUploadId(enrichedNode.id, graphEdges, graphNodesById);
+
+  return {
+    nodeId: enrichedNode.id,
+    nodeType,
+    recordId: enrichedNode.record_id,
+    uploadId,
+    pageNumber,
+    recordData,
+  };
 }
 
 function buildLinkPath(edge: GraphEdge): string {
@@ -781,6 +844,7 @@ export function ForceGraphView({
       .attr("cursor", "pointer")
       .call(d3.drag<any, GraphNode>().on("start", dragstarted).on("drag", dragged).on("end", dragended))
       .on("mouseenter", (event, d) => {
+        if (selectedNodeIdRef.current) return;
         const [x, y] = d3.pointer(event, containerRef.current);
         const enrichedNode = nodeDataMapRef.current.get(d.id);
         let tooltipHtml = "";
@@ -793,6 +857,7 @@ export function ForceGraphView({
         tooltip.style("left", `${x + 12}px`).style("top", `${y + 12}px`);
       })
       .on("mousemove", (event) => {
+        if (selectedNodeIdRef.current) return;
         throttledTooltipMove(event);
       })
       .on("mouseleave", () => {
@@ -804,7 +869,13 @@ export function ForceGraphView({
       })
       .on("click", (event, d) => {
         event.stopPropagation();
+        tooltip.style("opacity", "0");
+        if (tooltipRafId !== null) {
+          cancelAnimationFrame(tooltipRafId);
+          tooltipRafId = null;
+        }
         onSelectNodeRef.current(d.id);
+
         const t = tuningRef.current;
         const currentScale = zoomTransformRef.current.k || 1;
         const targetScale = Math.max(currentScale, t.focusZoom);
@@ -985,6 +1056,10 @@ export function ForceGraphView({
         expandedCardRef.current = null;
       }
 
+      if (selId) {
+        tooltip.style("opacity", "0");
+      }
+
       const inactiveNodeOpacity = 0.12;
       const inactiveEdgeOpacity = 0.04;
 
@@ -1080,20 +1155,17 @@ export function ForceGraphView({
               event.preventDefault();
               const onPreview = onPreviewNodeRef.current;
               if (!onPreview) return;
-              const rd = enrichedNode.record_data as Record<string, unknown> | undefined;
-              const nodeType = enrichedNode.type as NodesTypeOptions;
-              const request: NodePreviewRequest = {
-                nodeId: enrichedNode.id,
-                nodeType,
-                recordData: rd || undefined,
-              };
-              if (nodeType === NodesTypeOptions.upload) {
-                request.uploadId = enrichedNode.record_id;
-                request.uploadTitle = (rd?.title as string) || enrichedNode.label || "Document";
-              } else if (rd?.upload) {
-                request.uploadId = rd.upload as string;
-                request.pageNumber = rd.page_number as number | undefined;
-              }
+              const request =
+                buildPreviewRequest(enrichedNode, graphData.edges, nodeDataMapRef.current) ??
+                (enrichedNode.record_id
+                  ? {
+                      nodeId: enrichedNode.id,
+                      nodeType: enrichedNode.type as NodesTypeOptions,
+                      recordId: enrichedNode.record_id,
+                      recordData: (enrichedNode.record_data as Record<string, unknown> | undefined) ?? undefined,
+                    }
+                  : null);
+              if (!request) return;
               onPreview(request);
             });
           });

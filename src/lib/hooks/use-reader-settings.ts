@@ -61,7 +61,7 @@ export const DEFAULT_READER_SETTINGS: ReaderSettings = {
     textColor: READER_THEMES.light.textColor,
     viewMode: "paginate",
     hyphenation: false,
-    paragraphSpacing: 1.5,
+    paragraphSpacing: 2.5,
 };
 
 function parseReaderSettings(value: unknown): Partial<ReaderSettings> | null {

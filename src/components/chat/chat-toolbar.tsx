@@ -11,6 +11,7 @@ interface ChatToolbarProps {
   isFiltersPanelOpen: boolean;
   onOpenFilters: () => void;
   activeFilterCount: number;
+  filtersDisabled?: boolean;
   hasMessages: boolean;
   onNewChat: () => void;
 }
@@ -23,6 +24,7 @@ export function ChatToolbar({
   isFiltersPanelOpen,
   onOpenFilters,
   activeFilterCount,
+  filtersDisabled,
   hasMessages,
   onNewChat,
 }: ChatToolbarProps) {
@@ -43,7 +45,13 @@ export function ChatToolbar({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 relative" onClick={onOpenFilters}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 relative"
+                  onClick={filtersDisabled ? undefined : onOpenFilters}
+                  disabled={filtersDisabled}
+                >
                   <SlidersHorizontal className="h-4 w-4" />
                   {activeFilterCount > 0 && (
                     <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
@@ -52,7 +60,7 @@ export function ChatToolbar({
                   )}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">Show filters</TooltipContent>
+              <TooltipContent side="bottom">{filtersDisabled ? "Start a new chat to change filters" : "Show filters"}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
         )}

@@ -379,7 +379,7 @@ export function PreviewDialog({
               </div>
             ) : markdown ? (
               <div className="flex justify-center">
-                <div className="w-full max-w-3xl text-left text-sm text-foreground/80 font-serif leading-relaxed whitespace-pre-wrap">
+                <div className="w-fit max-w-3xl text-left text-sm text-foreground/80 font-serif leading-relaxed whitespace-pre-wrap">
                   {renderPageContent()}
                 </div>
               </div>

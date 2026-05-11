@@ -655,3 +655,113 @@ func buildPromptWithSidebarContext(contexts []ChatContext) string {
 
 	return sb.String()
 }
+
+// loadFirstAssistantSources returns the sources saved on the earliest assistant
+// message in the chat, so follow-up turns can reuse the initial RAG context.
+func loadFirstAssistantSources(app core.App, chatID string) ([]ChatSource, error) {
+	records, err := app.FindRecordsByFilter(
+		"messages",
+		"chat = {:chatId} && role = 'assistant'",
+		"created",
+		1,
+		0,
+		dbx.Params{"chatId": chatID},
+	)
+	if err != nil || len(records) == 0 {
+		return nil, err
+	}
+
+	sourcesStr := records[0].GetString("sources")
+	if sourcesStr == "" || sourcesStr == "null" {
+		return nil, nil
+	}
+
+	var sources []ChatSource
+	if err := json.Unmarshal([]byte(sourcesStr), &sources); err != nil {
+		return nil, err
+	}
+	return sources, nil
+}
+
+// buildPromptWithChatSources builds the system prompt using previously cached
+// ChatSource records instead of fresh vector_search.SearchResult values.
+func buildPromptWithChatSources(sources []ChatSource) string {
+	var sb strings.Builder
+	sb.WriteString("You are an AI assistant helping users understand their uploaded documents.\n\n")
+
+	if len(sources) == 0 {
+		sb.WriteString("No relevant context was found in the user's documents. Answer based on your general knowledge, but let the user know if you're unsure.\n")
+		return sb.String()
+	}
+
+	sb.WriteString("Use the following context from the user's documents to answer their question.\n\n")
+	sb.WriteString("RESPONSE STYLE:\n")
+	sb.WriteString("- Be thorough by default: provide a clear direct answer followed by concise supporting detail.\n")
+	sb.WriteString("- For non-trivial questions, prefer 2-4 short paragraphs and bullet points when useful.\n")
+	sb.WriteString("- Synthesize across multiple relevant context chunks when available.\n")
+	sb.WriteString("- Do not be terse unless the user explicitly asks for a brief answer.\n\n")
+
+	sb.WriteString("IMPORTANT INSTRUCTIONS:\n")
+	sb.WriteString("- Ground factual claims in the provided context.\n")
+	sb.WriteString("- When referencing grounded information, cite it using [citation:CHUNK_ID] format where CHUNK_ID is the chunk_id from the context.\n")
+	sb.WriteString("- Example: \"This is a direct quote from the text.\"[citation:abc123def]\n")
+	sb.WriteString("- Each referenced grounded statement should have a nearby citation marker.\n")
+	sb.WriteString("- Use as many distinct relevant chunk_ids as needed to support the answer (not just one), while avoiding irrelevant citations.\n")
+	sb.WriteString("- Prefer concise paraphrases; only use short direct quotes when necessary.\n")
+	sb.WriteString("- Avoid long verbatim passages from source documents.\n")
+	sb.WriteString("- Each citation in the citations array must include chunk_id, page_number, and upload_id; include quote when you used a direct snippet.\n")
+	sb.WriteString("- Do not add [citation:...] markers unless you are actually quoting or referencing specific content.\n")
+	sb.WriteString("- If the context doesn't contain enough information, say so clearly.\n\n")
+	sb.WriteString("CONTEXT:\n\n")
+
+	for _, s := range sources {
+		fmt.Fprintf(&sb, "[chunk_id: %s] (upload: %s, page: %d, title: %s)\n%s\n\n",
+			s.NodeID, s.UploadID, s.PageNumber, s.Title, s.Text)
+	}
+
+	return sb.String()
+}
+
+// buildSourcesFromCachedSeed maps LLM citations back to the cached seed
+// sources (keyed by NodeID = chunk_id) for follow-up turns.
+func buildSourcesFromCachedSeed(citations []Citation, seedSources []ChatSource) []ChatSource {
+	seedMap := make(map[string]ChatSource, len(seedSources))
+	for _, s := range seedSources {
+		if s.NodeID != "" {
+			seedMap[s.NodeID] = s
+		}
+	}
+
+	sources := make([]ChatSource, 0, len(citations))
+	for _, c := range citations {
+		source := ChatSource{
+			NodeID:     c.ChunkID,
+			UploadID:   c.UploadID,
+			PageNumber: c.PageNumber,
+			Text:       c.Quote,
+		}
+		if cached, ok := seedMap[c.ChunkID]; ok {
+			source.Title = cached.Title
+			source.Score = cached.Score
+			if source.Text == "" {
+				source.Text = cached.Text
+			}
+		}
+		sources = append(sources, source)
+	}
+	return sources
+}
+
+// buildFollowUpSources builds the source list for a follow-up turn that reuses
+// cached context. If the LLM cited specific chunks, those are returned;
+// otherwise the full seed source list is returned up to maxSources.
+func buildFollowUpSources(citations []Citation, seedSources []ChatSource, maxSources int) []ChatSource {
+	cited := buildSourcesFromCachedSeed(citations, seedSources)
+	if len(cited) > 0 {
+		return cited
+	}
+	if len(seedSources) > maxSources {
+		return seedSources[:maxSources]
+	}
+	return seedSources
+}

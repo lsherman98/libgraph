@@ -237,13 +237,32 @@ func processChatResponse(app core.App, payload ChatPayload) (string, error) {
 		return messageID, nil
 	}
 
-	searchResults, err := vector_search.Search(app, payload.Message, payload.UploadIDs, chatSearchTopK, payload.ApplyUploadFilter, payload.UserID)
-	if err != nil {
-		app.Logger().Error("vector search failed", "error", err)
-		searchResults = nil
+	isFollowUp := len(history) > 1
+
+	var cachedSources []ChatSource
+	if isFollowUp {
+		cachedSources, err = loadFirstAssistantSources(app, payload.ChatID)
+		if err != nil {
+			app.Logger().Error("failed to load cached context", "error", err)
+			cachedSources = nil
+			err = nil
+		}
 	}
 
-	systemPrompt := buildPromptWithContext(searchResults)
+	var searchResults []vector_search.SearchResult
+	var systemPrompt string
+
+	if isFollowUp {
+		systemPrompt = buildPromptWithChatSources(cachedSources)
+	} else {
+		searchResults, err = vector_search.Search(app, payload.Message, payload.UploadIDs, chatSearchTopK, payload.ApplyUploadFilter, payload.UserID)
+		if err != nil {
+			app.Logger().Error("vector search failed", "error", err)
+			searchResults = nil
+			err = nil
+		}
+		systemPrompt = buildPromptWithContext(searchResults)
+	}
 
 	model := geminiClient.GenerativeModel(modelName)
 	model.Temperature = utils.FloatPtr(0.2)
@@ -271,7 +290,13 @@ func processChatResponse(app core.App, payload ChatPayload) (string, error) {
 		structured = StructuredChatResponse{Answer: responseText}
 	}
 
-	sources := buildSourcesForChatResponse(structured.Citations, searchResults, chatSearchTopK)
+	var sources []ChatSource
+	if isFollowUp {
+		sources = buildFollowUpSources(structured.Citations, cachedSources, chatSearchTopK)
+	} else {
+		sources = buildSourcesForChatResponse(structured.Citations, searchResults, chatSearchTopK)
+	}
+
 	if structured.Answer == "" {
 		structured.Answer = "I couldn't generate a response from the provided context."
 	}

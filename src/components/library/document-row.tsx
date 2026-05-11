@@ -106,7 +106,7 @@ export function DocumentRow({
           <TooltipTrigger asChild>
             <span className="block text-sm truncate text-muted-foreground text-left">{formatNames(upload.tags, tagTitlesById)}</span>
           </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-xs break-words">
+          <TooltipContent side="top" className="max-w-xs wrap-break-word">
             {upload.tags?.length ? upload.tags.map((id) => tagTitlesById.get(id) || id).join(", ") : "—"}
           </TooltipContent>
         </Tooltip>
@@ -119,9 +119,9 @@ export function DocumentRow({
         })}
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-0.5 justify-end">
+        <div className="flex items-center justify-end gap-1 whitespace-nowrap">
           {upload.status === "processing" || upload.status === "failed" ? (
-            <div className="mr-1 flex items-center gap-2">
+            <div className="mr-1 flex items-center gap-1.5 whitespace-nowrap shrink-0">
               <StatusIcon className={`h-4 w-4 ${status.className}`} />
               <Badge variant={status.variant}>{status.label}</Badge>
             </div>

@@ -3,6 +3,7 @@ import { FileText } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { SharedMarkdownRenderer, sharedMarkdownComponents } from "@/components/ui/markdown-renderer";
+import { extractCitationIds } from "@/components/chat/citation-utils";
 import type { ChatSource } from "@/lib/types";
 
 interface CitationContentProps {
@@ -22,7 +23,13 @@ export function CitationContent({ content, sources, citationMap, onSourceClick }
   }, [sources]);
 
   const contentWithCitationTags = useMemo(() => {
-    return content.replace(/\[citation:([a-z0-9]+)\]/g, '<citation data-node-id="$1" />');
+    const toTags = (text: string) =>
+      extractCitationIds(`[${text}]`)
+        .map((nodeId) => `<citation data-node-id="${nodeId}" />`)
+        .join(" ");
+
+    // Expand grouped forms like [citation:id1, citation:id2] into individual citation tags.
+    return content.replace(/\[([^\]]*citation:[^\]]+)\]/g, (_match, inside: string) => toTags(inside));
   }, [content]);
 
   const markdownComponents = useMemo(

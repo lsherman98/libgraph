@@ -570,7 +570,7 @@ export function MarkdownContent({
         return (
           <p
             id={blockId}
-            className={cn("reader-paragraph group relative", (isBookmarkTarget || isNoteTarget) && "rounded-md border border-border px-2 -mx-2")}
+            className={cn("reader-paragraph group relative mb-4", (isBookmarkTarget || isNoteTarget) && "rounded-md border border-border px-2 -mx-2")}
           >
             {blockId && d.pageId && d.pageNumber && (
               <BlockActions
